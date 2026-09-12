@@ -1,12 +1,16 @@
 services:
-  tunelink:
+  app:
+    container_name: tunelink_app
     build: .
     restart: unless-stopped
-    env_file: .env
+    env_file:
+      - .env
     ports:
-      - '127.0.0.1:3000:3000'
+      - '127.0.0.1:3010:3010'
     volumes:
-      - ./data:/data
+      - tunelink_data:/data
+    networks:
+      - tunelink_internal
     cap_drop:
       - ALL
     security_opt:
@@ -17,8 +21,27 @@ services:
           'CMD',
           'node',
           '-e',
-          "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "fetch('http://127.0.0.1:' + process.env.PORT + '/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 30s
       timeout: 5s
       retries: 3
+
+  tunnel:
+    container_name: tunelink_tunnel
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    env_file:
+      - /etc/tunelink/compose.env
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    networks:
+      - tunelink_internal
+
+volumes:
+  tunelink_data:
+    external: true
+    name: tunelink_data
+
+networks:
+  tunelink_internal:
+    name: tunelink_internal
