@@ -1,0 +1,20 @@
+name: Bug report
+description: Report a reproducible problem without sharing secrets.
+title: '[Bug]: '
+body:
+  - type: markdown
+    attributes:
+      value: Never include tokens, client secrets, owner secrets, private URLs, or personal Spotify data.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Include the client, deployment method, and a minimal reproduction.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+    validations:
+      required: true

@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+coverage/
+*.log
+data/
+*.zip
+.git/
+.github/
+docs/
+tests/

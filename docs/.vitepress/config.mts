@@ -1,0 +1,50 @@
+import { defineConfig } from 'vitepress';
+import { buildSidebars, localeMeta } from './navigation.mts';
+
+const repo =
+  process.env.DOCS_REPOSITORY ?? process.env.GITHUB_REPOSITORY ?? 'your-org/your-repository';
+const repoName = repo.split('/').at(-1) ?? '';
+const automaticPagesBase =
+  process.env.GITHUB_ACTIONS === 'true' && repoName && !repoName.endsWith('.github.io')
+    ? `/${repoName}/`
+    : '/';
+const pagesBase = process.env.DOCS_BASE ?? automaticPagesBase;
+
+export default defineConfig({
+  title: 'TuneLink',
+  description: 'Self-hosted MCP bridge between AI assistants and Spotify.',
+  lang: 'en',
+  base: pagesBase,
+  locales: {
+    root: { label: localeMeta.en.label, lang: localeMeta.en.lang },
+    pl: { label: localeMeta.pl.label, lang: localeMeta.pl.lang, link: '/pl/' },
+    de: { label: localeMeta.de.label, lang: localeMeta.de.lang, link: '/de/' },
+    fr: { label: localeMeta.fr.label, lang: localeMeta.fr.lang, link: '/fr/' },
+    es: { label: localeMeta.es.label, lang: localeMeta.es.lang, link: '/es/' },
+  },
+  themeConfig: {
+    nav: [
+      { text: 'Guide', link: '/getting-started' },
+      { text: 'Configuration', link: '/configuration' },
+      { text: 'MCP tools', link: '/tools' },
+      { text: 'Security', link: '/security' },
+      {
+        text: 'Languages',
+        items: [
+          { text: 'English', link: '/' },
+          { text: 'Polski', link: '/pl/' },
+          { text: 'Deutsch', link: '/de/' },
+          { text: 'Français', link: '/fr/' },
+          { text: 'Español', link: '/es/' },
+        ],
+      },
+    ],
+    sidebar: buildSidebars(),
+    socialLinks: [{ icon: 'github', link: `https://github.com/${repo}` }],
+    search: { provider: 'local' },
+    footer: {
+      message: 'Unofficial community project. Not affiliated with Spotify or AI platform vendors.',
+      copyright: 'MIT License',
+    },
+  },
+});

@@ -1,0 +1,19 @@
+.translation-notice {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0 0 1.5rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--vp-c-warning-2);
+  border-radius: 10px;
+  background: var(--vp-c-warning-soft);
+  font-size: 0.9rem;
+}
+
+.translation-notice strong {
+  color: var(--vp-c-warning-1);
+}
+
+.translation-notice a {
+  width: fit-content;
+  font-weight: 600;
+}

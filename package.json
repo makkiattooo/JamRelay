@@ -1,0 +1,46 @@
+{
+  "name": "tunelink",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Self-hosted MCP server for connecting AI assistants with Spotify.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "node --env-file=.env --watch --import tsx src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node --env-file=.env dist/index.js",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src tests",
+    "format": "prettier --write src tests scripts examples docs .github eslint.config.js .prettierrc.json tsconfig.json package.json \"*.md\" \"*.yml\"",
+    "format:check": "prettier --check src tests scripts examples docs .github eslint.config.js .prettierrc.json tsconfig.json package.json \"*.md\" \"*.yml\"",
+    "docs:dev": "npm run docs:generate && vitepress dev docs",
+    "docs:build": "npm run docs:generate && vitepress build docs",
+    "docs:preview": "vitepress preview docs",
+    "check": "npm run docs:generate && npm run docs:check && npm run format:check && npm run lint && npm run typecheck && npm test && npm run build && npm run docs:build",
+    "docs:generate": "tsx scripts/generate-docs.ts && prettier --write docs/environment-reference.md docs/tools-reference.md docs/pl/environment-reference.md docs/pl/tools-reference.md docs/de/environment-reference.md docs/de/tools-reference.md docs/fr/environment-reference.md docs/fr/tools-reference.md docs/es/environment-reference.md docs/es/tools-reference.md",
+    "docs:check": "tsx scripts/check-docs.ts",
+    "release:check": "npm run check"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/node": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
+    "express": "5.2.1",
+    "pino": "9.14.0",
+    "zod": "4.6.2"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.3",
+    "@types/node": "24.0.0",
+    "@typescript-eslint/eslint-plugin": "8.46.2",
+    "@typescript-eslint/parser": "8.46.2",
+    "eslint": "9.39.1",
+    "prettier": "3.9.6",
+    "tsx": "4.23.13",
+    "typescript": "5.9.3",
+    "vitepress": "1.6.4",
+    "vitest": "3.2.7"
+  }
+}
