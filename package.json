@@ -24,7 +24,8 @@
     "docs:generate": "tsx scripts/generate-docs.ts && prettier --write docs/environment-reference.md docs/tools-reference.md docs/pl/environment-reference.md docs/pl/tools-reference.md docs/de/environment-reference.md docs/de/tools-reference.md docs/fr/environment-reference.md docs/fr/tools-reference.md docs/es/environment-reference.md docs/es/tools-reference.md",
     "docs:check": "tsx scripts/check-docs.ts",
     "release:check": "npm run check",
-    "docs:sync-translations": "tsx scripts/sync-translation-hashes.ts"
+    "docs:sync-translations": "tsx scripts/sync-translation-hashes.ts",
+    "deploy:vps": "node ./scripts/deploy.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/node": "2.0.0",
