@@ -35,7 +35,7 @@ See [OAuth and multi-client compatibility](./oauth-compatibility) for the regist
 
 ## Compatibility matrix
 
-| Client                 | Remote Streamable HTTP | OAuth | Bearer/custom headers           | Recommended TuneLink mode       | Status                      |
+| Client                 | Remote Streamable HTTP | OAuth | Bearer/custom headers           | Recommended TuneLink mode         | Status                      |
 | ---------------------- | ---------------------- | ----- | ------------------------------- | --------------------------------- | --------------------------- |
 | ChatGPT                | ✅                     | ✅    | custom-app UI is OAuth-oriented | static OAuth                      | previously verified         |
 | Claude hosted surfaces | ✅                     | ✅    | not primary connector path      | DCR                               | protocol path implemented   |

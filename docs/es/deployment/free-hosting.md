@@ -188,7 +188,7 @@ Hasta entonces, es mejor usar estas plataformas principalmente para pruebas.
 
 ## Comparación
 
-| Opción                       |         Coste de hosting |              24/7 posible | Almacenamiento persistente | Cambios en TuneLink              |
+| Opción                       |         Coste de hosting |              24/7 posible | Almacenamiento persistente | Cambios en TuneLink                |
 | ---------------------------- | -----------------------: | ------------------------: | -------------------------: | ---------------------------------- |
 | PC local + Cloudflare Tunnel |                  Gratis* | ✅ si permanece encendido |                         ✅ | Ninguno                            |
 | Servidor doméstico / NAS     |                  Gratis* |                        ✅ |                         ✅ | Ninguno                            |

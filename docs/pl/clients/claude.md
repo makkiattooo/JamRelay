@@ -1,7 +1,7 @@
 ---
 title: Claude
 translationReviewed: 2026-09-12
-sourceHash: f8729d702937
+sourceHash: efd98c1fa4d9
 ---
 
 # Claude

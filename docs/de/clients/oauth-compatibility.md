@@ -1,7 +1,7 @@
 ---
 title: OAuth und mehrere Clients
 translationReviewed: 2026-09-12
-sourceHash: d067f47fe3f6
+sourceHash: 26dfccbf5620
 ---
 
 # OAuth und mehrere Clients
@@ -16,7 +16,7 @@ DCR               ✅
 CIMD              noch nicht beworben
 ```
 
-| Client     | Dokumentiertes Verhalten                                     | Bester TuneLink-Pfad  |
+| Client     | Dokumentiertes Verhalten                                     | Bester TuneLink-Pfad    |
 | ---------- | ------------------------------------------------------------ | ----------------------- |
 | ChatGPT    | exakter Callback + Client ID/Secret                          | Static Pre-Registration |
 | Claude     | DCR + optionale statische Credentials                        | DCR/static              |

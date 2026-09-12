@@ -1,7 +1,7 @@
 ---
 title: Cursor
 translationReviewed: 2026-09-12
-sourceHash: f593d026dd37
+sourceHash: dd20a9dff117
 ---
 
 # Cursor

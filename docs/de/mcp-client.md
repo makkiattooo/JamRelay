@@ -1,7 +1,7 @@
 ---
 title: Generischer MCP-Client
 translationReviewed: 2026-09-12
-sourceHash: df74c934da3c
+sourceHash: 92b47c049402
 ---
 
 # Generischer MCP-Client

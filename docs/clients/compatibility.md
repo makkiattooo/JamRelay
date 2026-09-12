@@ -7,7 +7,7 @@ description: Current TuneLink MCP transport and authentication compatibility acr
 
 This matrix separates **protocol compatibility** from **end-to-end verification**. A client can implement a compatible OAuth flow without that exact client/version having been manually exercised against this TuneLink release.
 
-| Client                                | Remote Streamable HTTP | OAuth path supported by TuneLink                                                    | Recommended setup                | TuneLink verification                               |
+| Client                                | Remote Streamable HTTP | OAuth path supported by TuneLink                                                      | Recommended setup                | TuneLink verification                                 |
 | ------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------- | -------------------------------- | ----------------------------------------------------- |
 | ChatGPT custom MCP app                | yes                    | pre-registered confidential client                                                    | static OAuth client              | verified previously                                   |
 | Claude.ai / Desktop / mobile / Cowork | yes                    | DCR or static client credentials                                                      | DCR                              | protocol path implemented; re-test after this release |

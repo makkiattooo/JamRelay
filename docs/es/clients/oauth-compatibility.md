@@ -1,7 +1,7 @@
 ---
 title: OAuth y varios clientes
 translationReviewed: 2026-09-12
-sourceHash: d067f47fe3f6
+sourceHash: 26dfccbf5620
 ---
 
 # OAuth y varios clientes

@@ -1,14 +1,14 @@
 ---
 title: Kompatybilność klientów
 translationReviewed: 2026-09-12
-sourceHash: 2f919ff89d2a
+sourceHash: 3b11ae96ea79
 ---
 
 # Kompatybilność klientów
 
 Ta tabela rozdziela **kompatybilność protokołu** od **ręcznej weryfikacji end-to-end**.
 
-| Klient               | Ścieżka OAuth w TuneLink                                         | Zalecenie        | Weryfikacja                                          |
+| Klient               | Ścieżka OAuth w TuneLink                                           | Zalecenie        | Weryfikacja                                          |
 | -------------------- | ------------------------------------------------------------------ | ---------------- | ---------------------------------------------------- |
 | ChatGPT custom MCP   | pre-registered confidential client                                 | static OAuth     | zweryfikowane                                        |
 | Claude hosted / Code | DCR lub static credentials                                         | DCR              | protokół zaimplementowany; klient do ponownego testu |

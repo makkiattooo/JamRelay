@@ -50,7 +50,7 @@ CIMD requires the authorization server to fetch a client-controlled HTTPS metada
 
 ## Client behavior checked on 2026-09-12
 
-| Client                 | Vendor-documented behavior                                                                                                                                                                                            | Best current TuneLink path                              |
+| Client                 | Vendor-documented behavior                                                                                                                                                                                            | Best current TuneLink path                                |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
 | ChatGPT custom MCP app | user-defined OAuth client with an exact callback; confidential client credentials supported                                                                                                                           | legacy/static pre-registration                            |
 | Claude hosted surfaces | DCR is supported; a custom client ID and client secret can also be supplied. Claude documents `https://claude.ai/api/mcp/auth_callback` as its callback.                                                              | DCR, or static pre-registration                           |

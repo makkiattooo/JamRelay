@@ -1,7 +1,7 @@
 ---
 title: Configuración
 translationReviewed: 2026-09-12
-sourceHash: 08f4aeceb74f
+sourceHash: 9995ae91d43c
 ---
 
 # Configuración

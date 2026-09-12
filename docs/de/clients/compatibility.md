@@ -1,7 +1,7 @@
 ---
 title: Client-Kompatibilität
 translationReviewed: 2026-09-12
-sourceHash: 2f919ff89d2a
+sourceHash: 3b11ae96ea79
 ---
 
 # Client-Kompatibilität

@@ -1,7 +1,7 @@
 ---
 title: AI-Client-Kompatibilität
 translationReviewed: 2026-09-12
-sourceHash: 32f5c2c03ded
+sourceHash: 92ba01eb8652
 ---
 
 # AI-Client-Kompatibilität

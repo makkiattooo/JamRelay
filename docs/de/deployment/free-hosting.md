@@ -188,7 +188,7 @@ Bis dahin eignet sich kostenloses PaaS eher für Tests.
 
 ## Vergleich
 
-| Option                         |                 Hosting-Kosten |     24/7 möglich |  Persistenter Speicher | Änderungen an TuneLink    |
+| Option                         |                 Hosting-Kosten |     24/7 möglich |  Persistenter Speicher | Änderungen an TuneLink      |
 | ------------------------------ | -----------------------------: | ---------------: | ---------------------: | --------------------------- |
 | Lokaler PC + Cloudflare Tunnel |                     Kostenlos* | ✅ wenn PC läuft |                     ✅ | Keine                       |
 | Homeserver / NAS               |                     Kostenlos* |               ✅ |                     ✅ | Keine                       |

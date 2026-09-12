@@ -1,8 +1,8 @@
-import { createHash } from 'node:crypto';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { dirname, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { sections, docsLocales, docsLink, localeMeta } from '../docs/.vitepress/navigation.mts';
+import { docsSourceHash } from './docs-hash.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const docsRoot = resolve(root, 'docs');
@@ -65,7 +65,7 @@ for (const file of await walk(docsRoot)) {
     const englishFile = resolve(docsRoot, localeMatch[2]);
     if (await exists(englishFile)) {
       const english = await readFile(englishFile, 'utf8');
-      const currentHash = createHash('sha256').update(english).digest('hex');
+      const currentHash = docsSourceHash(english);
       if (!currentHash.startsWith(hashMatch[1])) {
         warnings.push(
           `Translation may be stale: ${relativeToDocs} (sourceHash ${hashMatch[1]}, current ${currentHash.slice(0, 12)})`,

@@ -188,7 +188,7 @@ Do tego czasu darmowy PaaS lepiej traktować jako środowisko testowe.
 
 ## Porównanie
 
-| Opcja                          |  Koszt hostingu |       Możliwe 24/7 |        Trwały storage | Zmiany w TuneLink         |
+| Opcja                          |  Koszt hostingu |       Możliwe 24/7 |        Trwały storage | Zmiany w TuneLink           |
 | ------------------------------ | --------------: | -----------------: | --------------------: | --------------------------- |
 | Lokalny PC + Cloudflare Tunnel |           0 zł* | ✅ jeśli PC działa |                    ✅ | Brak                        |
 | Serwer domowy / NAS            |           0 zł* |                 ✅ |                    ✅ | Brak                        |
