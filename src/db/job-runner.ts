@@ -96,7 +96,7 @@ export class JobRunner {
           ...input,
           error: 'resolution_failed',
         });
-        if (!exhausted) return;
+        return;
       }
     }
     const remaining = getJobItems(id).some((x) => x.status === 'pending' || x.status === 'waiting');
