@@ -10,9 +10,9 @@ By submitting a contribution, you agree to follow the rules below.
 
 Requirements:
 
-* Node.js 22 or newer
-* npm
-* Git
+- Node.js 22 or newer
+- npm
+- Git
 
 Install dependencies:
 
@@ -74,10 +74,10 @@ Do not submit code that you do not have the legal right to contribute.
 
 If a contribution includes or is derived from third-party material, you must:
 
-* identify the original source;
-* identify the applicable license;
-* ensure that the license is compatible with TuneLink;
-* preserve any legally required notices or attribution.
+- identify the original source;
+- identify the applicable license;
+- ensure that the license is compatible with TuneLink;
+- preserve any legally required notices or attribution.
 
 Do not copy code from proprietary projects, leaked source code, code with unknown licensing, or material whose terms are incompatible with this project.
 

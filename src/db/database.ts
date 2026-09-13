@@ -156,9 +156,19 @@ function verifyAppliedMigrations(
   const appliedPrefixes = applied.map((row) => parseMigrationVersion(row.version));
   const latestAppliedPrefix = Math.max(0, ...appliedPrefixes);
   const hasFutureMigration = latestAppliedPrefix > latestLocalPrefix;
+  const seenVersions = new Set<string>();
+  const seenPrefixes = new Set<number>();
   for (const row of applied) {
+    if (seenVersions.has(row.version))
+      throw new Error(`Duplicate applied migration version: ${row.version}`);
+    seenVersions.add(row.version);
     const migration = available.get(row.version);
     const prefix = parseMigrationVersion(row.version);
+    if (seenPrefixes.has(prefix))
+      throw new Error(
+        `Duplicate applied migration numeric prefix: ${String(prefix).padStart(4, '0')}`,
+      );
+    seenPrefixes.add(prefix);
     if (!row.checksum || !/^[a-f0-9]{64}$/.test(row.checksum))
       throw new Error(`Applied migration ${row.version} has invalid checksum metadata`);
     if (migration) {
@@ -281,11 +291,13 @@ export function getDatabaseStatus(): DatabaseStatus {
   const currentPrefix = currentVersion ? parseMigrationVersion(currentVersion) : 0;
   const expectedPrefix = parseMigrationVersion(expectedVersion);
   const schemaState =
-    currentPrefix === expectedPrefix
-      ? 'current'
-      : currentPrefix > expectedPrefix
-        ? 'ahead'
-        : 'behind';
+    database === null
+      ? 'unknown'
+      : currentPrefix === expectedPrefix
+        ? 'current'
+        : currentPrefix > expectedPrefix
+          ? 'ahead'
+          : 'behind';
   return {
     ready: database !== null && schemaState !== 'behind',
     currentVersion,

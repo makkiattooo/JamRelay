@@ -232,6 +232,56 @@ describe('TuneLink State DB', () => {
     }
   });
 
+  it('rejects duplicate applied prefixes and malformed applied versions', async () => {
+    const fixture = await fixtureDirectory([
+      '0001_marker.sql',
+      'CREATE TABLE marker (id INTEGER);\n',
+    ]);
+    const db = new DatabaseSync(join(fixture.root, 'tunelink.db'));
+    db.exec(
+      'CREATE TABLE schema_migrations (version TEXT PRIMARY KEY, checksum TEXT NOT NULL, provenance TEXT NOT NULL, applied_at INTEGER NOT NULL);',
+    );
+    const insert = db.prepare('INSERT INTO schema_migrations VALUES (?, ?, ?, ?)');
+    insert.run(
+      '0001_marker.sql',
+      checksumMigration('CREATE TABLE marker (id INTEGER);\n'),
+      'verified',
+      Date.now(),
+    );
+    insert.run('0002_future_a.sql', 'a'.repeat(64), 'verified', Date.now());
+    insert.run('0002_future_b.sql', 'b'.repeat(64), 'verified', Date.now());
+    db.close();
+    try {
+      expect(() =>
+        initializeDatabase({ dataDir: fixture.root, migrationsDir: fixture.directory }),
+      ).toThrow(/Duplicate applied migration numeric prefix: 0002/);
+    } finally {
+      closeDatabase();
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+
+    const malformed = await fixtureDirectory([
+      '0001_marker.sql',
+      'CREATE TABLE marker (id INTEGER);\n',
+    ]);
+    const malformedDb = new DatabaseSync(join(malformed.root, 'tunelink.db'));
+    malformedDb.exec(
+      'CREATE TABLE schema_migrations (version TEXT PRIMARY KEY, checksum TEXT NOT NULL, provenance TEXT NOT NULL, applied_at INTEGER NOT NULL);',
+    );
+    malformedDb
+      .prepare('INSERT INTO schema_migrations VALUES (?, ?, ?, ?)')
+      .run('not-a-migration', 'c'.repeat(64), 'verified', Date.now());
+    malformedDb.close();
+    try {
+      expect(() =>
+        initializeDatabase({ dataDir: malformed.root, migrationsDir: malformed.directory }),
+      ).toThrow(/Malformed applied migration version/);
+    } finally {
+      closeDatabase();
+      await rm(malformed.root, { recursive: true, force: true });
+    }
+  });
+
   it('rolls back failed migrations and does not record them', async () => {
     const fixture = await fixtureDirectory([
       '0001_broken.sql',
