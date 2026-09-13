@@ -598,14 +598,22 @@ export function registerAdvanced(
           );
           uris = uris.filter((uri) => !existing.has(uri));
         }
-        if (payload.dry_run)
+        if (payload.dry_run) {
+          const dryRunResult = { dry_run: true, requested_count: uris.length, uris };
+          updateJobPayload(a.job_id, {
+            ...payload,
+            phase: 'completed',
+            dry_run: true,
+            commit_result: dryRunResult,
+          });
+          setJobStatus(a.job_id, 'completed');
           return text({
             job_id: a.job_id,
             job_status: 'completed',
-            dry_run: true,
-            requested_count: uris.length,
-            uris,
+            phase: 'completed',
+            ...dryRunResult,
           });
+        }
         try {
           updateJobPayload(a.job_id, {
             ...payload,

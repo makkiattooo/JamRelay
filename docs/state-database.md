@@ -78,15 +78,15 @@ Track resolution is database-first: normalized title/artist/album aliases are ch
 
 Job phase is stored in `jobs.payload_json.phase`:
 
-| Phase | Meaning |
-| --- | --- |
-| `created` | Job and ordered `job_items` are persisted. |
-| `resolving` | The in-process single worker is resolving a bounded batch. |
+| Phase                | Meaning                                                                                                                     |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `created`            | Job and ordered `job_items` are persisted.                                                                                  |
+| `resolving`          | The in-process single worker is resolving a bounded batch.                                                                  |
 | `waiting_rate_limit` | Resolution waits for the persisted Spotify scope block; `jobs.status` is `waiting` and `run_after` is the eligibility time. |
-| `ready_to_commit` | Required items are resolved and explicit commit is allowed. |
-| `committing` | Commit metadata is durable and the Spotify mutation is in progress. |
-| `completed` | The mutation succeeded, or a dry-run completed without mutation. |
-| `failed` | Processing or commit failed; `manual_review=true` may be present. |
+| `ready_to_commit`    | Required items are resolved and explicit commit is allowed.                                                                 |
+| `committing`         | Commit metadata is durable and the Spotify mutation is in progress.                                                         |
+| `completed`          | The mutation succeeded, or a dry-run completed without mutation.                                                            |
+| `failed`             | Processing or commit failed; `manual_review=true` may be present.                                                           |
 
 Normal batch progress and rate-limit waiting do not consume `attempts`; only actual retryable processing failures do. `max_attempts` stops automatic processing and marks the job failed.
 

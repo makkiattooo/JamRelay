@@ -6,6 +6,8 @@ import { closeDatabase, initializeDatabase } from '../src/db/database.js';
 import { SpotifyClient } from '../src/spotify/client.js';
 import { TrackResolver } from '../src/spotify/resolver.js';
 import { upsertTrackAndAlias } from '../src/db/state.js';
+import { createJob, getJob, updateJobItem } from '../src/db/jobs.js';
+import { registerAdvanced } from '../src/mcp/helpers.js';
 
 let root: string | undefined;
 afterEach(async () => {
@@ -167,5 +169,49 @@ describe('persistent Spotify runtime state', () => {
         { id: 'new', uri: 'spotify:track:new', name: 'Conflict Song', artist: 'Conflict Artist' },
       ),
     ).toThrow('resolver_alias_conflict');
+  });
+
+  it('persists deferred dry-run completion without Spotify mutation', async () => {
+    await setup();
+    const jobId = createJob(
+      'bulk_add_tracks',
+      { phase: 'ready_to_commit', dry_run: true, strict: true, playlist_id: 'playlist' },
+      [
+        {
+          title: 'Song',
+          artist: 'Artist',
+          resolution: { status: 'matched', uri: 'spotify:track:song' },
+        },
+      ],
+    );
+    updateJobItem(getJob(jobId, 0, 1).items[0].id, 'completed', {
+      resolution: { status: 'matched', uri: 'spotify:track:song' },
+    });
+    const callbacks = new Map<string, (args: any) => Promise<any>>();
+    registerAdvanced(
+      {
+        registerTool(name: string, _config: unknown, callback: (args: any) => Promise<any>) {
+          callbacks.set(name, callback);
+        },
+      },
+      {
+        request: async () => ({ items: [] }),
+        json: async () => {
+          throw new Error('mutation');
+        },
+      } as any,
+      true,
+    );
+    const result = await callbacks.get('commit_job')!({ job_id: jobId });
+    expect(result.structuredContent).toMatchObject({
+      job_id: jobId,
+      job_status: 'completed',
+      phase: 'completed',
+      dry_run: true,
+    });
+    expect(getJob(jobId, 0, 1)).toMatchObject({
+      status: 'completed',
+      payload: { phase: 'completed', dry_run: true },
+    });
   });
 });

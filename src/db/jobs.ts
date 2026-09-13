@@ -97,13 +97,13 @@ export function claimEligibleJob(now = Date.now()) {
   const db = getDatabase();
   const row = db
     .prepare(
-      'SELECT id FROM jobs WHERE status IN ("pending","waiting") AND (run_after IS NULL OR run_after<=?) ORDER BY created_at LIMIT 1',
+      "SELECT id FROM jobs WHERE status IN ('pending','waiting') AND (run_after IS NULL OR run_after<=?) ORDER BY created_at LIMIT 1",
     )
     .get(now) as { id: number } | undefined;
   if (!row) return null;
   const changed = db
     .prepare(
-      'UPDATE jobs SET status="running", updated_at=?, started_at=COALESCE(started_at,?) WHERE id=? AND status IN ("pending","waiting")',
+      "UPDATE jobs SET status='running', updated_at=?, started_at=COALESCE(started_at,?) WHERE id=? AND status IN ('pending','waiting')",
     )
     .run(now, now, row.id);
   return Number(changed.changes) === 1 ? row.id : null;
@@ -134,7 +134,7 @@ export function setJobStatus(id: number, status: JobStatus, runAfter?: number, e
   const now = Date.now();
   getDatabase()
     .prepare(
-      'UPDATE jobs SET status=?, run_after=?, last_error_id=COALESCE(?,last_error_id), updated_at=?, started_at=CASE WHEN ?="running" THEN COALESCE(started_at,?) ELSE started_at END, completed_at=CASE WHEN ? IN ("completed","failed","cancelled") THEN ? ELSE completed_at END WHERE id=?',
+      "UPDATE jobs SET status=?, run_after=?, last_error_id=COALESCE(?,last_error_id), updated_at=?, started_at=CASE WHEN ?='running' THEN COALESCE(started_at,?) ELSE started_at END, completed_at=CASE WHEN ? IN ('completed','failed','cancelled') THEN ? ELSE completed_at END WHERE id=?",
     )
     .run(status, runAfter ?? null, errorId ?? null, now, status, now, status, now, id);
 }
@@ -147,7 +147,7 @@ export function recoverInterruptedJobs(): number {
   try {
     const db = getDatabase();
     const rows = db
-      .prepare('SELECT id,payload_json as payload FROM jobs WHERE status="running"')
+      .prepare("SELECT id,payload_json as payload FROM jobs WHERE status='running'")
       .all() as Array<{ id: number; payload: string }>;
     for (const row of rows) {
       const payload = JSON.parse(row.payload) as Record<string, unknown>;
