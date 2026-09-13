@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { closeDatabase, initializeDatabase } from '../src/db/database.js';
 import { SpotifyClient } from '../src/spotify/client.js';
 import { TrackResolver } from '../src/spotify/resolver.js';
+import { upsertTrackAndAlias } from '../src/db/state.js';
 
 let root: string | undefined;
 afterEach(async () => {
@@ -106,5 +107,65 @@ describe('persistent Spotify runtime state', () => {
     expect(initializeDatabase().prepare('SELECT hit_count FROM track_aliases').get()).toEqual({
       hit_count: 1,
     });
+  });
+
+  it('coalesces concurrent identical uncached resolutions', async () => {
+    await setup();
+    let calls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        calls++;
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return new Response(
+          JSON.stringify({
+            tracks: {
+              items: [
+                {
+                  id: 'one',
+                  uri: 'spotify:track:one',
+                  name: 'Same Song',
+                  artists: [{ name: 'Same Artist' }],
+                },
+              ],
+            },
+          }),
+          { status: 200 },
+        );
+      }),
+    );
+    const resolver = new TrackResolver(new SpotifyClient(auth));
+    await resolver.resolveMany(
+      Array.from({ length: 100 }, () => ({ title: 'Same Song', artist: 'Same Artist' })),
+    );
+    expect(calls).toBe(1);
+  });
+
+  it('surfaces initialized database alias conflicts', async () => {
+    await setup();
+    const db = initializeDatabase();
+    db.prepare(
+      'INSERT INTO tracks (spotify_track_id,spotify_uri,title,artist,source,created_at,updated_at) VALUES (?,?,?,?,?,?,?)',
+    ).run(
+      'old',
+      'spotify:track:old',
+      'Conflict Song',
+      'Conflict Artist',
+      'test',
+      Date.now(),
+      Date.now(),
+    );
+    const old = db.prepare('SELECT id FROM tracks WHERE spotify_track_id=?').get('old') as {
+      id: number;
+    };
+    db.prepare(
+      'INSERT INTO track_aliases (track_id,normalized_title,normalized_artist,created_at,updated_at) VALUES (?,?,?,?,?)',
+    ).run(old.id, 'conflict song', 'conflict artist', Date.now(), Date.now());
+    expect(() =>
+      upsertTrackAndAlias(
+        { title: 'conflict song', artist: 'conflict artist' },
+        { id: 'new', uri: 'spotify:track:new', name: 'Conflict Song', artist: 'Conflict Artist' },
+      ),
+    ).toThrow('resolver_alias_conflict');
   });
 });

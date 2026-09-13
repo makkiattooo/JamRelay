@@ -141,7 +141,7 @@ export class SpotifyClient {
         'Spotify returned an error response',
       );
       const error = normalizeSpotifyError(response.status, body, retryAfter, trimmed);
-      recordApiError({
+      const apiError = recordApiError({
         provider: 'spotify',
         endpoint,
         method,
@@ -152,10 +152,20 @@ export class SpotifyClient {
         requestId: toolContext.get()?.requestId,
         operation: toolContext.get()?.operation,
       });
+      if (apiError) error.apiErrorId = apiError.id;
       if (response.status === 429) {
         const seconds = Math.ceil(retryAfter ?? 60);
         recordRateLimit('spotify', scope, seconds, error.code);
-        throw new SpotifyApiError(429, 'RATE_LIMIT_EXCEEDED', error.message, seconds, false, scope);
+        const rateError = new SpotifyApiError(
+          429,
+          'RATE_LIMIT_EXCEEDED',
+          error.message,
+          seconds,
+          false,
+          scope,
+        );
+        rateError.apiErrorId = error.apiErrorId;
+        throw rateError;
       }
       const safe = method === 'GET';
       if (retry && safe && retryCount < 2 && [502, 503, 504].includes(response.status)) {

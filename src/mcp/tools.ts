@@ -12,6 +12,7 @@ import { registerAdvanced } from './helpers.js';
 import { toolContext } from './context.js';
 import type { Logger } from 'pino';
 import { indexCanonicalTrack } from '../db/state.js';
+import { isDatabaseInitialized } from '../db/database.js';
 const id = z.string().min(1),
   limit = z.number().int().min(1).max(50).default(20);
 const track = (x: any) =>
@@ -78,7 +79,7 @@ const out = (data: unknown) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(data) }],
   structuredContent: data,
 });
-export const REQUIRED_TOOL_NAMES = [
+const BASE_REQUIRED_TOOL_NAMES = [
   'search_tracks',
   'search_artists',
   'search_albums',
@@ -119,6 +120,32 @@ export const REQUIRED_TOOL_NAMES = [
   'bulk_add_tracks',
   'create_playlist_from_tracks',
 ] as const;
+const STATE_TOOL_NAMES = [
+  'create_bulk_job',
+  'get_job_status',
+  'list_jobs',
+  'resume_job',
+  'commit_job',
+  'cancel_job',
+  'get_state_diagnostics',
+  'get_rate_limit_status',
+  'get_recent_api_errors',
+] as const;
+export const REQUIRED_TOOL_NAMES: readonly string[] = new Proxy(
+  BASE_REQUIRED_TOOL_NAMES as readonly string[],
+  {
+    get(target, property, receiver) {
+      if (property === 'length')
+        return target.length + (isDatabaseInitialized() ? STATE_TOOL_NAMES.length : 0);
+      if (property === Symbol.iterator)
+        return function* () {
+          yield* target;
+          if (isDatabaseInitialized()) yield* STATE_TOOL_NAMES;
+        };
+      return Reflect.get(target, property, receiver);
+    },
+  },
+);
 export function registerTools(
   s: McpServer,
   c: SpotifyClient,

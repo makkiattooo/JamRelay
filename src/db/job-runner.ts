@@ -7,6 +7,7 @@ import {
   claimEligibleJob,
   getJob,
   getJobItems,
+  noteJobFailure,
   setJobStatus,
   updateJobItem,
   updateJobPayload,
@@ -90,7 +91,12 @@ export class JobRunner {
           updateJobItem(item.id, 'waiting', input);
           return;
         }
-        updateJobItem(item.id, 'failed', { ...input, error: 'resolution_failed' });
+        const exhausted = noteJobFailure(id, (error as { apiErrorId?: number }).apiErrorId);
+        updateJobItem(item.id, exhausted ? 'failed' : 'pending', {
+          ...input,
+          error: 'resolution_failed',
+        });
+        if (!exhausted) return;
       }
     }
     const remaining = getJobItems(id).some((x) => x.status === 'pending' || x.status === 'waiting');

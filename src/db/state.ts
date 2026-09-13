@@ -354,11 +354,12 @@ export function recordResolverAttempt(
   trackId?: number,
   confidence?: number,
   errorId?: number,
+  durationMs?: number,
 ) {
   try {
     getDatabase()
       .prepare(
-        'INSERT INTO resolver_attempts (query_title, query_artist, query_album, strategy, status, track_id, confidence, error_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO resolver_attempts (query_title, query_artist, query_album, strategy, status, track_id, confidence, duration_ms, error_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .run(
         query.title,
@@ -368,6 +369,7 @@ export function recordResolverAttempt(
         status,
         trackId ?? null,
         confidence ?? null,
+        durationMs ?? null,
         errorId ?? null,
         Date.now(),
       );

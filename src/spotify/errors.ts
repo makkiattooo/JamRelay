@@ -1,4 +1,5 @@
 export class SpotifyApiError extends Error {
+  public apiErrorId?: number;
   constructor(
     public status: number,
     public code: string,

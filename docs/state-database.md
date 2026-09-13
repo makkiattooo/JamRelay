@@ -43,7 +43,7 @@ This is intentionally a single-process/local-volume design. It is not a distribu
 
 ## Schema in migration 0001
 
-The first migration establishes the state model. Business writers and workers are deliberately wired in later phases.
+The first migration establishes the state model used by the runtime resolver, API diagnostics, rate-limit guard, and durable single-worker jobs. Migration `0001_state_db.sql` is immutable; phase metadata is stored in `jobs.payload_json`.
 
 | Table               | Purpose and relationships                                                                            |
 | ------------------- | ---------------------------------------------------------------------------------------------------- |
@@ -72,7 +72,27 @@ The runtime error path is `Spotify HTTP client → normalized API error → api_
 
 Spotify rate limits are persisted per provider and scope. `/search` uses scope `search`; playlist and player endpoints use their normalized endpoint scope, so a search quota block does not unnecessarily disable playlist writes. A 429 is recorded, converted to `blocked_until` using `ceil(Retry-After)`, and returned immediately. Future requests preflight this state before authentication/network I/O, including after an application restart; no request sleeps for the Spotify cooldown.
 
-Track resolution is database-first: normalized title/artist/album aliases are checked before Spotify Search. A confident search match upserts canonical track metadata and the input alias; cache hits increment `hit_count` and update `last_used_at`. Ambiguous and unmatched results never create aliases, and alias collisions fail conservatively. Bulk resolution coalesces duplicate normalized queries and creates a durable `waiting` job when a persisted rate limit prevents completion. `get_job_status`, `resume_job`, `commit_job`, `cancel_job`, and `get_state_diagnostics` are authenticated MCP tools; item inspection is paginated and bounded.
+Track resolution is database-first: normalized title/artist/album aliases are checked before Spotify Search. A confident search match upserts canonical track metadata and the input alias; cache hits increment `hit_count` and update `last_used_at`. Ambiguous and unmatched results never create aliases, and alias collisions are surfaced conservatively rather than overwritten. Bulk resolution coalesces duplicate normalized queries and creates a durable job when a persisted rate limit prevents completion. `get_job_status`, `list_jobs`, `resume_job`, `commit_job`, `cancel_job`, `get_state_diagnostics`, `get_rate_limit_status`, and `get_recent_api_errors` are authenticated MCP tools; item inspection is paginated and bounded.
+
+## Durable job runtime
+
+Job phase is stored in `jobs.payload_json.phase`:
+
+| Phase | Meaning |
+| --- | --- |
+| `created` | Job and ordered `job_items` are persisted. |
+| `resolving` | The in-process single worker is resolving a bounded batch. |
+| `waiting_rate_limit` | Resolution waits for the persisted Spotify scope block; `jobs.status` is `waiting` and `run_after` is the eligibility time. |
+| `ready_to_commit` | Required items are resolved and explicit commit is allowed. |
+| `committing` | Commit metadata is durable and the Spotify mutation is in progress. |
+| `completed` | The mutation succeeded, or a dry-run completed without mutation. |
+| `failed` | Processing or commit failed; `manual_review=true` may be present. |
+
+Normal batch progress and rate-limit waiting do not consume `attempts`; only actual retryable processing failures do. `max_attempts` stops automatic processing and marks the job failed.
+
+On startup, interrupted resolution jobs return to `pending` and resume from persisted item progress. A job with phase `committing` is never automatically re-queued: recovery marks it failed with `manual_review=true` and preserves commit metadata. Spotify mutations have no exactly-once guarantee; uncertain transport outcomes are not blindly retried.
+
+Deferred commits preserve `strict`, `dry_run`, `skip_existing`, and `skip_duplicates`. Dry runs perform no Spotify mutation; `skip_existing` is re-evaluated at commit time; duplicates are removed without changing requested order; and items are reconstructed by `job_items.position`. Strict jobs cannot commit unresolved, ambiguous, or failed items. Playlist creation is deferred until commit.
 
 ## Migration lifecycle
 

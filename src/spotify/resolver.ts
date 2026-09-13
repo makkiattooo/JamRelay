@@ -7,6 +7,7 @@ import {
   upsertTrackAndAlias,
   type TrackQuery,
 } from '../db/state.js';
+import { isDatabaseInitialized } from '../db/database.js';
 
 export type Resolution = {
   status: 'matched' | 'ambiguous' | 'unmatched';
@@ -29,6 +30,7 @@ const compact = (x: TrackCandidate) => ({
 export class TrackResolver {
   constructor(private client: SpotifyClient) {}
   async resolve(input: TrackQuery): Promise<Resolution> {
+    const started = Date.now();
     const query = {
       ...input,
       title: normalizeText(input.title),
@@ -37,7 +39,15 @@ export class TrackResolver {
     };
     const cached = findCachedTrack(query);
     if (cached) {
-      recordResolverAttempt(query, 'database', 'matched', cached.id, 1);
+      recordResolverAttempt(
+        query,
+        'database',
+        'matched',
+        cached.id,
+        1,
+        undefined,
+        Date.now() - started,
+      );
       return {
         status: 'matched',
         source: 'database',
@@ -77,10 +87,19 @@ export class TrackResolver {
             },
             'spotify_search',
           );
-        } catch {
+        } catch (error) {
+          if (isDatabaseInitialized()) throw error;
           /* DB is unavailable in isolated client tests. */
         }
-        recordResolverAttempt(query, 'spotify_search', 'matched', trackId, confidence);
+        recordResolverAttempt(
+          query,
+          'spotify_search',
+          'matched',
+          trackId,
+          confidence,
+          undefined,
+          Date.now() - started,
+        );
         return {
           status: 'matched',
           source: 'spotify_search',
@@ -90,10 +109,26 @@ export class TrackResolver {
           confidence,
         };
       }
-      recordResolverAttempt(query, 'spotify_search', status);
+      recordResolverAttempt(
+        query,
+        'spotify_search',
+        status,
+        undefined,
+        confidence,
+        undefined,
+        Date.now() - started,
+      );
       return { status, source: 'spotify_search', match: result.match, confidence };
     } catch (error) {
-      recordResolverAttempt(query, 'spotify_search', 'failed');
+      recordResolverAttempt(
+        query,
+        'spotify_search',
+        'failed',
+        undefined,
+        undefined,
+        (error as { apiErrorId?: number }).apiErrorId,
+        Date.now() - started,
+      );
       throw error;
     }
   }

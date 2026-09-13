@@ -103,7 +103,7 @@ export function claimEligibleJob(now = Date.now()) {
   if (!row) return null;
   const changed = db
     .prepare(
-      'UPDATE jobs SET status="running", attempts=attempts+1, updated_at=?, started_at=COALESCE(started_at,?) WHERE id=? AND status IN ("pending","waiting")',
+      'UPDATE jobs SET status="running", updated_at=?, started_at=COALESCE(started_at,?) WHERE id=? AND status IN ("pending","waiting")',
     )
     .run(now, now, row.id);
   return Number(changed.changes) === 1 ? row.id : null;
@@ -113,6 +113,21 @@ export function updateJobPayload(id: number, payload: unknown) {
   getDatabase()
     .prepare('UPDATE jobs SET payload_json=?,updated_at=? WHERE id=?')
     .run(JSON.stringify(payload), Date.now(), id);
+}
+
+export function noteJobFailure(id: number, errorId?: number) {
+  const db = getDatabase();
+  const row = db
+    .prepare('SELECT attempts,max_attempts as maxAttempts FROM jobs WHERE id=?')
+    .get(id) as { attempts: number; maxAttempts: number } | undefined;
+  if (!row) return false;
+  db.prepare('UPDATE jobs SET attempts=attempts+1,updated_at=? WHERE id=?').run(Date.now(), id);
+  if (row.attempts + 1 >= row.maxAttempts) {
+    setJobStatus(id, 'failed', undefined, errorId);
+    return true;
+  }
+  setJobStatus(id, 'pending', Date.now());
+  return false;
 }
 
 export function setJobStatus(id: number, status: JobStatus, runAfter?: number, errorId?: number) {
@@ -130,10 +145,26 @@ export function cancelJob(id: number) {
 
 export function recoverInterruptedJobs(): number {
   try {
-    const result = getDatabase()
-      .prepare('UPDATE jobs SET status="pending", run_after=?, updated_at=? WHERE status="running"')
-      .run(Date.now(), Date.now());
-    return Number(result.changes);
+    const db = getDatabase();
+    const rows = db
+      .prepare('SELECT id,payload_json as payload FROM jobs WHERE status="running"')
+      .all() as Array<{ id: number; payload: string }>;
+    for (const row of rows) {
+      const payload = JSON.parse(row.payload) as Record<string, unknown>;
+      if (payload.phase === 'committing') {
+        updateJobPayload(row.id, {
+          ...payload,
+          phase: 'failed',
+          manual_review: true,
+          manual_review_reason: 'interrupted_commit',
+        });
+        setJobStatus(row.id, 'failed');
+      } else {
+        updateJobPayload(row.id, { ...payload, phase: 'resolving' });
+        setJobStatus(row.id, 'pending', Date.now());
+      }
+    }
+    return rows.length;
   } catch {
     return 0;
   }

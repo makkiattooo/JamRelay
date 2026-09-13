@@ -195,7 +195,7 @@ export function registerAdvanced(
           r = await pending;
         } catch (error) {
           if (error instanceof SpotifyApiError && error.status === 429)
-            r = { status: 'waiting', source: 'spotify_search' };
+            r = { status: 'waiting', source: 'spotify_search', errorId: error.apiErrorId };
           else throw error;
         }
         result.push({
@@ -224,10 +224,17 @@ export function registerAdvanced(
             getJobItems(jobId)[index].id,
             item.status === 'matched' ? 'completed' : 'failed',
             { ...(items[index] as any), resolution: item },
+            undefined,
+            item.errorId,
           );
       });
     const state = getRateLimit('spotify', 'search');
-    setJobStatus(jobId, 'waiting', state?.blockedUntil ?? Date.now() + 60000);
+    setJobStatus(
+      jobId,
+      'waiting',
+      state?.blockedUntil ?? Date.now() + 60000,
+      report?.find((x) => x.errorId)?.errorId,
+    );
     return jobId;
   };
   async function addResolved(a: any, list: any[], dry: boolean) {
@@ -574,7 +581,7 @@ export function registerAdvanced(
             error: 'unresolved_items',
             unresolved_count: unresolved.length,
           });
-        const uris = rows
+        let uris = rows
           .filter((x) => x.status === 'completed')
           .sort((x, y) => x.position - y.position)
           .map((x) => {
@@ -582,7 +589,30 @@ export function registerAdvanced(
             return item.resolution?.uri;
           })
           .filter(Boolean);
+        if (payload.skip_duplicates) uris = [...new Set(uris)];
+        if (payload.skip_existing && payload.playlist_id) {
+          const existing = new Set(
+            (await allPlaylistItems(pid({ playlist_id: payload.playlist_id })))
+              .map((x: any) => x.item?.uri)
+              .filter(Boolean),
+          );
+          uris = uris.filter((uri) => !existing.has(uri));
+        }
+        if (payload.dry_run)
+          return text({
+            job_id: a.job_id,
+            job_status: 'completed',
+            dry_run: true,
+            requested_count: uris.length,
+            uris,
+          });
         try {
+          updateJobPayload(a.job_id, {
+            ...payload,
+            phase: 'committing',
+            commit_started_at: Date.now(),
+            commit_operation: job.type,
+          });
           setJobStatus(a.job_id, 'running');
           let playlistId = payload.playlist_id as string | undefined;
           let playlist: any;

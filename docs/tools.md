@@ -1,6 +1,6 @@
 # MCP tools
 
-The server registers exactly 39 tools. Tool schemas are the source of truth and are validated by tests.
+The server registers the core tools plus authenticated State DB tools when the runtime database is initialized. Tool schemas are the source of truth and are validated by tests.
 
 ## Catalog and discovery
 
@@ -19,3 +19,11 @@ Reads: `get_my_playlists`, `get_playlist`, `get_playlist_tracks`, `get_playlist_
 Reads: `get_currently_playing`, `get_playback_state`, `get_devices`. Writes: `play`, `pause`, `next_track`, `previous_track`, `seek`, `set_volume`, `transfer_playback`. Premium, an active compatible device, and account permissions may be required.
 
 Example request: “What is currently playing?” → `get_currently_playing`.
+
+## Durable bulk jobs
+
+`create_bulk_job`, `get_job_status`, `list_jobs`, `resume_job`, `commit_job`, and `cancel_job` manage persisted bulk work. The single in-process worker resolves bounded batches and resumes eligible work after restart. Phases are `created`, `resolving`, `waiting_rate_limit`, `ready_to_commit`, `committing`, `completed`, and `failed`; interrupted resolution may resume, while interrupted committing is failed for manual review and is never automatically retried.
+
+Normal progress and rate-limit waiting do not consume retry attempts. Actual retryable failures increment `attempts`; `max_attempts` stops automatic processing. `commit_job` preserves strict/dry-run/skip options, re-checks `skip_existing`, preserves duplicate removal and ordering, and performs no Spotify mutation for dry runs. Strict jobs cannot commit unresolved items. External writes have no exactly-once guarantee; uncertain outcomes require manual review rather than blind retry.
+
+`get_state_diagnostics`, `get_rate_limit_status`, and `get_recent_api_errors` expose bounded authenticated diagnostics only. API error history contains normalized fields and no raw request/response bodies or secrets. Resolver alias conflicts are not silently overwritten.
