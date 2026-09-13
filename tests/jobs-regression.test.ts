@@ -109,7 +109,7 @@ describe('durable job regressions', () => {
     expect(claimEligibleJob(Date.now())?.toString()).not.toBe(committing.toString());
   });
 
-  it('cancelled jobs are never processed and invalid commit phase is rejected', async () => {
+  it('cancelled jobs are never processed', async () => {
     await setup();
     const id = createJob('bulk_add_tracks', { phase: 'created' }, directItems(1));
     setJobStatus(id, 'cancelled');
@@ -123,6 +123,16 @@ describe('durable job regressions', () => {
     await runner.stop();
     expect(getJob(id, 0, 1).status).toBe('cancelled');
     expect(getJobItems(id)[0].status).toBe('pending');
+  });
+
+  it('rejects an invalid commit phase without Spotify mutation', async () => {
+    await setup();
+    const id = createJob(
+      'bulk_add_tracks',
+      { phase: 'resolving', playlist_id: 'playlist' },
+      directItems(1),
+    );
+    const json = vi.fn(async () => null);
     const callbacks = new Map<string, (a: any) => Promise<any>>();
     registerAdvanced(
       {
@@ -130,11 +140,12 @@ describe('durable job regressions', () => {
           callbacks.set(n, cb);
         },
       },
-      { request: async () => null, json: async () => null } as any,
+      { request: async () => null, json } as any,
       true,
     );
     const result = await callbacks.get('commit_job')!({ job_id: id });
     expect(result.structuredContent.error).toBe('invalid_commit_state');
+    expect(json).not.toHaveBeenCalled();
   });
 
   it('commit_job writes ordered URIs and preserves deferred options', async () => {
@@ -212,6 +223,56 @@ describe('durable job regressions', () => {
       payload: { phase: 'completed', dry_run: true },
     });
   });
+
+  it('deferred create playlist removes duplicates in first-occurrence order at commit time', async () => {
+    await setup();
+    const id = createJob(
+      'create_playlist_from_tracks',
+      {
+        phase: 'ready_to_commit',
+        name: 'Deferred',
+        strict: true,
+        skip_duplicates: true,
+        dry_run: false,
+      },
+      Array.from({ length: 5 }, () => ({})),
+    );
+    const rows = getJobItems(id);
+    const uris = [
+      'spotify:track:b',
+      'spotify:track:a',
+      'spotify:track:b',
+      'spotify:track:c',
+      'spotify:track:a',
+    ];
+    rows.forEach((row, i) =>
+      updateJobItem(row.id, 'completed', { resolution: { status: 'matched', uri: uris[i] } }),
+    );
+    const calls: Array<{ path: string; uris?: string[] }> = [];
+    const callbacks = new Map<string, (a: any) => Promise<any>>();
+    registerAdvanced(
+      {
+        registerTool(n: string, _c: unknown, cb: any) {
+          callbacks.set(n, cb);
+        },
+      },
+      {
+        request: async () => null,
+        json: async (path: string, body: any) => {
+          calls.push({ path, uris: body.uris });
+          return path === '/me/playlists' ? { id: 'created-playlist' } : {};
+        },
+      } as any,
+      true,
+    );
+    const result = await callbacks.get('commit_job')!({ job_id: id });
+    expect(result.structuredContent.job_status).toBe('completed');
+    expect(calls.map((x) => x.path)).toEqual([
+      '/me/playlists',
+      '/playlists/created-playlist/items',
+    ]);
+    expect(calls[1].uris).toEqual(['spotify:track:b', 'spotify:track:a', 'spotify:track:c']);
+  });
 });
 
 describe('Express MCP body limit', () => {
@@ -230,6 +291,7 @@ describe('Express MCP body limit', () => {
     SPOTIFY_MARKET: 'PL',
   };
   async function request(payload: unknown) {
+    await setup();
     const app = createApp(cfg, {
       auth: { connected: async () => false } as any,
       client: { request: async () => null, json: async () => null } as any,
@@ -240,14 +302,26 @@ describe('Express MCP body limit', () => {
     const address = server.address() as any;
     const response = await fetch(`http://127.0.0.1:${address.port}/mcp`, {
       method: 'POST',
-      headers: { authorization: 'Bearer test-key', 'content-type': 'application/json' },
+      headers: {
+        authorization: 'Bearer test-key',
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
       body: JSON.stringify(payload),
     });
     await new Promise<void>((r) => server.close(() => r()));
-    return response.status;
+    const raw = await response.text();
+    const json = raw.trimStart().startsWith('event:')
+      ? raw
+          .split('\n')
+          .find((line) => line.startsWith('data:'))
+          ?.slice(5)
+          .trim()
+      : raw;
+    return { status: response.status, body: JSON.parse(json ?? '{}') };
   }
   it('accepts a realistic multi-thousand-track MCP payload under 2mb', async () => {
-    const status = await request({
+    const response = await request({
       jsonrpc: '2.0',
       id: 1,
       method: 'tools/call',
@@ -259,10 +333,12 @@ describe('Express MCP body limit', () => {
         },
       },
     });
-    expect(status).not.toBe(413);
+    expect(response.status).toBe(200);
+    expect(response.body.result?.content?.[0]?.text).toContain('job_id');
+    expect(response.body.result?.isError).not.toBe(true);
   });
   it('rejects a payload above 2mb', async () => {
-    const status = await request({
+    const response = await request({
       jsonrpc: '2.0',
       id: 1,
       method: 'tools/call',
@@ -277,6 +353,8 @@ describe('Express MCP body limit', () => {
         },
       },
     });
-    expect(status).toBe(400);
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatchObject({ code: 'INVALID_REQUEST' });
+    expect(response.body.error.message).toMatch(/too large/i);
   });
 });
