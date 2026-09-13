@@ -18,7 +18,7 @@ sequenceDiagram
 
 The server starts from `src/index.ts`, registers the tools in `src/mcp/tools.ts` and `src/mcp/helpers.ts`, and delegates Spotify calls to `src/spotify/client.ts`. Spotify OAuth is implemented in `src/spotify/auth.ts`; encrypted token persistence is in `src/spotify/token-store.ts`; MCP OAuth persistence and routes are in `src/mcp/oauth.ts`.
 
-The MCP endpoint is stateless at the transport layer. Runtime state is limited to encrypted Spotify credentials and the MCP OAuth store. Do not share either store between unrelated deployments.
+The MCP endpoint is stateless at the transport layer. Durable state includes the SQLite State DB plus the encrypted Spotify credentials and MCP OAuth store. The database is documented in [State Database](/state-database); do not share any of these stores between unrelated deployments.
 
 ## Request lifecycle
 

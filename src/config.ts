@@ -27,6 +27,8 @@ const schema = z.object({
   SPOTIFY_REDIRECT_URI: z.string().url(),
   TOKEN_ENCRYPTION_KEY: z.string().min(1),
   SPOTIFY_TOKEN_STORE_PATH: dataPath('spotify-token.json'),
+  TUNELINK_DATA_DIR: optionalNonEmpty,
+  TUNELINK_DB_PATH: optionalNonEmpty,
   PORT: z.coerce.number().int().positive().default(3000),
   HOST: z.string().default('0.0.0.0'),
   PUBLIC_BASE_URL: z.string().url(),

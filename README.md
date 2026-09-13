@@ -4,7 +4,7 @@ Self-hosted MCP server for connecting AI assistants to your own Spotify account.
 
 > **Unofficial project:** TuneLink is not affiliated with, endorsed by, or sponsored by Spotify, OpenAI, Anthropic, Google, or any other AI platform vendor.
 
-TuneLink exposes Spotify search, playlist, library, discovery and playback tools over MCP Streamable HTTP. It supports Spotify OAuth, multi-client MCP OAuth with PKCE, Dynamic Client Registration (DCR), optional static Bearer authentication, encrypted token persistence and Docker deployment.
+TuneLink exposes Spotify search, playlist, library, discovery and playback tools over MCP Streamable HTTP. It supports Spotify OAuth, multi-client MCP OAuth with PKCE, Dynamic Client Registration (DCR), optional static Bearer authentication, encrypted token persistence, a persistent SQLite State DB, and Docker deployment.
 
 ## Documentation
 
@@ -49,6 +49,10 @@ One deployment can keep an existing pre-registered ChatGPT client while also acc
 - small paid VPS
 
 See [free hosting](docs/deployment/free-hosting.md) and [free/low-cost deployment](docs/deployment/budget-hosting.md).
+
+The State DB architecture, schema, migration policy, backup guidance, and security boundary are documented in [State Database](docs/state-database.md).
+
+Create reviewed local migrations with `npm run db:migration:new -- add-track-isrc`; deployment never generates schema changes.
 
 ## Documentation maintenance
 

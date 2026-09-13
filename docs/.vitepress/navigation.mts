@@ -199,6 +199,16 @@ export const sections: Section[] = [
         labels: { pl: 'Architektura', de: 'Architektur', fr: 'Architecture', es: 'Arquitectura' },
       },
       {
+        path: 'state-database',
+        label: 'State Database',
+        labels: {
+          pl: 'Baza stanu',
+          de: 'Zustandsdatenbank',
+          fr: 'Base d’état',
+          es: 'Base de estado',
+        },
+      },
+      {
         path: 'endpoints',
         label: 'HTTP endpoints',
         labels: {

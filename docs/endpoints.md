@@ -25,7 +25,7 @@ curl -fsS https://mcp.example.com/health
 curl -fsS https://mcp.example.com/auth/status
 ```
 
-`/health` returns `status`, `spotifyConnected`, the application version, and the MCP URL. `/auth/status` returns `spotifyConnected` and `reauthorizationRequired`.
+`/health` returns `status`, `spotifyConnected`, the application version, the MCP URL, and a database object with `status`, `schemaVersion`, and `expectedVersion`. A healthy process reports matching schema versions. `/auth/status` returns `spotifyConnected` and `reauthorizationRequired`.
 
 ## Spotify authorization
 

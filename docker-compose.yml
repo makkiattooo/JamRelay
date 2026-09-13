@@ -5,6 +5,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      TUNELINK_DATA_DIR: /data
     ports:
       - '127.0.0.1:3010:3010'
     volumes:
@@ -31,8 +33,6 @@ services:
     container_name: tunelink_tunnel
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
-    env_file:
-      - /etc/tunelink/compose.env
     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     networks:
       - tunelink_internal

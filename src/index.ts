@@ -12,6 +12,7 @@ import { registerTools } from './mcp/tools.js';
 import { McpOAuthStore, registerMcpOAuthRoutes } from './mcp/oauth.js';
 import { apiErrorHandler, requestId, sendApiError, ApiError } from './http/errors.js';
 import { toolContext } from './mcp/context.js';
+import { closeDatabase, getDatabaseStatus, initializeDatabase } from './db/database.js';
 export type AppDependencies = { auth: SpotifyAuth; client: SpotifyClient; logger: Logger };
 export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
   const logger =
@@ -42,14 +43,21 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
   });
   const oauthStore = new McpOAuthStore(cfg.MCP_OAUTH_STORE_PATH);
   registerMcpOAuthRoutes(app, cfg, oauthStore);
-  app.get('/health', async (_req, res) =>
-    res.json({
-      status: 'ok',
-      spotifyConnected: await auth.connected(),
+  app.get('/health', async (_req, res) => {
+    const database = getDatabaseStatus();
+    const spotifyConnected = await auth.connected();
+    res.status(database.ready ? 200 : 503).json({
+      status: database.ready ? 'ok' : 'error',
+      spotifyConnected,
       version: '1.0.0',
       mcpEndpoint: cfg.PUBLIC_BASE_URL + '/mcp',
-    }),
-  );
+      database: {
+        status: database.ready ? 'ok' : 'error',
+        schemaVersion: database.currentVersion,
+        expectedVersion: database.expectedVersion,
+      },
+    });
+  });
   app.get('/auth/status', async (_req, res) =>
     res.json({ spotifyConnected: await auth.connected(), reauthorizationRequired: false }),
   );
@@ -137,10 +145,33 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
   app.use(apiErrorHandler);
   return app;
 }
-export function startServer(cfg = getConfig()) {
-  const app = createApp(cfg);
-  return app.listen(cfg.PORT, cfg.HOST, () =>
-    pino().info({ event: 'startup', host: cfg.HOST, port: cfg.PORT }, 'Spotify MCP server started'),
+export async function startServer(cfg = getConfig()) {
+  const logger = pino({ level: cfg.LOG_LEVEL });
+  initializeDatabase({
+    dataDir: cfg.TUNELINK_DATA_DIR,
+    dbPath: cfg.TUNELINK_DB_PATH,
+    logger,
+  });
+  const app = createApp(cfg, { logger });
+  const server = app.listen(cfg.PORT, cfg.HOST, () =>
+    logger.info({ event: 'startup', host: cfg.HOST, port: cfg.PORT }, 'Spotify MCP server started'),
   );
+  let shuttingDown = false;
+  const shutdown = (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    logger.info({ event: 'shutdown', signal }, 'TuneLink shutdown requested');
+    server.close((error) => {
+      if (error) logger.error({ err: error }, 'HTTP server shutdown failed');
+      closeDatabase();
+    });
+  };
+  process.once('SIGTERM', () => shutdown('SIGTERM'));
+  process.once('SIGINT', () => shutdown('SIGINT'));
+  return server;
 }
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) startServer();
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url)
+  startServer().catch((error: unknown) => {
+    pino().error({ err: error }, 'TuneLink startup failed');
+    process.exitCode = 1;
+  });

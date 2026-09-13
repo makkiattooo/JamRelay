@@ -57,6 +57,18 @@ description: Generated reference for variables documented in .env.example.
 - **Sensitive:** no
 - **Example/default in `.env.example`:** `info`
 
+### `TUNELINK_DATA_DIR`
+
+- **Sensitive:** no
+- **Example/default in `.env.example`:** _empty_
+- **Notes:** Persistent TuneLink State DB. These are infrastructure settings, not secrets. Local default: ./data/tunelink.db Docker production: /data/tunelink.db (Compose sets TUNELINK_DATA_DIR=/data)
+
+### `TUNELINK_DB_PATH`
+
+- **Sensitive:** no
+- **Example/default in `.env.example`:** _empty_
+- **Notes:** Optional explicit path; overrides TUNELINK_DATA_DIR when set.
+
 ## Token encryption
 
 ### `TOKEN_ENCRYPTION_KEY`
