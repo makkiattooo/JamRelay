@@ -3,7 +3,7 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/logos/jamrelay-logo-dark.png.png">
   <source media="(prefers-color-scheme: light)" srcset="assets/logos/jamrelay-logo-light.png.png">
-  <img src="assets/logos/jamrelay-logo-dark.png.png" alt="JamRelay" width="560">
+  <img src="assets/logos/jamrelay-logo-dark.png.png" alt="JamRelay" width="420">
 </picture>
 
 <br>
