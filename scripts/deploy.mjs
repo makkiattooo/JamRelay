@@ -38,7 +38,7 @@ const defaults = {
 
   localBaseUrl: process.env.JAMRELAY_LOCAL_BASE_URL ?? 'http://127.0.0.1:5267',
 
-  publicBaseUrl: process.env.JAMRELAY_PUBLIC_BASE_URL ?? 'https://jamrelay-mcp.mealoo.pl',
+  publicBaseUrl: process.env.JAMRELAY_PUBLIC_BASE_URL ?? 'https://mcp.jamrelay.com',
 };
 
 function createStamp() {
