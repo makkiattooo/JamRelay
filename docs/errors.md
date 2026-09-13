@@ -2,6 +2,27 @@
 
 Errors can appear as HTTP responses, MCP tool errors, or structured Spotify error objects. The original provider status is preserved even when its body is empty or malformed.
 
+## HTTP error contract
+
+Application JSON endpoints return errors in the following stable shape:
+
+```json
+{
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "Too many requests.",
+    "details": null,
+    "request_id": "req_01K4..."
+  }
+}
+```
+
+`X-Request-ID` is returned on every response and can be supplied by a trusted caller when it matches the documented safe character set. The value is also available in server logs. Unexpected failures always return `500 INTERNAL_ERROR`; infrastructure details are logged server-side only. Malformed JSON returns `400 INVALID_JSON`.
+
+Rate-limited application responses return `429 RATE_LIMIT_EXCEEDED` and should include `Retry-After`. Clients may retry `429`, `502`, `503`, and `504` with exponential backoff and jitter, while respecting `Retry-After`; validation, authentication, authorization, not-found, and conflict errors are not automatically retried.
+
+MCP tool failures use the same stable application code inside an `isError: true` tool result. For example, a persistent Spotify rate limit is returned with `code: RATE_LIMIT_EXCEEDED`, `details.spotify_status: 429`, and `details.retry_after` when Spotify supplied that value. The MCP transport itself may still use HTTP `200`, because the failure belongs to the tool result.
+
 ## Application and Spotify errors
 
 | Code                                 | Meaning                                         | Action                                    |

@@ -7,7 +7,10 @@ import { chunks } from '../utils/chunks.js';
 import { normalizeText, resolveCandidates } from '../spotify/normalize.js';
 import { paginate } from '../spotify/pagination.js';
 import { writeChunks } from '../spotify/write-operation.js';
+import { toApiError } from '../http/errors.js';
 import { registerAdvanced } from './helpers.js';
+import { toolContext } from './context.js';
+import type { Logger } from 'pino';
 const id = z.string().min(1),
   limit = z.number().int().min(1).max(50).default(20);
 const track = (x: any) =>
@@ -114,7 +117,7 @@ export const REQUIRED_TOOL_NAMES = [
   'bulk_add_tracks',
   'create_playlist_from_tracks',
 ] as const;
-export function registerTools(s: McpServer, c: SpotifyClient) {
+export function registerTools(s: McpServer, c: SpotifyClient, logger?: Logger) {
   const original = s.registerTool.bind(s);
   const mutations = new Set([
     'create_playlist',
@@ -138,12 +141,98 @@ export function registerTools(s: McpServer, c: SpotifyClient) {
     'create_playlist_from_tracks',
   ]);
   s = {
-    registerTool: (name: any, config: any, callback: any) =>
-      original(
+    registerTool: (name: any, config: any, callback: any) => {
+      const wrapped = async (...args: any[]) => {
+        const parentContext = toolContext.get();
+        const requestId = parentContext?.requestId ?? `req_${globalThis.crypto.randomUUID()}`;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 15000);
+        const started = Date.now();
+        logger?.info(
+          { event: 'tool.start', request_id: requestId, tool: name },
+          'MCP tool started',
+        );
+        try {
+          const result = await toolContext.run(
+            {
+              requestId,
+              signal: controller.signal,
+              deadlineAt: parentContext?.deadlineAt ?? Date.now() + 15000,
+            },
+            async () =>
+              await Promise.race([
+                callback(...args),
+                new Promise((_, reject) =>
+                  controller.signal.addEventListener(
+                    'abort',
+                    () => reject(new Error('tool_execution_timeout')),
+                    { once: true },
+                  ),
+                ),
+              ]),
+          );
+          logger?.info(
+            {
+              event: 'tool.success',
+              request_id: requestId,
+              tool: name,
+              duration_ms: Date.now() - started,
+            },
+            'MCP tool succeeded',
+          );
+          return result;
+        } catch (error) {
+          const normalized = toApiError(error);
+          logger?.warn(
+            {
+              event: 'tool.error',
+              request_id: requestId,
+              tool: name,
+              code: normalized.code,
+              duration_ms: Date.now() - started,
+            },
+            'MCP tool failed',
+          );
+          const details = {
+            ...(normalized.details ?? {}),
+            ...(error instanceof SpotifyApiError ? { spotify_status: error.status } : {}),
+            ...(normalized.retryAfter !== undefined ? { retry_after: normalized.retryAfter } : {}),
+            request_id: requestId,
+          };
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify({
+                  error: {
+                    code: normalized.code,
+                    message: normalized.message,
+                    details,
+                    request_id: requestId,
+                  },
+                }),
+              },
+            ],
+            structuredContent: {
+              error: {
+                code: normalized.code,
+                message: normalized.message,
+                details,
+                request_id: requestId,
+              },
+            },
+          };
+        } finally {
+          clearTimeout(timer);
+        }
+      };
+      return original(
         name,
         {
           ...config,
           annotations: {
+            ...config.annotations,
             readOnlyHint: !mutations.has(name),
             destructiveHint: [
               'remove_tracks_from_playlist',
@@ -161,8 +250,9 @@ export function registerTools(s: McpServer, c: SpotifyClient) {
             openWorldHint: true,
           },
         },
-        callback,
-      ),
+        wrapped,
+      );
+    },
   } as unknown as McpServer;
   const get = async (path: string) => c.request<any>(path);
   const playlistSnapshot = async (playlistId: string) => {

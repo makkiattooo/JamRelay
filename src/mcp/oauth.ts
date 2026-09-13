@@ -484,6 +484,9 @@ export function registerMcpOAuthRoutes(
   const unavailable = (_req: express.Request, res: express.Response) =>
     res.status(503).json({ error: 'OAuth is not configured' });
 
+  const rateLimited = (res: express.Response, code: string) =>
+    res.status(429).set('Retry-After', '15').json({ error: code });
+
   const resolveClient = async (clientId: string): Promise<OAuthClient | undefined> => {
     const legacy = legacyClient(cfg);
     if (legacy?.clientId === clientId) return legacy;
@@ -529,7 +532,7 @@ export function registerMcpOAuthRoutes(
     if (!cfg.MCP_OAUTH_OWNER_SECRET || cfg.MCP_OAUTH_DCR_ENABLED !== 'true') {
       return res.status(404).json({ error: 'dynamic_registration_disabled' });
     }
-    if (!allowed(req)) return res.status(429).json({ error: 'slow_down' });
+    if (!allowed(req)) return rateLimited(res, 'slow_down');
 
     const body = (req.body ?? {}) as Record<string, unknown>;
     const applicationType = body.application_type;
@@ -625,7 +628,7 @@ export function registerMcpOAuthRoutes(
         });
     } catch (error) {
       if ((error as Error).message === 'dynamic_client_limit_reached') {
-        return res.status(429).json({ error: 'too_many_clients' });
+        return rateLimited(res, 'too_many_clients');
       }
       throw error;
     }
@@ -671,7 +674,7 @@ export function registerMcpOAuthRoutes(
 
   app.post('/oauth/authorize', express.urlencoded({ extended: false }), async (req, res) => {
     if (!cfg.MCP_OAUTH_OWNER_SECRET) return unavailable(req, res);
-    if (!allowed(req)) return res.status(429).json({ error: 'rate_limited' });
+    if (!allowed(req)) return rateLimited(res, 'rate_limited');
 
     const body = (req.body ?? {}) as Record<string, string>;
     const client = await resolveClient(body.client_id ?? '');
@@ -703,7 +706,7 @@ export function registerMcpOAuthRoutes(
 
   app.post('/oauth/token', express.urlencoded({ extended: false }), async (req, res) => {
     if (!cfg.MCP_OAUTH_OWNER_SECRET) return unavailable(req, res);
-    if (!allowed(req)) return res.status(429).json({ error: 'slow_down' });
+    if (!allowed(req)) return rateLimited(res, 'slow_down');
 
     const body = (req.body ?? {}) as Record<string, string>;
     const basic = readBasicClient(req.header('authorization'));

@@ -1,6 +1,7 @@
 import { SpotifyAuth } from './auth.js';
 import { SpotifyApiError, normalizeSpotifyError } from './errors.js';
 import type { Logger } from 'pino';
+import { toolContext } from '../mcp/context.js';
 const knownNoContentMutations = new Set([
   'PUT /me/player/play',
   'PUT /me/player/pause',
@@ -39,7 +40,11 @@ export class SpotifyClient {
       headers.set('Authorization', 'Bearer ' + token);
       headers.set('Accept', 'application/json');
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 30000);
+      const parentSignal = toolContext.get()?.signal;
+      const signal = parentSignal
+        ? AbortSignal.any([parentSignal, controller.signal])
+        : controller.signal;
+      const timer = setTimeout(() => controller.abort(), 8000);
       let response: Response;
       try {
         const started = Date.now();
@@ -50,11 +55,12 @@ export class SpotifyClient {
         response = await fetch('https://api.spotify.com/v1' + requestPath, {
           ...init,
           headers,
-          signal: controller.signal,
+          signal,
         });
         this.logger?.info(
           {
             event: 'spotify_request',
+            request_id: toolContext.get()?.requestId,
             path: requestPath,
             status: response.status,
             latency_ms: Date.now() - started,
@@ -111,6 +117,7 @@ export class SpotifyClient {
       this.logger?.warn(
         {
           event: 'spotify_error_response',
+          request_id: toolContext.get()?.requestId,
           method: init.method ?? 'GET',
           path,
           status: response.status,
@@ -120,18 +127,24 @@ export class SpotifyClient {
       );
       const error = normalizeSpotifyError(response.status, body, retryAfter, trimmed);
       const safe = method === 'GET';
-      if (retry && safe && retryCount < 2 && (response.status === 429 || response.status >= 500)) {
+      if (retry && safe && retryCount < 2 && [429, 502, 503, 504].includes(response.status)) {
         retryCount++;
+        const delay = error.retryAfter ?? Math.pow(2, retryCount - 1);
+        const remaining = toolContext.get()?.deadlineAt
+          ? toolContext.get()!.deadlineAt - Date.now()
+          : Number.POSITIVE_INFINITY;
+        if (delay * 1000 >= remaining) throw error;
         this.logger?.warn(
-          { event: 'spotify_retry', path, status: response.status, retry_after: error.retryAfter },
+          {
+            event: 'spotify_retry',
+            request_id: toolContext.get()?.requestId,
+            path,
+            status: response.status,
+            retry_after: error.retryAfter,
+          },
           'Retrying safe Spotify request',
         );
-        await new Promise((resolve) =>
-          setTimeout(
-            resolve,
-            ((error.retryAfter ?? Math.pow(2, retryCount - 1)) + Math.random()) * 1000,
-          ),
-        );
+        await new Promise((resolve) => setTimeout(resolve, (delay + Math.random()) * 1000));
         continue;
       }
       if (response.status === 401)

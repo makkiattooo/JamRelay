@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { TokenStore, StoredToken } from './token-store.js';
 import { SPOTIFY_SCOPES } from './scopes.js';
 import { SpotifyApiError } from './errors.js';
+import { toolContext } from '../mcp/context.js';
 export class SpotifyAuth {
   private states = new Map<string, number>();
   private refreshPromise?: Promise<string>;
@@ -41,6 +42,8 @@ export class SpotifyAuth {
     if (!exp || exp < Date.now()) throw new Error('Invalid or expired OAuth state');
   }
   async callback(code: string) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
     const r = await fetch('https://accounts.spotify.com/api/token', {
       method: 'POST',
       headers: {
@@ -56,7 +59,11 @@ export class SpotifyAuth {
         code,
         redirect_uri: this.cfg.SPOTIFY_REDIRECT_URI,
       }),
+      signal: toolContext.get()?.signal
+        ? AbortSignal.any([toolContext.get()!.signal, controller.signal])
+        : controller.signal,
     });
+    clearTimeout(timer);
     if (!r.ok) throw new Error('Spotify authorization failed');
     const b = (await r.json()) as {
       access_token: string;
@@ -81,6 +88,8 @@ export class SpotifyAuth {
     return this.refreshPromise;
   }
   private async refresh(t: StoredToken) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
     const r = await fetch('https://accounts.spotify.com/api/token', {
       method: 'POST',
       headers: {
@@ -92,7 +101,11 @@ export class SpotifyAuth {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: t.refreshToken }),
+      signal: toolContext.get()?.signal
+        ? AbortSignal.any([toolContext.get()!.signal, controller.signal])
+        : controller.signal,
     });
+    clearTimeout(timer);
     const b = (await r.json().catch(() => ({}))) as {
       error?: string;
       access_token?: string;

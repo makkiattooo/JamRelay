@@ -10,6 +10,8 @@ import { SpotifyAuth } from './spotify/auth.js';
 import { SpotifyClient } from './spotify/client.js';
 import { registerTools } from './mcp/tools.js';
 import { McpOAuthStore, registerMcpOAuthRoutes } from './mcp/oauth.js';
+import { apiErrorHandler, requestId, sendApiError, ApiError } from './http/errors.js';
+import { toolContext } from './mcp/context.js';
 export type AppDependencies = { auth: SpotifyAuth; client: SpotifyClient; logger: Logger };
 export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
   const logger =
@@ -30,6 +32,7 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', cfg.TRUST_PROXY === 'true');
+  app.use(requestId);
   app.use(express.json({ limit: '64kb' }));
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -88,7 +91,7 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
   const mcpHandler = createMcpHandler(
     () => {
       const server = new McpServer({ name: 'tunelink', version: '1.0.0' });
-      registerTools(server, client);
+      registerTools(server, client, logger);
       return server;
     },
     { legacy: 'stateless' },
@@ -96,13 +99,15 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
   const nodeMcpHandler = toNodeHandler(mcpHandler);
   app.all('/mcp', async (req, res) => {
     if (!(await authorized(req)))
-      return res
-        .status(401)
-        .set(
-          'WWW-Authenticate',
-          `Bearer resource_metadata="${cfg.PUBLIC_BASE_URL.replace(/\/$/, '')}/.well-known/oauth-protected-resource"`,
-        )
-        .json({ error: 'Unauthorized' });
+      return sendApiError(
+        res
+          .status(401)
+          .set(
+            'WWW-Authenticate',
+            `Bearer resource_metadata="${cfg.PUBLIC_BASE_URL.replace(/\/$/, '')}/.well-known/oauth-protected-resource"`,
+          ),
+        new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required.'),
+      );
     const started = Date.now();
     res.on('finish', () =>
       logger.info(
@@ -110,14 +115,26 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
           event: 'mcp_request',
           method: req.method,
           path: '/mcp',
+          request_id: res.locals.requestId,
           status: res.statusCode,
           latency_ms: Date.now() - started,
         },
         'MCP request',
       ),
     );
-    void nodeMcpHandler(req, res, req.body);
+    void toolContext.run(
+      {
+        requestId: res.locals.requestId,
+        signal: new AbortController().signal,
+        deadlineAt: Date.now() + 15000,
+      },
+      () => nodeMcpHandler(req, res, req.body),
+    );
   });
+  app.use((_req, res) =>
+    sendApiError(res, new ApiError(404, 'RESOURCE_NOT_FOUND', 'Resource not found.')),
+  );
+  app.use(apiErrorHandler);
   return app;
 }
 export function startServer(cfg = getConfig()) {
