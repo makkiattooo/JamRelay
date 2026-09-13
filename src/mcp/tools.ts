@@ -113,6 +113,7 @@ const BASE_REQUIRED_TOOL_NAMES = [
   'set_volume',
   'transfer_playback',
   'find_track_exact',
+  'remember_track',
   'find_playlist_by_name',
   'add_tracks_by_search',
   'deduplicate_playlist',

@@ -76,6 +76,12 @@ export class JobRunner {
           );
         }
         const r = resolution as { status: string; uri?: string; id?: string };
+        if (r.status === 'waiting') {
+          const state = getRateLimit('spotify', 'search');
+          setJobStatus(id, 'waiting', state?.blockedUntil ?? Date.now() + 60000);
+          updateJobItem(item.id, 'waiting', { ...input, resolution });
+          return;
+        }
         updateJobItem(item.id, r.status === 'matched' ? 'completed' : 'failed', {
           ...input,
           resolution,

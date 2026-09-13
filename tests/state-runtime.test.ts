@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { closeDatabase, initializeDatabase } from '../src/db/database.js';
 import { SpotifyClient } from '../src/spotify/client.js';
 import { TrackResolver } from '../src/spotify/resolver.js';
-import { upsertTrackAndAlias } from '../src/db/state.js';
+import { recordRateLimit, upsertTrackAndAlias } from '../src/db/state.js';
 import { createJob, getJob, updateJobItem } from '../src/db/jobs.js';
 import { registerAdvanced } from '../src/mcp/helpers.js';
 
@@ -21,8 +21,134 @@ async function setup() {
   initializeDatabase({ dataDir: root, migrationsDir: join(process.cwd(), 'db/migrations') });
 }
 const auth = { accessToken: async () => 'test-token' } as any;
+const canonical = (id: string, title = 'Fallback Song', album = 'Fallback Album') => ({
+  id,
+  uri: `spotify:track:${id}`,
+  name: title,
+  artists: [{ name: 'Fallback Artist' }],
+  album: { name: album, release_date: '2020-01-01' },
+  duration_ms: 1000,
+});
 
 describe('persistent Spotify runtime state', () => {
+  it('uses an alternate provider when persisted Spotify Search is blocked, verifies, caches, and survives restart', async () => {
+    await setup();
+    recordRateLimit('spotify', 'search', 600);
+    const provider = {
+      name: 'web_search',
+      resolve: vi.fn(async () => [{ spotifyUrl: 'https://open.spotify.com/track/fallback' }]),
+    };
+    const paths: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        paths.push(url);
+        return new Response(JSON.stringify(canonical('fallback')), { status: 200 });
+      }),
+    );
+    const resolver = new TrackResolver(new SpotifyClient(auth), provider);
+    const first = await resolver.resolve({ title: 'Fallback Song', artist: 'Fallback Artist' });
+    const second = await resolver.resolve({ title: 'Fallback Song', artist: 'Fallback Artist' });
+    closeDatabase();
+    initializeDatabase({ dataDir: root!, migrationsDir: join(process.cwd(), 'db/migrations') });
+    const third = await resolver.resolve({ title: 'Fallback Song', artist: 'Fallback Artist' });
+    expect(first).toMatchObject({ status: 'matched', source: 'external_verified', id: 'fallback' });
+    expect(second).toMatchObject({ status: 'matched', source: 'database' });
+    expect(third).toMatchObject({ status: 'matched', source: 'database' });
+    expect(provider.resolve).toHaveBeenCalledTimes(1);
+    expect(paths.some((x) => x.includes('/search'))).toBe(false);
+    expect(paths.filter((x) => x.includes('/tracks/fallback'))).toHaveLength(1);
+  });
+
+  it('rejects mismatched and conflicting external candidates without aliases', async () => {
+    await setup();
+    recordRateLimit('spotify', 'search', 600);
+    const provider = {
+      name: 'web_search',
+      resolve: vi.fn(async () => [
+        { spotifyId: 'wrong' },
+        { spotifyId: 'v1' },
+        { spotifyId: 'v2' },
+      ]),
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        const id = url.split('/tracks/')[1];
+        const data =
+          id === 'wrong'
+            ? canonical(id, 'Other Song')
+            : canonical(id, 'Fallback Song', id === 'v1' ? 'Album One' : 'Album Two');
+        return new Response(JSON.stringify(data), { status: 200 });
+      }),
+    );
+    const result = await new TrackResolver(new SpotifyClient(auth), provider).resolve({
+      title: 'Fallback Song',
+      artist: 'Fallback Artist',
+    });
+    expect(result).toMatchObject({ status: 'ambiguous', source: 'alternate_external' });
+    expect(
+      initializeDatabase()
+        .prepare(
+          "SELECT COUNT(*) as count FROM track_aliases WHERE normalized_title='fallback song' AND normalized_artist='fallback artist' AND normalized_album=''",
+        )
+        .get(),
+    ).toEqual({ count: 0 });
+  });
+
+  it('remember_track verifies metadata without Search and preserves the manual attempt', async () => {
+    await setup();
+    recordRateLimit('spotify', 'search', 600);
+    const paths: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        paths.push(url);
+        return new Response(JSON.stringify(canonical('manual')), { status: 200 });
+      }),
+    );
+    const resolver = new TrackResolver(new SpotifyClient(auth), {
+      name: 'unused',
+      resolve: vi.fn(),
+    });
+    const result = await resolver.rememberTrack({
+      track_id: 'spotify:track:manual',
+      title: 'Fallback Song',
+      artist: 'Fallback Artist',
+      album: 'Fallback Album',
+    });
+    expect(result).toMatchObject({ status: 'matched', id: 'manual' });
+    expect(paths.every((x) => !x.includes('/search'))).toBe(true);
+    expect(
+      initializeDatabase().prepare('SELECT strategy,status FROM resolver_attempts').all(),
+    ).toContainEqual({ strategy: 'manual', status: 'matched' });
+  });
+
+  it('passively warms canonical tracks and safe album-less aliases from nested Spotify responses', async () => {
+    await setup();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ items: [canonical('warm', 'Warm Song', 'Warm Album')] }), {
+            status: 200,
+          }),
+      ),
+    );
+    const client = new SpotifyClient(auth);
+    await client.request('/me/player/recently-played');
+    const result = await new TrackResolver(client).resolve({
+      title: 'Warm Song',
+      artist: 'Fallback Artist',
+    });
+    expect(result).toMatchObject({ status: 'matched', source: 'database', id: 'warm' });
+    expect(initializeDatabase().prepare('SELECT COUNT(*) as count FROM tracks').get()).toEqual({
+      count: 1,
+    });
+    expect(
+      initializeDatabase().prepare('SELECT COUNT(*) as count FROM track_aliases').get(),
+    ).toEqual({ count: 2 });
+  });
   it('aggregates 429 errors and blocks search before the next HTTP request', async () => {
     await setup();
     let calls = 0;

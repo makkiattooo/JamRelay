@@ -69,8 +69,8 @@ it('exposes exactly the required tools through tools/list', async () => {
   );
   const listed = await rpc(handler, { jsonrpc: '2.0', id: 10, method: 'tools/list', params: {} });
   const names = listed.result.tools.map((x: any) => x.name);
-  expect(names).toHaveLength(39);
-  expect(new Set(names).size).toBe(39);
+  expect(names).toHaveLength(40);
+  expect(new Set(names).size).toBe(40);
   expect(names.sort()).toEqual([...REQUIRED_TOOL_NAMES].sort());
   const add = listed.result.tools.find((x: any) => x.name === 'add_tracks_to_playlist');
   const search = listed.result.tools.find((x: any) => x.name === 'search_tracks');
@@ -151,7 +151,7 @@ it('serves the real Express app with bearer auth and MCP v2 discovery/calls', as
     });
     expect(response.status).toBe(200);
     const listed: any = wire(await response.text());
-    expect(listed.result.tools).toHaveLength(39);
+    expect(listed.result.tools).toHaveLength(40);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }

@@ -7,7 +7,7 @@ description: Generated reference for the MCP tools registered by the server.
 
 > **Generated file.** Do not edit this page by hand. Run `npm run docs:generate` after changing MCP tool registrations.
 
-Generated from the runtime tool registry. Current tool count: **48**.
+Generated from the runtime tool registry. Current tool count: **49**.
 
 ## `add_tracks_by_search`
 
@@ -461,6 +461,21 @@ Control Spotify playback.
 **Arguments:**
 
 - `device_id`
+
+## `remember_track`
+
+**Title:** Remember track
+
+**Type:** Read
+
+Verify a known Spotify track ID, URI, or public URL and save its safe alias.
+
+**Arguments:**
+
+- `track_id`
+- `title`
+- `artist`
+- `album`
 
 ## `remove_saved_tracks`
 

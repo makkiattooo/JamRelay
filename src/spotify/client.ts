@@ -2,7 +2,13 @@ import { SpotifyAuth } from './auth.js';
 import { SpotifyApiError, normalizeSpotifyError } from './errors.js';
 import type { Logger } from 'pino';
 import { toolContext } from '../mcp/context.js';
-import { clearRateLimit, getRateLimit, recordApiError, recordRateLimit } from '../db/state.js';
+import {
+  clearRateLimit,
+  getRateLimit,
+  recordApiError,
+  recordRateLimit,
+  indexCanonicalTrack,
+} from '../db/state.js';
 const knownNoContentMutations = new Set([
   'PUT /me/player/play',
   'PUT /me/player/pause',
@@ -14,6 +20,27 @@ const knownNoContentMutations = new Set([
 ]);
 function isKnownNoContentMutation(method: string, path: string) {
   return knownNoContentMutations.has(method + ' ' + path.split('?')[0]);
+}
+function warmCanonicalTracks(value: unknown, seen = new Set<unknown>(), budget = { n: 0 }): void {
+  if (!value || typeof value !== 'object' || seen.has(value) || budget.n >= 500) return;
+  seen.add(value);
+  if (Array.isArray(value)) {
+    for (const item of value) warmCanonicalTracks(item, seen, budget);
+    return;
+  }
+  const x = value as Record<string, unknown>;
+  if (
+    x.type === 'track' ||
+    (typeof x.id === 'string' &&
+      typeof x.uri === 'string' &&
+      typeof x.name === 'string' &&
+      Array.isArray(x.artists) &&
+      x.album)
+  ) {
+    budget.n++;
+    indexCanonicalTrack(x as any);
+  }
+  for (const child of Object.values(x)) warmCanonicalTracks(child, seen, budget);
 }
 export class SpotifyClient {
   constructor(
@@ -127,6 +154,7 @@ export class SpotifyClient {
             'Spotify returned invalid JSON.',
           );
         }
+        warmCanonicalTracks(body);
         return body as T;
       }
       this.logger?.warn(

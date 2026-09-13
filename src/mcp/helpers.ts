@@ -143,6 +143,20 @@ export function registerAdvanced(
     },
   );
   s.registerTool(
+    'remember_track',
+    {
+      title: 'Remember track',
+      description: 'Verify a known Spotify track ID, URI, or public URL and save its safe alias.',
+      inputSchema: {
+        track_id: id,
+        title: z.string().min(1).max(200),
+        artist: z.string().min(1).max(200),
+        album: z.string().max(200).optional(),
+      },
+    },
+    async (a: any) => text(await resolver.rememberTrack(a)),
+  );
+  s.registerTool(
     'find_playlist_by_name',
     {
       title: 'Find playlist by name',

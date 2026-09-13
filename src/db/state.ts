@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { getDatabase } from './database.js';
+import { normalizeText } from '../spotify/normalize.js';
 
 export type ApiErrorRecord = {
   id: number;
@@ -324,6 +325,10 @@ export function indexCanonicalTrack(match: {
   try {
     const db = getDatabase();
     const now = Date.now();
+    const artist = match.artists
+      .map((x) => x.name)
+      .filter(Boolean)
+      .join(', ');
     db.prepare(
       `INSERT INTO tracks (spotify_track_id,spotify_uri,title,artist,album,duration_ms,source,confidence,verified_at,created_at,updated_at)
       VALUES (?,?,?,?,?,?, 'spotify_response', NULL, ?, ?, ?)
@@ -332,16 +337,50 @@ export function indexCanonicalTrack(match: {
       match.id,
       match.uri,
       match.name,
-      match.artists
-        .map((x) => x.name)
-        .filter(Boolean)
-        .join(', '),
+      artist,
       match.album?.name ?? null,
       match.duration_ms ?? null,
       now,
       now,
       now,
     );
+    // Warm only aliases derived from Spotify's own canonical metadata.  The
+    // album-less form is created only while the pair is unambiguous.
+    const canonical = { title: match.name!, artist, album: match.album?.name ?? '' };
+    const addAlias = (title: string, artistName: string, album: string) => {
+      const existing = db
+        .prepare(
+          'SELECT track_id as trackId FROM track_aliases WHERE normalized_title=? AND normalized_artist=? AND normalized_album=?',
+        )
+        .get(title, artistName, album) as { trackId: number } | undefined;
+      const row = db.prepare('SELECT id FROM tracks WHERE spotify_track_id=?').get(match.id!) as {
+        id: number;
+      };
+      if (existing && existing.trackId !== row.id) return;
+      db.prepare(
+        `INSERT INTO track_aliases (track_id,normalized_title,normalized_artist,normalized_album,hit_count,created_at,updated_at)
+        VALUES (?,?,?,?,0,?,?) ON CONFLICT(normalized_title,normalized_artist,normalized_album) DO UPDATE SET updated_at=excluded.updated_at`,
+      ).run(row.id, title, artistName, album, now, now);
+    };
+    addAlias(
+      normalizeText(canonical.title),
+      normalizeText(canonical.artist),
+      normalizeText(canonical.album),
+    );
+    const pair = db
+      .prepare(
+        'SELECT COUNT(*) as count FROM tracks WHERE lower(title)=lower(?) AND lower(artist)=lower(?)',
+      )
+      .get(canonical.title, canonical.artist) as { count: number };
+    if (pair.count === 1) {
+      addAlias(normalizeText(canonical.title), normalizeText(canonical.artist), '');
+    } else {
+      // Once a second version is observed, every album-less mapping for the
+      // pair becomes unsafe. Fail closed instead of retaining a stale choice.
+      db.prepare(
+        'DELETE FROM track_aliases WHERE normalized_title=? AND normalized_artist=? AND normalized_album=?',
+      ).run(normalizeText(canonical.title), normalizeText(canonical.artist), '');
+    }
   } catch {
     /* passive warming must never break a Spotify read */
   }
@@ -349,7 +388,7 @@ export function indexCanonicalTrack(match: {
 
 export function recordResolverAttempt(
   query: TrackQuery,
-  strategy: 'database' | 'spotify_search',
+  strategy: 'database' | 'spotify_search' | 'web_search' | 'oembed' | 'manual',
   status: 'matched' | 'ambiguous' | 'unmatched' | 'failed',
   trackId?: number,
   confidence?: number,

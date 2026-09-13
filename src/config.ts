@@ -57,6 +57,13 @@ const schema = z.object({
 
   TRUST_PROXY: z.string().default('false'),
   SPOTIFY_MARKET: z.string().length(2).default('PL'),
+  // Optional, disabled-by-default adapter. The endpoint must be an operator-
+  // configured API returning { candidates: [{ spotifyId|spotifyUrl }] }.
+  ALTERNATE_TRACK_RESOLVER_URL: optionalUrl,
+  ALTERNATE_TRACK_RESOLVER_NAME: optionalNonEmpty,
+  ALTERNATE_TRACK_RESOLVER_TOKEN: optionalNonEmpty,
+  ALTERNATE_TRACK_RESOLVER_TIMEOUT_MS: z.coerce.number().int().min(100).max(10000).default(2500),
+  ALTERNATE_TRACK_RESOLVER_MAX_RESULTS: z.coerce.number().int().min(1).max(10).default(5),
 });
 
 export type Config = z.infer<typeof schema>;

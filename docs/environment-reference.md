@@ -30,6 +30,32 @@ description: Generated reference for variables documented in .env.example.
 - **Sensitive:** no
 - **Example/default in `.env.example`:** `PL`
 
+### `ALTERNATE_TRACK_RESOLVER_URL`
+
+- **Sensitive:** no
+- **Example/default in `.env.example`:** _empty_
+- **Notes:** Optional alternate resolver API. Disabled when URL is unset. The API must return JSON: { "candidates": [{ "spotifyUrl": "https://open.spotify.com/track/..." }] }.
+
+### `ALTERNATE_TRACK_RESOLVER_NAME`
+
+- **Sensitive:** no
+- **Example/default in `.env.example`:** `web_search`
+
+### `ALTERNATE_TRACK_RESOLVER_TOKEN`
+
+- **Sensitive:** no
+- **Example/default in `.env.example`:** _empty_
+
+### `ALTERNATE_TRACK_RESOLVER_TIMEOUT_MS`
+
+- **Sensitive:** no
+- **Example/default in `.env.example`:** `2500`
+
+### `ALTERNATE_TRACK_RESOLVER_MAX_RESULTS`
+
+- **Sensitive:** no
+- **Example/default in `.env.example`:** `5`
+
 ## Server
 
 ### `HOST`
