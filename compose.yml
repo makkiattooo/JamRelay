@@ -61,4 +61,5 @@ volumes:
 
 networks:
   jamrelay_internal:
+    external: true
     name: jamrelay_internal

@@ -9,12 +9,14 @@ const automaticPagesBase =
     ? `/${repoName}/`
     : '/';
 const pagesBase = process.env.DOCS_BASE ?? automaticPagesBase;
+const faviconHref = `${pagesBase}favicon.ico`;
 
 export default defineConfig({
   title: 'JamRelay',
   description: 'Self-hosted MCP bridge between AI assistants and Spotify.',
   lang: 'en',
   base: pagesBase,
+  head: [['link', { rel: 'icon', href: faviconHref }]],
   locales: {
     root: { label: localeMeta.en.label, lang: localeMeta.en.lang },
     pl: { label: localeMeta.pl.label, lang: localeMeta.pl.lang, link: '/pl/' },
