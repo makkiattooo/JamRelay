@@ -30,7 +30,7 @@ export function createJob(type: string, payload: unknown, items: unknown[], maxA
   }
 }
 
-export function getJob(id: number, offset = 0, limit?: number) {
+export function getJob(id: number, offset = 0, limit?: number): any {
   const db = getDatabase();
   const job = db
     .prepare(
@@ -47,6 +47,72 @@ export function getJob(id: number, offset = 0, limit?: number) {
     .prepare('SELECT status, COUNT(*) as count FROM job_items WHERE job_id=? GROUP BY status')
     .all(id);
   return { ...job, payload: JSON.parse(String(job.payload)), items, counts };
+}
+
+export function getJobItems(id: number) {
+  return getDatabase()
+    .prepare(
+      'SELECT id,position,track_id as trackId,status,payload_json as payload,error_id as errorId FROM job_items WHERE job_id=? ORDER BY position',
+    )
+    .all(id) as Array<{
+    id: number;
+    position: number;
+    trackId: number | null;
+    status: string;
+    payload: string | null;
+    errorId: number | null;
+  }>;
+}
+
+export function updateJobItem(
+  id: number,
+  status: 'pending' | 'waiting' | 'completed' | 'failed' | 'skipped',
+  payload?: unknown,
+  trackId?: number,
+  errorId?: number,
+) {
+  getDatabase()
+    .prepare(
+      'UPDATE job_items SET status=?, payload_json=COALESCE(?,payload_json), track_id=COALESCE(?,track_id), error_id=COALESCE(?,error_id), updated_at=? WHERE id=?',
+    )
+    .run(
+      status,
+      payload === undefined ? null : JSON.stringify(payload),
+      trackId ?? null,
+      errorId ?? null,
+      Date.now(),
+      id,
+    );
+}
+
+export function listJobs(offset = 0, limit?: number) {
+  return getDatabase()
+    .prepare(
+      'SELECT id,type,status,attempts,max_attempts as maxAttempts,run_after as runAfter,last_error_id as lastErrorId,created_at as createdAt,updated_at as updatedAt FROM jobs ORDER BY created_at DESC LIMIT ? OFFSET ?',
+    )
+    .all(maxPage(limit), Math.max(0, offset));
+}
+
+export function claimEligibleJob(now = Date.now()) {
+  const db = getDatabase();
+  const row = db
+    .prepare(
+      'SELECT id FROM jobs WHERE status IN ("pending","waiting") AND (run_after IS NULL OR run_after<=?) ORDER BY created_at LIMIT 1',
+    )
+    .get(now) as { id: number } | undefined;
+  if (!row) return null;
+  const changed = db
+    .prepare(
+      'UPDATE jobs SET status="running", attempts=attempts+1, updated_at=?, started_at=COALESCE(started_at,?) WHERE id=? AND status IN ("pending","waiting")',
+    )
+    .run(now, now, row.id);
+  return Number(changed.changes) === 1 ? row.id : null;
+}
+
+export function updateJobPayload(id: number, payload: unknown) {
+  getDatabase()
+    .prepare('UPDATE jobs SET payload_json=?,updated_at=? WHERE id=?')
+    .run(JSON.stringify(payload), Date.now(), id);
 }
 
 export function setJobStatus(id: number, status: JobStatus, runAfter?: number, errorId?: number) {

@@ -11,11 +11,13 @@ import { toApiError } from '../http/errors.js';
 import { registerAdvanced } from './helpers.js';
 import { toolContext } from './context.js';
 import type { Logger } from 'pino';
+import { indexCanonicalTrack } from '../db/state.js';
 const id = z.string().min(1),
   limit = z.number().int().min(1).max(50).default(20);
 const track = (x: any) =>
   x
     ? {
+        ...(indexCanonicalTrack(x), {}),
         id: x.id,
         uri: x.uri,
         name: x.name,
@@ -144,6 +146,10 @@ export function registerTools(
     'deduplicate_playlist',
     'bulk_add_tracks',
     'create_playlist_from_tracks',
+    'create_bulk_job',
+    'resume_job',
+    'commit_job',
+    'cancel_job',
   ]);
   s = {
     registerTool: (name: any, config: any, callback: any) => {
@@ -163,6 +169,7 @@ export function registerTools(
               requestId,
               signal: controller.signal,
               deadlineAt: parentContext?.deadlineAt ?? Date.now() + 15000,
+              operation: name,
             },
             async () =>
               await Promise.race([

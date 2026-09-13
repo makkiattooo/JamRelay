@@ -160,6 +160,59 @@ export function clearRateLimit(provider: string, scope: string): void {
   }
 }
 
+export function getRateLimitStatus(provider = 'spotify', scope?: string) {
+  const rows = getDatabase()
+    .prepare(
+      `SELECT provider, scope, blocked_until as blockedUntil, retry_after_seconds as retryAfterSeconds, reason, last_status_code as lastStatusCode, updated_at as updatedAt FROM rate_limit_state ${scope ? 'WHERE provider=? AND scope=?' : 'WHERE provider=?'} ORDER BY scope`,
+    )
+    .all(...(scope ? [provider, scope] : [provider])) as Array<{
+    provider: string;
+    scope: string;
+    blockedUntil: number | null;
+    retryAfterSeconds: number | null;
+    reason: string | null;
+    lastStatusCode: number | null;
+    updatedAt: number;
+  }>;
+  return rows.map((row) => ({
+    provider: row.provider,
+    scope: row.scope,
+    blocked: row.blockedUntil !== null && row.blockedUntil > Date.now(),
+    blocked_until: row.blockedUntil,
+    remaining_seconds: row.blockedUntil
+      ? Math.max(0, Math.ceil((row.blockedUntil - Date.now()) / 1000))
+      : 0,
+    reason: row.reason,
+    last_status_code: row.lastStatusCode,
+    updated_at: row.updatedAt,
+  }));
+}
+
+export function getRecentApiErrors(
+  limit = 25,
+  provider?: string,
+  statusCode?: number,
+  unresolvedOnly = false,
+) {
+  const conditions = ['1=1'];
+  const args: (string | number)[] = [];
+  if (provider) {
+    conditions.push('provider=?');
+    args.push(provider);
+  }
+  if (statusCode !== undefined) {
+    conditions.push('status_code=?');
+    args.push(statusCode);
+  }
+  if (unresolvedOnly) conditions.push('resolved_at IS NULL');
+  args.push(Math.min(100, Math.max(1, limit)));
+  return getDatabase()
+    .prepare(
+      `SELECT id,fingerprint,provider,endpoint,method,status_code as statusCode,reason,message,retry_after_seconds as retryAfterSeconds,operation,first_seen_at as firstSeenAt,last_seen_at as lastSeenAt,occurrences,resolved_at as resolvedAt FROM api_errors WHERE ${conditions.join(' AND ')} ORDER BY last_seen_at DESC LIMIT ?`,
+    )
+    .all(...args);
+}
+
 export type TrackQuery = { title: string; artist: string; album?: string; year?: number };
 export type CachedTrack = {
   id: number;
@@ -257,6 +310,41 @@ export function upsertTrackAndAlias(
     VALUES (?, ?, ?, ?, 0, ?, ?) ON CONFLICT(normalized_title, normalized_artist, normalized_album) DO UPDATE SET updated_at=excluded.updated_at`,
   ).run(trackId, query.title, query.artist, query.album ?? '', now, now);
   return trackId;
+}
+
+export function indexCanonicalTrack(match: {
+  id?: string;
+  uri?: string;
+  name?: string;
+  artists?: Array<{ name?: string }>;
+  album?: { name?: string };
+  duration_ms?: number;
+}) {
+  if (!match.id || !match.uri || !match.name || !match.artists?.length) return;
+  try {
+    const db = getDatabase();
+    const now = Date.now();
+    db.prepare(
+      `INSERT INTO tracks (spotify_track_id,spotify_uri,title,artist,album,duration_ms,source,confidence,verified_at,created_at,updated_at)
+      VALUES (?,?,?,?,?,?, 'spotify_response', NULL, ?, ?, ?)
+      ON CONFLICT(spotify_track_id) DO UPDATE SET spotify_uri=excluded.spotify_uri,title=excluded.title,artist=excluded.artist,album=excluded.album,duration_ms=excluded.duration_ms,updated_at=excluded.updated_at`,
+    ).run(
+      match.id,
+      match.uri,
+      match.name,
+      match.artists
+        .map((x) => x.name)
+        .filter(Boolean)
+        .join(', '),
+      match.album?.name ?? null,
+      match.duration_ms ?? null,
+      now,
+      now,
+      now,
+    );
+  } catch {
+    /* passive warming must never break a Spotify read */
+  }
 }
 
 export function recordResolverAttempt(

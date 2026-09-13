@@ -98,18 +98,18 @@ export class TrackResolver {
     }
   }
   async resolveMany(inputs: TrackQuery[]) {
-    const results = new Map<string, Resolution>();
+    const pending = new Map<string, Promise<Resolution>>();
     return Promise.all(
-      inputs.map(async (input) => {
+      inputs.map((input) => {
         const key = trackKey({
           title: normalizeText(input.title),
           artist: normalizeText(input.artist),
           album: input.album ? normalizeText(input.album) : '',
         });
-        const existing = results.get(key);
+        const existing = pending.get(key);
         if (existing) return existing;
-        const value = await this.resolve(input);
-        results.set(key, value);
+        const value = this.resolve(input);
+        pending.set(key, value);
         return value;
       }),
     );

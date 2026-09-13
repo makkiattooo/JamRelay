@@ -5,9 +5,20 @@ import { chunks } from '../utils/chunks.js';
 import { normalizeText, resolveCandidates } from '../spotify/normalize.js';
 import { writeChunks } from '../spotify/write-operation.js';
 import { TrackResolver } from '../spotify/resolver.js';
-import { cancelJob, createJob, getJob, listStateDiagnostics, setJobStatus } from '../db/jobs.js';
+import {
+  cancelJob,
+  createJob,
+  getJob,
+  getJobItems,
+  listJobs,
+  listStateDiagnostics,
+  setJobStatus,
+  updateJobItem,
+  updateJobPayload,
+} from '../db/jobs.js';
 import { isDatabaseInitialized } from '../db/database.js';
 import { SpotifyApiError } from '../spotify/errors.js';
+import { getRateLimit, getRateLimitStatus, getRecentApiErrors } from '../db/state.js';
 const id = z.string().min(1);
 const text = (x: unknown) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(x) }],
@@ -203,10 +214,20 @@ export function registerAdvanced(
     skipped_existing: report.filter((x) => x.status === 'matched' && existing.has(x.uri)).length,
     waiting: report.filter((x) => x.status === 'waiting').length,
   });
-  const waitingJob = (type: string, payload: unknown, items: unknown[]) => {
+  const waitingJob = (type: string, payload: unknown, items: unknown[], report?: any[]) => {
     if (!isDatabaseInitialized()) return undefined;
     const jobId = createJob(type, payload, items);
-    setJobStatus(jobId, 'waiting');
+    if (report)
+      report.forEach((item, index) => {
+        if (item.status !== 'waiting')
+          updateJobItem(
+            getJobItems(jobId)[index].id,
+            item.status === 'matched' ? 'completed' : 'failed',
+            { ...(items[index] as any), resolution: item },
+          );
+      });
+    const state = getRateLimit('spotify', 'search');
+    setJobStatus(jobId, 'waiting', state?.blockedUntil ?? Date.now() + 60000);
     return jobId;
   };
   async function addResolved(a: any, list: any[], dry: boolean) {
@@ -215,7 +236,7 @@ export function registerAdvanced(
     if (report.some((x) => x.status === 'waiting'))
       return {
         ...counts(report, new Set()),
-        job_id: waitingJob('add_tracks_by_search', a, list),
+        job_id: waitingJob('add_tracks_by_search', a, list, report),
         job_status: 'waiting',
         added: 0,
         blocked: true,
@@ -281,7 +302,7 @@ export function registerAdvanced(
       if (report.some((x) => x.status === 'waiting'))
         return text({
           ...summary,
-          job_id: waitingJob('bulk_add_tracks', a, a.tracks),
+          job_id: waitingJob('bulk_add_tracks', a, a.tracks, report),
           job_status: 'waiting',
           added: 0,
           blocked: true,
@@ -429,7 +450,7 @@ export function registerAdvanced(
       if (report.some((x) => x.status === 'waiting'))
         return text({
           created: false,
-          job_id: waitingJob('create_playlist_from_tracks', a, a.tracks),
+          job_id: waitingJob('create_playlist_from_tracks', a, a.tracks, report),
           job_status: 'waiting',
           report,
           reason: 'rate_limited',
@@ -490,6 +511,20 @@ export function registerAdvanced(
     );
   if (includeStateTools)
     s.registerTool(
+      'list_jobs',
+      {
+        title: 'List jobs',
+        description: 'List bounded durable job summaries.',
+        inputSchema: {
+          offset: z.number().int().min(0).default(0),
+          limit: z.number().int().min(1).max(100).default(25),
+        },
+      },
+      async (a: any) =>
+        text({ jobs: listJobs(a.offset, a.limit), offset: a.offset, limit: a.limit }),
+    );
+  if (includeStateTools)
+    s.registerTool(
       'resume_job',
       {
         title: 'Resume job',
@@ -497,8 +532,21 @@ export function registerAdvanced(
         inputSchema: { job_id: z.number().int().positive() },
       },
       async (a: any) => {
+        const job = getJob(a.job_id, 0, 1);
+        if (!job) return text({ error: 'job_not_found' });
+        if (job.status === 'cancelled' || job.status === 'completed')
+          return text({ error: 'invalid_resume_state', job_status: job.status });
+        const state = getRateLimit('spotify', 'search');
+        if (state) {
+          setJobStatus(a.job_id, 'waiting', state.blockedUntil ?? Date.now() + 60000);
+          return text({ job_id: a.job_id, job_status: 'waiting', run_after: state.blockedUntil });
+        }
         setJobStatus(a.job_id, 'pending', Date.now());
-        return text({ job_id: a.job_id, job_status: 'pending' });
+        return text({
+          job_id: a.job_id,
+          job_status: 'pending',
+          progress: getJob(a.job_id, 0, 1)?.counts,
+        });
       },
     );
   if (includeStateTools)
@@ -506,12 +554,84 @@ export function registerAdvanced(
       'commit_job',
       {
         title: 'Commit job',
-        description: 'Mark a successfully prepared durable job as completed.',
+        description: 'Commit a ready durable job with ordered, chunked Spotify writes.',
         inputSchema: { job_id: z.number().int().positive() },
       },
       async (a: any) => {
-        setJobStatus(a.job_id, 'completed');
-        return text({ job_id: a.job_id, job_status: 'completed' });
+        const job = getJob(a.job_id, 0, 1);
+        if (!job) return text({ error: 'job_not_found' });
+        const payload = job.payload as any;
+        if (
+          payload.phase !== 'ready_to_commit' ||
+          ['cancelled', 'completed'].includes(String(job.status))
+        )
+          return text({ job_id: a.job_id, job_status: job.status, error: 'invalid_commit_state' });
+        const rows = getJobItems(a.job_id);
+        const unresolved = rows.filter((x) => x.status !== 'completed');
+        if (payload.strict !== false && unresolved.length)
+          return text({
+            job_id: a.job_id,
+            error: 'unresolved_items',
+            unresolved_count: unresolved.length,
+          });
+        const uris = rows
+          .filter((x) => x.status === 'completed')
+          .sort((x, y) => x.position - y.position)
+          .map((x) => {
+            const item: any = x.payload ? JSON.parse(x.payload) : {};
+            return item.resolution?.uri;
+          })
+          .filter(Boolean);
+        try {
+          setJobStatus(a.job_id, 'running');
+          let playlistId = payload.playlist_id as string | undefined;
+          let playlist: any;
+          if (job.type === 'create_playlist_from_tracks') {
+            playlist = await c.json('/me/playlists', {
+              name: payload.name,
+              description: payload.description ?? '',
+              public: payload.public ?? false,
+            });
+            playlistId = playlist.id;
+          }
+          if (!playlistId) return text({ job_id: a.job_id, error: 'playlist_id_required' });
+          const result = await writeChunks(`job:${job.type}`, playlistId, uris, async (part) =>
+            c.json('/playlists/' + playlistId + '/items', { uris: part }),
+          );
+          if (!result.ok) {
+            updateJobPayload(a.job_id, {
+              ...payload,
+              phase: 'failed',
+              commit_result: result,
+              manual_review: Boolean(result.partial),
+            });
+            setJobStatus(a.job_id, 'failed');
+            return text({ job_id: a.job_id, job_status: 'failed', result });
+          }
+          updateJobPayload(a.job_id, {
+            ...payload,
+            phase: 'completed',
+            playlist_id: playlistId,
+            playlist,
+            commit_result: result,
+          });
+          setJobStatus(a.job_id, 'completed');
+          return text({ job_id: a.job_id, job_status: 'completed', playlist, result });
+        } catch {
+          updateJobPayload(a.job_id, {
+            ...payload,
+            phase: 'failed',
+            manual_review: true,
+            commit_error: 'transport_uncertain',
+          });
+          setJobStatus(a.job_id, 'failed');
+          return text({
+            job_id: a.job_id,
+            job_status: 'failed',
+            manual_review: true,
+            error: 'transport_uncertain',
+          });
+        }
       },
     );
   if (includeStateTools)
@@ -536,5 +656,31 @@ export function registerAdvanced(
         inputSchema: {},
       },
       async () => text(listStateDiagnostics()),
+    );
+  if (includeStateTools)
+    s.registerTool(
+      'get_rate_limit_status',
+      {
+        title: 'Get rate limit status',
+        description: 'Inspect persisted provider rate-limit scopes.',
+        inputSchema: { provider: z.string().default('spotify'), scope: z.string().optional() },
+      },
+      async (a: any) => text(getRateLimitStatus(a.provider, a.scope)),
+    );
+  if (includeStateTools)
+    s.registerTool(
+      'get_recent_api_errors',
+      {
+        title: 'Get recent API errors',
+        description: 'Inspect bounded, normalized API error history.',
+        inputSchema: {
+          limit: z.number().int().min(1).max(100).default(25),
+          provider: z.string().optional(),
+          status_code: z.number().int().optional(),
+          unresolved_only: z.boolean().default(false),
+        },
+      },
+      async (a: any) =>
+        text(getRecentApiErrors(a.limit, a.provider, a.status_code, a.unresolved_only)),
     );
 }

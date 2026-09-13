@@ -13,6 +13,7 @@ import { McpOAuthStore, registerMcpOAuthRoutes } from './mcp/oauth.js';
 import { apiErrorHandler, requestId, sendApiError, ApiError } from './http/errors.js';
 import { toolContext } from './mcp/context.js';
 import { recoverInterruptedJobs } from './db/jobs.js';
+import { JobRunner } from './db/job-runner.js';
 import {
   closeDatabase,
   getDatabaseStatus,
@@ -40,7 +41,7 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
   app.disable('x-powered-by');
   app.set('trust proxy', cfg.TRUST_PROXY === 'true');
   app.use(requestId);
-  app.use(express.json({ limit: '64kb' }));
+  app.use(express.json({ limit: '2mb' }));
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
@@ -150,6 +151,7 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
     sendApiError(res, new ApiError(404, 'RESOURCE_NOT_FOUND', 'Resource not found.')),
   );
   app.use(apiErrorHandler);
+  (app as typeof app & { tunelinkClient: SpotifyClient }).tunelinkClient = client;
   return app;
 }
 export async function startServer(cfg = getConfig()) {
@@ -161,6 +163,11 @@ export async function startServer(cfg = getConfig()) {
   });
   recoverInterruptedJobs();
   const app = createApp(cfg, { logger });
+  const jobRunner = new JobRunner(
+    (app as typeof app & { tunelinkClient: SpotifyClient }).tunelinkClient,
+    logger,
+  );
+  jobRunner.start();
   const server = app.listen(cfg.PORT, cfg.HOST, () =>
     logger.info({ event: 'startup', host: cfg.HOST, port: cfg.PORT }, 'Spotify MCP server started'),
   );
@@ -168,6 +175,7 @@ export async function startServer(cfg = getConfig()) {
   const shutdown = (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
+    void jobRunner.stop();
     logger.info({ event: 'shutdown', signal }, 'TuneLink shutdown requested');
     server.close((error) => {
       if (error) logger.error({ err: error }, 'HTTP server shutdown failed');

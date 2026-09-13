@@ -7,7 +7,7 @@ description: Generated reference for the MCP tools registered by the server.
 
 > **Generated file.** Do not edit this page by hand. Run `npm run docs:generate` after changing MCP tool registrations.
 
-Generated from the runtime tool registry. Current tool count: **45**.
+Generated from the runtime tool registry. Current tool count: **48**.
 
 ## `add_tracks_by_search`
 
@@ -58,7 +58,7 @@ Add mixed ID/URI/search track inputs in ordered chunks; supports strict, dry_run
 
 **Title:** Cancel job
 
-**Type:** Read
+**Type:** Write / action
 
 Cancel a durable job without deleting its history.
 
@@ -82,9 +82,9 @@ Return an exact input-to-saved mapping using current /me/library/contains.
 
 **Title:** Commit job
 
-**Type:** Read
+**Type:** Write / action
 
-Mark a successfully prepared durable job as completed.
+Commit a ready durable job with ordered, chunked Spotify writes.
 
 **Arguments:**
 
@@ -94,7 +94,7 @@ Mark a successfully prepared durable job as completed.
 
 **Title:** Create bulk job
 
-**Type:** Read
+**Type:** Write / action
 
 Persist a bulk track operation for later processing.
 
@@ -302,6 +302,34 @@ Read normalized playlist items using current /items; maximum page size is 50.
 - `limit`
 - `offset`
 
+## `get_rate_limit_status`
+
+**Title:** Get rate limit status
+
+**Type:** Read
+
+Inspect persisted provider rate-limit scopes.
+
+**Arguments:**
+
+- `provider`
+- `scope`
+
+## `get_recent_api_errors`
+
+**Title:** Get recent API errors
+
+**Type:** Read
+
+Inspect bounded, normalized API error history.
+
+**Arguments:**
+
+- `limit`
+- `provider`
+- `status_code`
+- `unresolved_only`
+
 ## `get_recently_played`
 
 **Title:** Get recently played
@@ -374,6 +402,19 @@ Get a Spotify track by ID, URI, or URL.
 **Arguments:**
 
 - `track_id`
+
+## `list_jobs`
+
+**Title:** List jobs
+
+**Type:** Read
+
+List bounded durable job summaries.
+
+**Arguments:**
+
+- `offset`
+- `limit`
 
 ## `next_track`
 
@@ -480,7 +521,7 @@ Replace then append ordered chunks, max 100 per request; rolls back after later 
 
 **Title:** Resume job
 
-**Type:** Read
+**Type:** Write / action
 
 Make a durable job eligible for processing.
 
