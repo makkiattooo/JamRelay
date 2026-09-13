@@ -8,7 +8,7 @@ sourceHash: 3b11ae96ea79
 
 Ta tabela rozdziela **kompatybilność protokołu** od **ręcznej weryfikacji end-to-end**.
 
-| Klient               | Ścieżka OAuth w TuneLink                                           | Zalecenie        | Weryfikacja                                          |
+| Klient               | Ścieżka OAuth w JamRelay                                           | Zalecenie        | Weryfikacja                                          |
 | -------------------- | ------------------------------------------------------------------ | ---------------- | ---------------------------------------------------- |
 | ChatGPT custom MCP   | pre-registered confidential client                                 | static OAuth     | zweryfikowane                                        |
 | Claude hosted / Code | DCR lub static credentials                                         | DCR              | protokół zaimplementowany; klient do ponownego testu |
@@ -21,4 +21,4 @@ Ta tabela rozdziela **kompatybilność protokołu** od **ręcznej weryfikacji en
 Jedna instancja nie wymaga już podmieniania jednego globalnego callbacka między klientami.
 
 > [!NOTE]
-> MCP 2026-07-28 preferuje CIMD i długoterminowo deprecjonuje DCR. TuneLink v1.0.0 zachowuje DCR dla kompatybilności z klientami wdrożonymi obecnie.
+> MCP 2026-07-28 preferuje CIMD i długoterminowo deprecjonuje DCR. JamRelay v1.0.0 zachowuje DCR dla kompatybilności z klientami wdrożonymi obecnie.

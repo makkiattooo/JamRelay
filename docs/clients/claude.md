@@ -1,15 +1,15 @@
 ---
 title: Claude
-description: Connect TuneLink to Claude hosted surfaces or Claude Code using remote MCP OAuth.
+description: Connect JamRelay to Claude hosted surfaces or Claude Code using remote MCP OAuth.
 ---
 
 # Claude
 
-Claude supports remote MCP connectors with OAuth. TuneLink supports the registration paths Claude currently documents: **Dynamic Client Registration (DCR)** and pre-configured client credentials.
+Claude supports remote MCP connectors with OAuth. JamRelay supports the registration paths Claude currently documents: **Dynamic Client Registration (DCR)** and pre-configured client credentials.
 
 ## Claude.ai, Claude Desktop, mobile, and Cowork
 
-For hosted Claude surfaces, the simplest TuneLink setup is DCR:
+For hosted Claude surfaces, the simplest JamRelay setup is DCR:
 
 ```dotenv
 PUBLIC_BASE_URL=https://mcp.example.com
@@ -23,7 +23,7 @@ Add the connector URL:
 https://mcp.example.com/mcp
 ```
 
-Claude discovers TuneLink's protected-resource metadata, authorization-server metadata, and registration endpoint automatically.
+Claude discovers JamRelay's protected-resource metadata, authorization-server metadata, and registration endpoint automatically.
 
 Anthropic documents this hosted callback:
 
@@ -31,14 +31,14 @@ Anthropic documents this hosted callback:
 https://claude.ai/api/mcp/auth_callback
 ```
 
-With DCR, Claude registers its callback with TuneLink automatically. If you instead use Claude's **Advanced settings** with a static Client ID and Client Secret, add that callback to the corresponding TuneLink static client.
+With DCR, Claude registers its callback with JamRelay automatically. If you instead use Claude's **Advanced settings** with a static Client ID and Client Secret, add that callback to the corresponding JamRelay static client.
 
 ## Claude Code
 
 Claude Code supports automatic OAuth discovery for remote HTTP MCP servers. Add the server, then authenticate from `/mcp`:
 
 ```bash
-claude mcp add --transport http tunelink https://mcp.example.com/mcp
+claude mcp add --transport http jamrelay https://mcp.example.com/mcp
 ```
 
 Claude Code normally uses a local loopback callback on an available port. DCR lets it register that callback automatically, so you do not need to predict the port.
@@ -47,7 +47,7 @@ If you need a fixed pre-registered redirect, Claude Code also supports `--callba
 
 ## Network requirement
 
-Hosted Claude connectors are reached from Anthropic's cloud infrastructure, not directly from the local Claude Desktop process. The remote TuneLink endpoint therefore needs to be publicly reachable over HTTPS.
+Hosted Claude connectors are reached from Anthropic's cloud infrastructure, not directly from the local Claude Desktop process. The remote JamRelay endpoint therefore needs to be publicly reachable over HTTPS.
 
 ## Verify
 

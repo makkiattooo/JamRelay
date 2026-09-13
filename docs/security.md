@@ -1,6 +1,6 @@
 # Security
 
-TuneLink is self-hosted: you are responsible for the host, reverse proxy, secrets, backups, access policy, and updates.
+JamRelay is self-hosted: you are responsible for the host, reverse proxy, secrets, backups, access policy, and updates.
 
 Treat MCP as a control surface for a Spotify account. An attacker with the API key, OAuth credentials, owner secret, or persistent stores may gain account access or control playback/playlists. HTTPS is required remotely.
 
@@ -20,11 +20,11 @@ The application disables Express fingerprinting, sets browser security headers, 
 
 ## MCP OAuth client registration
 
-When `MCP_OAUTH_DCR_ENABLED=true`, `POST /oauth/register` is intentionally public. That endpoint only creates an OAuth client identity and records its callback URIs; it does **not** grant access to Spotify or MCP tools. TuneLink still requires PKCE and explicit owner approval with `MCP_OAUTH_OWNER_SECRET` before issuing an authorization code.
+When `MCP_OAUTH_DCR_ENABLED=true`, `POST /oauth/register` is intentionally public. That endpoint only creates an OAuth client identity and records its callback URIs; it does **not** grant access to Spotify or MCP tools. JamRelay still requires PKCE and explicit owner approval with `MCP_OAUTH_OWNER_SECRET` before issuing an authorization code.
 
 DCR registrations are rate-limited, bounded, and pruned. Dynamically generated client secrets are stored as digests. If you use `MCP_OAUTH_CLIENTS_PATH`, remember that the static registry can contain plaintext `clientSecret` values and must be protected like `.env`.
 
-TuneLink does not advertise Client ID Metadata Documents (CIMD) in this release. CIMD would require the authorization server to fetch client-controlled HTTPS metadata, which introduces an outbound SSRF/DNS-rebinding surface that should not be added without dedicated protections.
+JamRelay does not advertise Client ID Metadata Documents (CIMD) in this release. CIMD would require the authorization server to fetch client-controlled HTTPS metadata, which introduces an outbound SSRF/DNS-rebinding surface that should not be added without dedicated protections.
 
 ## Incident response
 

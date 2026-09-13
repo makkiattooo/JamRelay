@@ -11,7 +11,7 @@ VS Code obsługuje lokalne i zdalne MCP oraz OAuth dla serwerów HTTP. Według a
 ```json
 {
   "servers": {
-    "tunelink": {
+    "jamrelay": {
       "type": "http",
       "url": "https://mcp.example.com/mcp"
     }

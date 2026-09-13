@@ -6,7 +6,7 @@ sourceHash: a9cb47be34b8
 
 # MCP OAuth
 
-TuneLink ma dwie niezależne warstwy autoryzacji: **klient AI → TuneLink** oraz **TuneLink → Spotify**. MCP OAuth nie zastępuje Spotify OAuth.
+JamRelay ma dwie niezależne warstwy autoryzacji: **klient AI → JamRelay** oraz **JamRelay → Spotify**. MCP OAuth nie zastępuje Spotify OAuth.
 
 ## Obsługiwane funkcje
 
@@ -45,7 +45,7 @@ Klient może automatycznie odkryć:
 ## Istniejący ChatGPT nadal działa
 
 ```dotenv
-MCP_OAUTH_CLIENT_ID=chatgpt-tunelink
+MCP_OAUTH_CLIENT_ID=chatgpt-jamrelay
 MCP_OAUTH_CLIENT_SECRET=<STRONG_RANDOM_SECRET>
 MCP_OAUTH_REDIRECT_URI=<EXACT_CALLBACK_FROM_CHATGPT>
 MCP_OAUTH_OWNER_SECRET=<OWNER_APPROVAL_SECRET>
@@ -59,7 +59,7 @@ Ustaw `MCP_OAUTH_CLIENTS_PATH` i zacznij od `examples/mcp-oauth-clients.example.
 
 ## Bezpieczeństwo DCR
 
-`POST /oauth/register` jest niezalogowany z założenia protokołu, ale sama rejestracja **nie daje dostępu do Spotify**. Kod autoryzacyjny jest wydawany dopiero po owner approval. TuneLink dodaje rate limiting, limit dynamicznych klientów, pruning, S256 PKCE, walidację callbacków i hashowanie dynamicznych client secretów.
+`POST /oauth/register` jest niezalogowany z założenia protokołu, ale sama rejestracja **nie daje dostępu do Spotify**. Kod autoryzacyjny jest wydawany dopiero po owner approval. JamRelay dodaje rate limiting, limit dynamicznych klientów, pruning, S256 PKCE, walidację callbacków i hashowanie dynamicznych client secretów.
 
 DCR można wyłączyć:
 
@@ -77,4 +77,4 @@ Lokalnie: `./data/mcp-oauth.json`. W Docker production: `/data/mcp-oauth.json`. 
 
 ## CIMD
 
-MCP 2026-07-28 preferuje Client ID Metadata Documents (CIMD) i długoterminowo deprecjonuje DCR. TuneLink v1.0.0 celowo nie reklamuje CIMD, ponieważ poprawna implementacja wymaga bezpiecznego pobierania metadata kontrolowanych przez klienta oraz ochrony przed SSRF i DNS rebinding.
+MCP 2026-07-28 preferuje Client ID Metadata Documents (CIMD) i długoterminowo deprecjonuje DCR. JamRelay v1.0.0 celowo nie reklamuje CIMD, ponieważ poprawna implementacja wymaga bezpiecznego pobierania metadata kontrolowanych przez klienta oraz ochrony przed SSRF i DNS rebinding.

@@ -6,10 +6,10 @@ sourceHash: 0b1728a880f4
 
 # ChatGPT
 
-TuneLink kann als entfernte MCP-App über einen öffentlichen HTTPS-Endpunkt mit ChatGPT verbunden werden. Für ChatGPT empfiehlt sich ein **vorregistrierter vertraulicher OAuth-Client**. Übernimm die in ChatGPT angezeigte Callback-URL exakt.
+JamRelay kann als entfernte MCP-App über einen öffentlichen HTTPS-Endpunkt mit ChatGPT verbunden werden. Für ChatGPT empfiehlt sich ein **vorregistrierter vertraulicher OAuth-Client**. Übernimm die in ChatGPT angezeigte Callback-URL exakt.
 
 ```dotenv
-MCP_OAUTH_CLIENT_ID=chatgpt-tunelink
+MCP_OAUTH_CLIENT_ID=chatgpt-jamrelay
 MCP_OAUTH_CLIENT_SECRET=<STARKES_ZUFALLSGEHEIMNIS>
 MCP_OAUTH_REDIRECT_URI=<EXAKTER_CHATGPT_CALLBACK>
 MCP_OAUTH_OWNER_SECRET=<OWNER_SECRET>

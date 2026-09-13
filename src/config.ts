@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+export const APP_NAME = 'JamRelay';
+export const DEFAULT_PORT = 5267;
+
 const defaultDataPath = (file: string) =>
   process.env.NODE_ENV === 'production' ? `/data/${file}` : `./data/${file}`;
 
@@ -27,9 +30,11 @@ const schema = z.object({
   SPOTIFY_REDIRECT_URI: z.string().url(),
   TOKEN_ENCRYPTION_KEY: z.string().min(1),
   SPOTIFY_TOKEN_STORE_PATH: dataPath('spotify-token.json'),
+  JAMRELAY_DATA_DIR: optionalNonEmpty,
+  JAMRELAY_DB_PATH: optionalNonEmpty,
   TUNELINK_DATA_DIR: optionalNonEmpty,
   TUNELINK_DB_PATH: optionalNonEmpty,
-  PORT: z.coerce.number().int().positive().default(3000),
+  PORT: z.coerce.number().int().positive().default(DEFAULT_PORT),
   HOST: z.string().default('0.0.0.0'),
   PUBLIC_BASE_URL: z.string().url(),
   LOG_LEVEL: z.string().default('info'),
@@ -69,7 +74,12 @@ const schema = z.object({
 export type Config = z.infer<typeof schema>;
 
 export function getConfig(): Config {
-  const c = schema.parse(process.env);
+  const parsed = schema.parse(process.env);
+  const c = {
+    ...parsed,
+    JAMRELAY_DATA_DIR: parsed.JAMRELAY_DATA_DIR ?? parsed.TUNELINK_DATA_DIR,
+    JAMRELAY_DB_PATH: parsed.JAMRELAY_DB_PATH ?? parsed.TUNELINK_DB_PATH,
+  };
 
   if (c.MCP_AUTH_MODE === 'bearer' && !c.MCP_API_KEY) {
     throw new Error('MCP_API_KEY is required in bearer mode');

@@ -668,7 +668,7 @@ export function registerMcpOAuthRoutes(
     res
       .type('html')
       .send(
-        `<!doctype html><meta charset="utf-8"><title>Authorize MCP client</title><h1>Authorize ${escapeHtml(client.clientName)} to access TuneLink</h1><p>Redirect: <code>${escapeHtml(redirectUri)}</code></p><form method="post" action="/oauth/authorize">${fields}<label>Owner secret <input name="owner_secret" type="password" required autocomplete="current-password"></label><button type="submit">Authorize</button></form>`,
+        `<!doctype html><meta charset="utf-8"><title>Authorize MCP client</title><h1>Authorize ${escapeHtml(client.clientName)} to access JamRelay</h1><p>Redirect: <code>${escapeHtml(redirectUri)}</code></p><form method="post" action="/oauth/authorize">${fields}<label>Owner secret <input name="owner_secret" type="password" required autocomplete="current-password"></label><button type="submit">Authorize</button></form>`,
       );
   });
 

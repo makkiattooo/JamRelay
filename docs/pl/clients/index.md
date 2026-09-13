@@ -6,7 +6,7 @@ sourceHash: 92ba01eb8652
 
 # Kompatybilność klientów AI
 
-TuneLink udostępnia zdalny MCP Streamable HTTP pod:
+JamRelay udostępnia zdalny MCP Streamable HTTP pod:
 
 ```text
 https://mcp.example.com/mcp

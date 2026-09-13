@@ -1,14 +1,14 @@
-# TuneLink
+# JamRelay
 
 Self-hosted MCP server for connecting AI assistants to your own Spotify account.
 
 [Get started](/getting-started) · [Configuration](/configuration) · [MCP tools](/tools)
 
-> **Unofficial project.** TuneLink is not affiliated with, endorsed by, or sponsored by Spotify, OpenAI, Anthropic, Google, or any other AI platform vendor. Spotify is a trademark of Spotify AB.
+> **Unofficial project.** JamRelay is not affiliated with, endorsed by, or sponsored by Spotify, OpenAI, Anthropic, Google, or any other AI platform vendor. Spotify is a trademark of Spotify AB.
 
 ## What it does
 
-TuneLink exposes Spotify search, library, playlist, discovery, and playback operations through the Model Context Protocol (MCP). You run the server, authorize your own Spotify account, and choose which client can reach it.
+JamRelay exposes Spotify search, library, playlist, discovery, and playback operations through the Model Context Protocol (MCP). You run the server, authorize your own Spotify account, and choose which client can reach it.
 
 ## Two independent authentication layers
 

@@ -24,7 +24,7 @@ const obsoleteClaims = [
   'Dynamic Client Registration n’est pas implémenté',
   'No se implementa Dynamic Client Registration',
   'Dynamiczna rejestracja klientów nie jest zaimplementowana',
-  'TuneLink nie implementuje Dynamic Client Registration',
+  'JamRelay nie implementuje Dynamic Client Registration',
 ];
 
 for (const locale of docsLocales) {

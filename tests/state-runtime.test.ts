@@ -17,7 +17,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 async function setup() {
-  root = await mkdtemp(join(tmpdir(), 'tunelink-runtime-'));
+  root = await mkdtemp(join(tmpdir(), 'jamrelay-runtime-'));
   initializeDatabase({ dataDir: root, migrationsDir: join(process.cwd(), 'db/migrations') });
 }
 const auth = { accessToken: async () => 'test-token' } as any;

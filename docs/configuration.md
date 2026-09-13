@@ -46,7 +46,7 @@ All paths can be overridden.
 
 ## MCP authentication
 
-TuneLink can accept OAuth and an optional static Bearer key at the same time.
+JamRelay can accept OAuth and an optional static Bearer key at the same time.
 
 `MCP_AUTH_MODE=bearer` enables `MCP_API_KEY` as an additional authentication path.
 
@@ -60,7 +60,7 @@ OAuth authorization is enabled when an owner secret is configured:
 MCP_OAUTH_OWNER_SECRET=<STRONG_RANDOM_SECRET>
 ```
 
-That secret is entered only on TuneLink's owner approval page. It is never sent to the MCP client.
+That secret is entered only on JamRelay's owner approval page. It is never sent to the MCP client.
 
 ### Dynamic clients
 
@@ -98,9 +98,9 @@ The registry can contain ChatGPT, Cursor, VS Code, Claude, or any other known cl
 ## Local Bearer-only development
 
 ```dotenv
-PUBLIC_BASE_URL=http://127.0.0.1:3000
+PUBLIC_BASE_URL=http://127.0.0.1:5267
 HOST=127.0.0.1
-PORT=3000
+PORT=5267
 MCP_AUTH_MODE=bearer
 MCP_API_KEY=GENERATE_A_SEPARATE_RANDOM_VALUE
 SPOTIFY_TOKEN_STORE_PATH=./data/spotify-token.json
@@ -115,7 +115,7 @@ Leave `MCP_OAUTH_OWNER_SECRET` empty if you do not want OAuth at all.
 ```dotenv
 PUBLIC_BASE_URL=https://mcp.example.com
 HOST=0.0.0.0
-PORT=3000
+PORT=5267
 
 MCP_AUTH_MODE=bearer
 MCP_API_KEY=GENERATE_A_SEPARATE_RANDOM_VALUE
@@ -124,7 +124,7 @@ MCP_OAUTH_OWNER_SECRET=GENERATE_A_SEPARATE_RANDOM_VALUE
 MCP_OAUTH_DCR_ENABLED=true
 
 # Existing ChatGPT pre-registration:
-MCP_OAUTH_CLIENT_ID=chatgpt-tunelink
+MCP_OAUTH_CLIENT_ID=chatgpt-jamrelay
 MCP_OAUTH_CLIENT_SECRET=GENERATE_A_SEPARATE_RANDOM_VALUE
 MCP_OAUTH_REDIRECT_URI=https://EXACT_CALLBACK_FROM_CHATGPT
 

@@ -1,11 +1,11 @@
 ---
 title: AI client compatibility
-description: Connect TuneLink to ChatGPT, Claude, Gemini CLI, Cursor, VS Code, Windsurf, and MCP Inspector.
+description: Connect JamRelay to ChatGPT, Claude, Gemini CLI, Cursor, VS Code, Windsurf, and MCP Inspector.
 ---
 
 # AI client compatibility
 
-TuneLink exposes a remote MCP Streamable HTTP endpoint:
+JamRelay exposes a remote MCP Streamable HTTP endpoint:
 
 ```text
 https://mcp.example.com/mcp
@@ -18,7 +18,7 @@ It supports two authentication families:
 
 ## Multi-client OAuth
 
-TuneLink no longer has a one-client/one-callback limitation. A single deployment can keep an existing static ChatGPT client while also accepting automatically registered native/CLI clients through DCR.
+JamRelay no longer has a one-client/one-callback limitation. A single deployment can keep an existing static ChatGPT client while also accepting automatically registered native/CLI clients through DCR.
 
 Available registration paths:
 
@@ -35,7 +35,7 @@ See [OAuth and multi-client compatibility](./oauth-compatibility) for the regist
 
 ## Compatibility matrix
 
-| Client                 | Remote Streamable HTTP | OAuth | Bearer/custom headers           | Recommended TuneLink mode         | Status                      |
+| Client                 | Remote Streamable HTTP | OAuth | Bearer/custom headers           | Recommended JamRelay mode         | Status                      |
 | ---------------------- | ---------------------- | ----- | ------------------------------- | --------------------------------- | --------------------------- |
 | ChatGPT                | ✅                     | ✅    | custom-app UI is OAuth-oriented | static OAuth                      | previously verified         |
 | Claude hosted surfaces | ✅                     | ✅    | not primary connector path      | DCR                               | protocol path implemented   |
@@ -46,7 +46,7 @@ See [OAuth and multi-client compatibility](./oauth-compatibility) for the regist
 | Windsurf Cascade       | ✅                     | ✅    | ✅                              | OAuth discovery / Bearer fallback | not yet verified end-to-end |
 | MCP Inspector          | ✅                     | ✅    | ✅                              | OAuth or Bearer                   | developer verification tool |
 
-“Protocol path implemented” means TuneLink now implements the registration/callback behavior documented by that vendor. It is not a certification that every current client build has been manually exercised against this exact release.
+“Protocol path implemented” means JamRelay now implements the registration/callback behavior documented by that vendor. It is not a certification that every current client build has been manually exercised against this exact release.
 
 ## Test prompts
 

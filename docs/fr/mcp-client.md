@@ -6,7 +6,7 @@ sourceHash: 92b47c049402
 
 # Client MCP générique
 
-TuneLink expose Streamable HTTP sur `/mcp`. Le client doit disposer du transport MCP HTTP et d’un chemin d’authentification pris en charge.
+JamRelay expose Streamable HTTP sur `/mcp`. Le client doit disposer du transport MCP HTTP et d’un chemin d’authentification pris en charge.
 
 Bearer : `Authorization: Bearer YOUR_MCP_API_KEY`. Ne donnez jamais au client `MCP_OAUTH_OWNER_SECRET`, `SPOTIFY_CLIENT_SECRET` ou `TOKEN_ENCRYPTION_KEY`.
 

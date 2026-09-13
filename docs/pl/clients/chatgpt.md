@@ -6,14 +6,14 @@ sourceHash: 0b1728a880f4
 
 # ChatGPT
 
-TuneLink może działać jako zdalna aplikacja MCP ChatGPT przez publiczny endpoint HTTPS.
+JamRelay może działać jako zdalna aplikacja MCP ChatGPT przez publiczny endpoint HTTPS.
 
 ## Zalecany tryb
 
 Dla ChatGPT użyj **pre-registered confidential OAuth client**. ChatGPT pokazuje dokładny callback podczas konfiguracji. Skopiuj go bez zmian.
 
 ```dotenv
-MCP_OAUTH_CLIENT_ID=chatgpt-tunelink
+MCP_OAUTH_CLIENT_ID=chatgpt-jamrelay
 MCP_OAUTH_CLIENT_SECRET=<MOCNY_LOSOWY_SEKRET>
 MCP_OAUTH_REDIRECT_URI=<DOKLADNY_CALLBACK_Z_CHATGPT>
 MCP_OAUTH_OWNER_SECRET=<SEKRET_WLASCICIELA>
@@ -33,7 +33,7 @@ Resource: https://mcp.example.com/mcp
 Token endpoint authentication: client_secret_basic
 ```
 
-Nie używaj tutaj Spotify Client ID ani Spotify Client Secret. Przy rozpoczęciu logowania TuneLink pokaże stronę owner approval — wpisujesz tam `MCP_OAUTH_OWNER_SECRET`, którego nie przekazujesz ChatGPT.
+Nie używaj tutaj Spotify Client ID ani Spotify Client Secret. Przy rozpoczęciu logowania JamRelay pokaże stronę owner approval — wpisujesz tam `MCP_OAUTH_OWNER_SECRET`, którego nie przekazujesz ChatGPT.
 
 ## Weryfikacja
 

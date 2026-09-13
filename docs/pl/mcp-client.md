@@ -6,7 +6,7 @@ sourceHash: 92b47c049402
 
 # Ogólny klient MCP
 
-TuneLink udostępnia Streamable HTTP pod `/mcp`. Klient potrzebuje transportu HTTP MCP i jednej wspieranej ścieżki auth.
+JamRelay udostępnia Streamable HTTP pod `/mcp`. Klient potrzebuje transportu HTTP MCP i jednej wspieranej ścieżki auth.
 
 ## Bearer
 

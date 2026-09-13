@@ -7,9 +7,9 @@ const original = { ...process.env };
 const baseEnv = () => ({
   SPOTIFY_CLIENT_ID: 'spotify-client',
   SPOTIFY_CLIENT_SECRET: 'spotify-secret',
-  SPOTIFY_REDIRECT_URI: 'http://127.0.0.1:3000/auth/spotify/callback',
+  SPOTIFY_REDIRECT_URI: 'http://127.0.0.1:5267/auth/spotify/callback',
   TOKEN_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
-  PUBLIC_BASE_URL: 'http://127.0.0.1:3000',
+  PUBLIC_BASE_URL: 'http://127.0.0.1:5267',
   MCP_AUTH_MODE: 'none',
 });
 
@@ -24,6 +24,10 @@ const useEnv = (values: Record<string, string>) => {
     'MCP_API_KEY',
     'MCP_OAUTH_CLIENTS_PATH',
     'MCP_OAUTH_DCR_ENABLED',
+    'JAMRELAY_DATA_DIR',
+    'JAMRELAY_DB_PATH',
+    'TUNELINK_DATA_DIR',
+    'TUNELINK_DB_PATH',
   ])
     if (!(key in values)) delete process.env[key];
 };
@@ -63,5 +67,32 @@ describe('configuration', () => {
   it('requires MCP_API_KEY when static bearer mode is enabled', () => {
     useEnv({ ...baseEnv(), MCP_AUTH_MODE: 'bearer' });
     expect(() => getConfig()).toThrow(/MCP_API_KEY is required/);
+  });
+
+  it('defaults the application port to 5267', () => {
+    useEnv(baseEnv());
+    expect(getConfig().PORT).toBe(5267);
+  });
+
+  it('uses canonical JAMRELAY storage variables before legacy aliases', () => {
+    useEnv({
+      ...baseEnv(),
+      JAMRELAY_DATA_DIR: '/canonical/data',
+      TUNELINK_DATA_DIR: '/legacy/data',
+      JAMRELAY_DB_PATH: '/canonical/db.sqlite',
+      TUNELINK_DB_PATH: '/legacy/db.sqlite',
+    });
+    expect(getConfig().JAMRELAY_DATA_DIR).toBe('/canonical/data');
+    expect(getConfig().JAMRELAY_DB_PATH).toBe('/canonical/db.sqlite');
+  });
+
+  it('accepts legacy TUNELINK storage aliases', () => {
+    useEnv({
+      ...baseEnv(),
+      TUNELINK_DATA_DIR: '/legacy/data',
+      TUNELINK_DB_PATH: '/legacy/db.sqlite',
+    });
+    expect(getConfig().JAMRELAY_DATA_DIR).toBe('/legacy/data');
+    expect(getConfig().JAMRELAY_DB_PATH).toBe('/legacy/db.sqlite');
   });
 });

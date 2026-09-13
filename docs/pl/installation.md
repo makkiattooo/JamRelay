@@ -8,7 +8,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Użyj `http://127.0.0.1:3010` w `PUBLIC_BASE_URL` i zarejestruj identyczny `SPOTIFY_REDIRECT_URI`.
+Użyj `http://127.0.0.1:5267` w `PUBLIC_BASE_URL` i zarejestruj identyczny `SPOTIFY_REDIRECT_URI`.
 
 ## Lokalna produkcja
 
@@ -21,8 +21,8 @@ npm start
 ## Docker i Compose
 
 ```bash
-docker build -t tunelink .
-docker run --env-file .env -p 127.0.0.1:3000:3000 -v tunelink-data:/data tunelink
+docker build -t jamrelay .
+docker run --env-file .env -p 127.0.0.1:5267:5267 -v jamrelay-data:/data jamrelay
 docker compose up -d --build
 ```
 

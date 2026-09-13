@@ -18,4 +18,4 @@ Operators must protect `.env`, `/data`, backups, reverse proxy configuration, lo
 
 If `MCP_OAUTH_CLIENTS_PATH` points to a static multi-client registry containing `clientSecret` values, treat that JSON file as a secret. Keep it outside version control, restrict filesystem access, and back it up with the same care as `.env` and the persistent OAuth store.
 
-TuneLink does not advertise Client ID Metadata Documents (CIMD) in this release. Implementing CIMD on the authorization-server side requires fetching client-controlled HTTPS metadata and therefore needs deliberate SSRF and DNS-rebinding protections.
+JamRelay does not advertise Client ID Metadata Documents (CIMD) in this release. Implementing CIMD on the authorization-server side requires fetching client-controlled HTTPS metadata and therefore needs deliberate SSRF and DNS-rebinding protections.

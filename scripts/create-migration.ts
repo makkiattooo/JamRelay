@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const migrationsDir =
-  process.env.TUNELINK_MIGRATIONS_DIR ?? path.resolve(process.cwd(), 'db', 'migrations');
+  process.env.JAMRELAY_MIGRATIONS_DIR ?? path.resolve(process.cwd(), 'db', 'migrations');
 const slug = process.argv[2];
 
 if (!slug || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
@@ -26,6 +26,6 @@ const filename = `${String(next).padStart(4, '0')}_${slug.replaceAll('-', '_')}.
 const target = path.join(migrationsDir, filename);
 if (fs.existsSync(target)) throw new Error(`Migration already exists: ${filename}`);
 
-const content = `-- TuneLink migration: ${slug.replaceAll('-', '_')}\n-- Forward-only migration.\n-- Keep this migration backward-compatible with the previous application release.\n\n`;
+const content = `-- JamRelay migration: ${slug.replaceAll('-', '_')}\n-- Forward-only migration.\n-- Keep this migration backward-compatible with the previous application release.\n\n`;
 fs.writeFileSync(target, content, { encoding: 'utf8', flag: 'wx' });
 console.log(`Created ${path.relative(process.cwd(), target).replaceAll(path.sep, '/')}`);

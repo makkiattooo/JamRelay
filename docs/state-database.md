@@ -3,20 +3,20 @@ title: State Database
 description: Persistent SQLite state database architecture, operations, and migration policy.
 ---
 
-# TuneLink State Database
+# JamRelay State Database
 
-TuneLink uses SQLite for its first persistent state foundation because the production architecture currently runs one TuneLink application instance with one local persistent volume. SQLite provides durable local state, WAL concurrency for the app process, and very low operational overhead without adding a database service. A deployment with multiple independently scheduled replicas should revisit this model and likely move shared state to a network database such as PostgreSQL.
+JamRelay uses SQLite for its first persistent state foundation because the production architecture currently runs one JamRelay application instance with one local persistent volume. SQLite provides durable local state, WAL concurrency for the app process, and very low operational overhead without adding a database service. A deployment with multiple independently scheduled replicas should revisit this model and likely move shared state to a network database such as PostgreSQL.
 
 ## Persistence architecture
 
 ```text
-tunelink_app
+jamrelay_app
     |
     v
 /data/tunelink.db
     |
     v
-Docker external volume: tunelink_data
+Docker external volume: jamrelay_data
 ```
 
 The encrypted `spotify-token.json` and the MCP OAuth store remain separate files under `/data`. The SQLite database is state storage, not credential storage.
@@ -27,7 +27,7 @@ The encrypted `spotify-token.json` and the MCP OAuth store remain separate files
 | `./data/tunelink.db` | Local development default                       |
 | `db/migrations/`     | Versioned migration source shipped in the image |
 
-`TUNELINK_DB_PATH`, when set, overrides `TUNELINK_DATA_DIR`. Otherwise the database is `${TUNELINK_DATA_DIR}/tunelink.db`; Compose sets `TUNELINK_DATA_DIR=/data`. Both variables are non-secret infrastructure configuration.
+`JAMRELAY_DB_PATH`, when set, overrides `JAMRELAY_DATA_DIR`. Otherwise the database is `${JAMRELAY_DATA_DIR}/tunelink.db`; Compose sets `JAMRELAY_DATA_DIR=/data`. The legacy physical filename is intentionally retained to preserve the existing database. Both variables are non-secret infrastructure configuration.
 
 ## SQLite configuration
 
@@ -161,7 +161,7 @@ If startup or schema verification fails, the application does not become healthy
 
 ### Schema drift protection
 
-TuneLink detects an applied migration whose checksum changed, an applied migration whose file disappeared, an invalid or ambiguous migration filename, a migration execution failure, and a current/expected schema mismatch. A legacy `schema_migrations` table from the first foundation release is upgraded additively and receives the checksum only when its applied version still exists in the repository; unknown versions fail conservatively.
+JamRelay detects an applied migration whose checksum changed, an applied migration whose file disappeared, an invalid or ambiguous migration filename, a migration execution failure, and a current/expected schema mismatch. A legacy `schema_migrations` table from the first foundation release is upgraded additively and receives the checksum only when its applied version still exists in the repository; unknown versions fail conservatively.
 
 ## Backup, recovery, and security
 
@@ -173,11 +173,11 @@ Migration files use LF line endings through `.gitattributes` (`*.sql text eol=lf
 
 ## Troubleshooting
 
-- **Cannot open / permission error:** verify that the runtime user can write `/data` and that `TUNELINK_DB_PATH` points to a writable location.
+- **Cannot open / permission error:** verify that the runtime user can write `/data` and that `JAMRELAY_DB_PATH` points to a writable location.
 - **Migration failure:** inspect application startup logs and fix the migration/schema issue; health should remain unavailable until startup succeeds.
 - **Corruption:** stop the app, preserve the original database and WAL files, and restore a known-good backup before restarting.
 - **WAL files:** `tunelink.db-wal` and `tunelink.db-shm` are normal SQLite companion files and are ignored by Git.
 - **Schema inspection:** read-only inspection of `schema_migrations` confirms which migration filenames were applied.
-- **Local reset:** stop the local app and remove only the local `data/` database files when intentionally resetting development state. Never use a destructive reset against the production `tunelink_data` volume.
+- **Local reset:** stop the local app and remove only the local `data/` database files when intentionally resetting development state. Never use a destructive reset against the production `jamrelay_data` volume.
 
-Recreating `tunelink_app` does not delete the external `tunelink_data` volume. The deployment script packages and ships migration source but does not run migrations itself; normal application startup owns that responsibility. A failed migration therefore prevents healthy state and lets deployment health/rollback react.
+Recreating `jamrelay_app` does not delete the external `jamrelay_data` volume. The deployment script packages and ships migration source but does not run migrations itself; normal application startup owns that responsibility. A failed migration therefore prevents healthy state and lets deployment health/rollback react.

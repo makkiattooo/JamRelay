@@ -6,7 +6,7 @@ sourceHash: efd98c1fa4d9
 
 # Claude
 
-Claude obsługuje zdalne MCP z OAuth. TuneLink wspiera DCR oraz statyczne dane klienta.
+Claude obsługuje zdalne MCP z OAuth. JamRelay wspiera DCR oraz statyczne dane klienta.
 
 ## Claude.ai / Desktop / mobile / Cowork
 
@@ -22,7 +22,7 @@ i dodać `https://mcp.example.com/mcp`. Claude może odkryć metadata i endpoint
 ## Claude Code
 
 ```bash
-claude mcp add --transport http tunelink https://mcp.example.com/mcp
+claude mcp add --transport http jamrelay https://mcp.example.com/mcp
 ```
 
 DCR pozwala Claude Code zarejestrować callback loopback bez przewidywania portu.

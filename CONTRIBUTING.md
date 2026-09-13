@@ -1,6 +1,6 @@
-# Contributing to TuneLink
+# Contributing to JamRelay
 
-Thank you for your interest in contributing to TuneLink.
+Thank you for your interest in contributing to JamRelay.
 
 Contributions are welcome, including bug fixes, documentation improvements, tests, compatibility fixes, security improvements, and new features.
 
@@ -76,26 +76,26 @@ If a contribution includes or is derived from third-party material, you must:
 
 - identify the original source;
 - identify the applicable license;
-- ensure that the license is compatible with TuneLink;
+- ensure that the license is compatible with JamRelay;
 - preserve any legally required notices or attribution.
 
 Do not copy code from proprietary projects, leaked source code, code with unknown licensing, or material whose terms are incompatible with this project.
 
 ## License
 
-TuneLink is licensed under the **GNU Affero General Public License v3.0 only (`AGPL-3.0-only`)** unless a file explicitly states otherwise.
+JamRelay is licensed under the **GNU Affero General Public License v3.0 only (`AGPL-3.0-only`)** unless a file explicitly states otherwise.
 
-Contributions accepted into the public TuneLink project are distributed under `AGPL-3.0-only`.
+Contributions accepted into the public JamRelay project are distributed under `AGPL-3.0-only`.
 
-Submitting a contribution also requires agreement to the TuneLink Contributor License Agreement in `CLA.md`.
+Submitting a contribution also requires agreement to the JamRelay Contributor License Agreement in `CLA.md`.
 
-The CLA does **not** transfer ownership of your copyright. It grants the TuneLink Project Owner additional rights necessary to maintain the project, enforce its licensing model, and potentially offer the project under additional licensing terms in the future.
+The CLA does **not** transfer ownership of your copyright. It grants the JamRelay Project Owner additional rights necessary to maintain the project, enforce its licensing model, and potentially offer the project under additional licensing terms in the future.
 
 ## Contributor declaration
 
 When submitting a pull request, include the following declaration:
 
-> I have the right to submit this contribution, and I agree to the TuneLink Contributor License Agreement in CLA.md.
+> I have the right to submit this contribution, and I agree to the JamRelay Contributor License Agreement in CLA.md.
 
 A contribution may not be accepted until this declaration is present.
 
@@ -103,7 +103,7 @@ A contribution may not be accepted until this declaration is present.
 
 You retain copyright in contributions that you create.
 
-Nothing in this contribution process grants contributors ownership of the TuneLink name, logo, domains, infrastructure, official distribution channels, project accounts, or other project assets.
+Nothing in this contribution process grants contributors ownership of the JamRelay name, logo, domains, infrastructure, official distribution channels, project accounts, or other project assets.
 
 ## Review and acceptance
 

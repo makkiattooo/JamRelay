@@ -1,4 +1,5 @@
 services:
+  # Legacy production container/network/volume names are intentionally retained.
   app:
     container_name: tunelink_app
     build: .
@@ -6,9 +7,10 @@ services:
     env_file:
       - .env
     environment:
-      TUNELINK_DATA_DIR: /data
+      JAMRELAY_DATA_DIR: /data
+      PORT: 5267
     ports:
-      - '127.0.0.1:3010:3010'
+      - '127.0.0.1:5267:5267'
     volumes:
       - tunelink_data:/data
     networks:

@@ -18,4 +18,4 @@ Cette matrice distingue la compatibilité protocolaire de la vérification manue
 | Windsurf          | OAuth confirmé, contrat callback moins explicite | discovery/Bearer | non vérifié                              |
 | MCP Inspector     | DCR/statique/Bearer                              | test             | outil développeur                        |
 
-MCP 2026-07-28 préfère CIMD; TuneLink v1.0.0 conserve DCR pour la compatibilité actuelle.
+MCP 2026-07-28 préfère CIMD; JamRelay v1.0.0 conserve DCR pour la compatibilité actuelle.

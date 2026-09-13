@@ -1,11 +1,11 @@
 ---
 title: Gemini CLI
-description: Connect TuneLink to Gemini CLI using automatic OAuth discovery and Dynamic Client Registration.
+description: Connect JamRelay to Gemini CLI using automatic OAuth discovery and Dynamic Client Registration.
 ---
 
 # Gemini CLI
 
-Gemini CLI supports remote Streamable HTTP MCP servers and automatic OAuth discovery. With TuneLink, **DCR is the recommended OAuth path**.
+Gemini CLI supports remote Streamable HTTP MCP servers and automatic OAuth discovery. With JamRelay, **DCR is the recommended OAuth path**.
 
 ## Recommended setup — OAuth discovery + DCR
 
@@ -16,21 +16,21 @@ MCP_OAUTH_OWNER_SECRET=<STRONG_OWNER_SECRET>
 MCP_OAUTH_DCR_ENABLED=true
 ```
 
-Add TuneLink:
+Add JamRelay:
 
 ```bash
-gemini mcp add --transport http tunelink https://mcp.example.com/mcp
+gemini mcp add --transport http jamrelay https://mcp.example.com/mcp
 ```
 
 Then authenticate:
 
 ```text
-/mcp auth tunelink
+/mcp auth jamrelay
 ```
 
 Gemini CLI can:
 
-1. receive TuneLink's `401` challenge;
+1. receive JamRelay's `401` challenge;
 2. discover protected-resource and authorization-server metadata;
 3. register itself dynamically;
 4. open the browser for owner approval;
@@ -38,7 +38,7 @@ Gemini CLI can:
 6. exchange the PKCE authorization code;
 7. store and refresh its tokens.
 
-TuneLink accepts loopback callbacks registered by native clients and returns the RFC 9207 `iss` parameter that Gemini CLI requires.
+JamRelay accepts loopback callbacks registered by native clients and returns the RFC 9207 `iss` parameter that Gemini CLI requires.
 
 ## Bearer fallback
 
@@ -50,7 +50,7 @@ MCP_API_KEY=<STRONG_RANDOM_VALUE>
 ```
 
 ```bash
-gemini mcp add --transport http --header "Authorization: Bearer YOUR_MCP_API_KEY" tunelink https://mcp.example.com/mcp
+gemini mcp add --transport http --header "Authorization: Bearer YOUR_MCP_API_KEY" jamrelay https://mcp.example.com/mcp
 ```
 
 OAuth is preferable for normal remote use because it gives the client expiring access tokens and rotating refresh tokens rather than one long-lived shared key.

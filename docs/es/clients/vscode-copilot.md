@@ -9,7 +9,7 @@ sourceHash: fb8ca57a672d
 VS Code admite MCP remoto y OAuth. La guía actual de Microsoft indica que primero intenta **DCR** y después puede usar credenciales de cliente configuradas.
 
 ```json
-{ "servers": { "tunelink": { "type": "http", "url": "https://mcp.example.com/mcp" } } }
+{ "servers": { "jamrelay": { "type": "http", "url": "https://mcp.example.com/mcp" } } }
 ```
 
 Redirects documentados:

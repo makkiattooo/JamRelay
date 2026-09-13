@@ -27,9 +27,13 @@ type AppliedMigration = {
 
 const migrationPattern = /^(\d{4})_([a-z0-9][a-z0-9_-]*)\.sql$/;
 const defaultDataDir = () =>
-  process.env.TUNELINK_DATA_DIR?.trim() || path.resolve(process.cwd(), 'data');
+  process.env.JAMRELAY_DATA_DIR?.trim() ||
+  process.env.TUNELINK_DATA_DIR?.trim() ||
+  path.resolve(process.cwd(), 'data');
 const defaultDbPath = (dataDir: string) =>
-  process.env.TUNELINK_DB_PATH?.trim() || path.join(dataDir, 'tunelink.db');
+  process.env.JAMRELAY_DB_PATH?.trim() ||
+  process.env.TUNELINK_DB_PATH?.trim() ||
+  path.join(dataDir, 'tunelink.db');
 const defaultMigrationsDir = () => path.resolve(process.cwd(), 'db', 'migrations');
 
 function parseMigrationVersion(version: string): number {
@@ -265,7 +269,7 @@ export function initializeDatabase(options: DatabaseOptions = {}): DatabaseSync 
 }
 
 export function getDatabase(): DatabaseSync {
-  if (!database) throw new Error('TuneLink database has not been initialized.');
+  if (!database) throw new Error('JamRelay database has not been initialized.');
   return database;
 }
 

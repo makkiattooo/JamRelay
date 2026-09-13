@@ -22,7 +22,7 @@ description: Generated reference for variables documented in .env.example.
 ### `SPOTIFY_REDIRECT_URI`
 
 - **Sensitive:** no
-- **Example/default in `.env.example`:** `http://127.0.0.1:3000/auth/spotify/callback`
+- **Example/default in `.env.example`:** `http://127.0.0.1:5267/auth/spotify/callback`
 - **Notes:** Local development:
 
 ### `SPOTIFY_MARKET`
@@ -66,12 +66,12 @@ description: Generated reference for variables documented in .env.example.
 ### `PORT`
 
 - **Sensitive:** no
-- **Example/default in `.env.example`:** `3000`
+- **Example/default in `.env.example`:** `5267`
 
 ### `PUBLIC_BASE_URL`
 
 - **Sensitive:** no
-- **Example/default in `.env.example`:** `http://127.0.0.1:3000`
+- **Example/default in `.env.example`:** `http://127.0.0.1:5267`
 
 ### `TRUST_PROXY`
 
@@ -83,17 +83,28 @@ description: Generated reference for variables documented in .env.example.
 - **Sensitive:** no
 - **Example/default in `.env.example`:** `info`
 
+### `JAMRELAY_DATA_DIR`
+
+- **Sensitive:** no
+- **Example/default in `.env.example`:** _empty_
+- **Notes:** Persistent JamRelay State DB. These are infrastructure settings, not secrets. JAMRELAY_* names are canonical; TUNELINK_* names remain deprecated aliases. Local default: ./data/tunelink.db Docker production: /data/tunelink.db (Compose sets JAMRELAY_DATA_DIR=/data). The legacy physical filename is intentionally retained for data safety.
+
+### `JAMRELAY_DB_PATH`
+
+- **Sensitive:** no
+- **Example/default in `.env.example`:** _empty_
+- **Notes:** Optional explicit path; overrides JAMRELAY_DATA_DIR when set.
+
 ### `TUNELINK_DATA_DIR`
 
 - **Sensitive:** no
 - **Example/default in `.env.example`:** _empty_
-- **Notes:** Persistent TuneLink State DB. These are infrastructure settings, not secrets. Local default: ./data/tunelink.db Docker production: /data/tunelink.db (Compose sets TUNELINK_DATA_DIR=/data)
+- **Notes:** Deprecated compatibility aliases for existing deployments.
 
 ### `TUNELINK_DB_PATH`
 
 - **Sensitive:** no
 - **Example/default in `.env.example`:** _empty_
-- **Notes:** Optional explicit path; overrides TUNELINK_DATA_DIR when set.
 
 ## Token encryption
 

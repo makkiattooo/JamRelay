@@ -1,16 +1,16 @@
-# TuneLink Contributor License Agreement
+# JamRelay Contributor License Agreement
 
 Version 1.0 — 2026-09-13
 
-This Contributor License Agreement ("Agreement") applies to contributions submitted to the official TuneLink project.
+This Contributor License Agreement ("Agreement") applies to contributions submitted to the official JamRelay project.
 
 By expressly agreeing to this Agreement and submitting a Contribution, you agree to the terms below.
 
 ## 1. Definitions
 
-**"Project"** means TuneLink and the software, documentation, tests, examples, configuration, and other materials maintained as part of the official TuneLink repository.
+**"Project"** means JamRelay and the software, documentation, tests, examples, configuration, and other materials maintained as part of the official JamRelay repository.
 
-**"Project Owner"** means the person or legal entity responsible for the official TuneLink project and any successor or assignee that validly acquires the relevant project rights.
+**"Project Owner"** means the person or legal entity responsible for the official JamRelay project and any successor or assignee that validly acquires the relevant project rights.
 
 **"Contribution"** means any original work of authorship intentionally submitted by you for inclusion in the Project, including source code, documentation, tests, examples, configuration, patches, and other copyrightable material.
 
@@ -43,7 +43,7 @@ This license includes the right to:
 
 your Contribution in source or binary form.
 
-The Project Owner may distribute or license your Contribution as part of TuneLink under:
+The Project Owner may distribute or license your Contribution as part of JamRelay under:
 
 * GNU Affero General Public License v3.0 only (`AGPL-3.0-only`);
 * another open-source license;
@@ -106,15 +106,15 @@ This disclaimer does not limit representations expressly made in this Agreement 
 
 ## 9. Project licensing
 
-You acknowledge that the public version of TuneLink may be distributed under `AGPL-3.0-only`.
+You acknowledge that the public version of JamRelay may be distributed under `AGPL-3.0-only`.
 
-You also acknowledge that the Project Owner may separately offer versions of TuneLink under other licensing terms where the Project Owner possesses sufficient rights to do so.
+You also acknowledge that the Project Owner may separately offer versions of JamRelay under other licensing terms where the Project Owner possesses sufficient rights to do so.
 
 Nothing in this Agreement requires the Project Owner to publish proprietary versions, commercial versions, or future modifications under `AGPL-3.0-only`, except where the Project Owner is independently bound by that license for material it does not have the right to relicense.
 
 ## 10. Project name and trademarks
 
-This Agreement does not grant you rights to use the TuneLink name, logos, trademarks, domains, or branding except as necessary to truthfully describe your Contribution or your use of the Project.
+This Agreement does not grant you rights to use the JamRelay name, logos, trademarks, domains, or branding except as necessary to truthfully describe your Contribution or your use of the Project.
 
 Copyright licensing and trademark rights are separate.
 
@@ -122,12 +122,12 @@ Copyright licensing and trademark rights are separate.
 
 The Project Owner may assign or transfer rights granted under this Agreement in connection with:
 
-* transfer of the TuneLink project;
+* transfer of the JamRelay project;
 * transfer of substantially all relevant project assets;
 * corporate restructuring;
 * merger;
 * acquisition; or
-* transfer to a successor organization maintaining TuneLink.
+* transfer to a successor organization maintaining JamRelay.
 
 Such a transfer does not reduce rights previously granted to users of versions already released under an open-source license.
 
@@ -139,9 +139,9 @@ Where applicable law requires the consent of a parent, legal guardian, employer,
 
 ## 13. Acceptance
 
-You accept this Agreement by submitting a Contribution to TuneLink together with an explicit statement substantially equivalent to:
+You accept this Agreement by submitting a Contribution to JamRelay together with an explicit statement substantially equivalent to:
 
-> I have the right to submit this contribution, and I agree to the TuneLink Contributor License Agreement in CLA.md.
+> I have the right to submit this contribution, and I agree to the JamRelay Contributor License Agreement in CLA.md.
 
 The Project Owner may require another reasonable method of recording acceptance in the future.
 

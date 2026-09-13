@@ -1,29 +1,29 @@
 ---
 title: OAuth and multi-client compatibility
-description: How TuneLink supports several MCP OAuth clients on one deployment using pre-registration and Dynamic Client Registration.
+description: How JamRelay supports several MCP OAuth clients on one deployment using pre-registration and Dynamic Client Registration.
 ---
 
 # OAuth and multi-client compatibility
 
-TuneLink separates two unrelated authorization layers:
+JamRelay separates two unrelated authorization layers:
 
 ```text
 AI / MCP client
    │
    │ MCP OAuth or static Bearer
    ▼
-TuneLink
+JamRelay
    │
    │ Spotify OAuth
    ▼
 Spotify Web API
 ```
 
-The MCP client never receives the Spotify client secret, Spotify refresh token, token-encryption key, or TuneLink owner approval secret.
+The MCP client never receives the Spotify client secret, Spotify refresh token, token-encryption key, or JamRelay owner approval secret.
 
 ## One deployment, several clients
 
-A single TuneLink deployment can now accept all of these simultaneously:
+A single JamRelay deployment can now accept all of these simultaneously:
 
 1. the existing legacy pre-registered client from `MCP_OAUTH_CLIENT_ID`, `MCP_OAUTH_CLIENT_SECRET`, and `MCP_OAUTH_REDIRECT_URI`;
 2. any number of operator-defined pre-registered clients from `MCP_OAUTH_CLIENTS_PATH`;
@@ -38,7 +38,7 @@ The legacy client remains supported so an existing ChatGPT connection does not n
 
 The MCP 2026-07-28 specification moved toward **Client ID Metadata Documents (CIMD)** and formally deprecated DCR as the long-term registration mechanism. DCR remains available for backwards compatibility and is still documented by several major deployed clients.
 
-TuneLink therefore implements:
+JamRelay therefore implements:
 
 ```text
 pre-registration  ✅
@@ -46,11 +46,11 @@ DCR               ✅
 CIMD              not advertised yet
 ```
 
-CIMD requires the authorization server to fetch a client-controlled HTTPS metadata URL. TuneLink does not advertise CIMD until that outbound-fetch path can be implemented with a deliberately hardened SSRF/DNS-rebinding model rather than adding an arbitrary server-side fetch feature casually.
+CIMD requires the authorization server to fetch a client-controlled HTTPS metadata URL. JamRelay does not advertise CIMD until that outbound-fetch path can be implemented with a deliberately hardened SSRF/DNS-rebinding model rather than adding an arbitrary server-side fetch feature casually.
 
 ## Client behavior checked on 2026-09-12
 
-| Client                 | Vendor-documented behavior                                                                                                                                                                                            | Best current TuneLink path                                |
+| Client                 | Vendor-documented behavior                                                                                                                                                                                            | Best current JamRelay path                                |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
 | ChatGPT custom MCP app | user-defined OAuth client with an exact callback; confidential client credentials supported                                                                                                                           | legacy/static pre-registration                            |
 | Claude hosted surfaces | DCR is supported; a custom client ID and client secret can also be supplied. Claude documents `https://claude.ai/api/mcp/auth_callback` as its callback.                                                              | DCR, or static pre-registration                           |
@@ -62,7 +62,7 @@ CIMD requires the authorization server to fetch a client-controlled HTTPS metada
 | MCP Inspector          | standards-oriented OAuth debugging                                                                                                                                                                                    | DCR/static/Bearer depending on test                       |
 
 > [!NOTE]
-> Client support does not mean every row has been manually tested end-to-end against this exact release. TuneLink implements the vendor-documented protocol path; keep untested clients labelled as such until verified.
+> Client support does not mean every row has been manually tested end-to-end against this exact release. JamRelay implements the vendor-documented protocol path; keep untested clients labelled as such until verified.
 
 ## Automatic DCR flow
 
@@ -70,19 +70,19 @@ For clients such as Gemini CLI, Claude Code, or VS Code:
 
 ```text
 1. client calls /mcp without a token
-2. TuneLink returns 401 + WWW-Authenticate resource_metadata
+2. JamRelay returns 401 + WWW-Authenticate resource_metadata
 3. client reads protected-resource metadata
 4. client reads authorization-server metadata
 5. client POSTs its metadata to /oauth/register
 6. client opens /oauth/authorize with PKCE S256
 7. owner enters MCP_OAUTH_OWNER_SECRET
-8. TuneLink redirects to the client's registered callback with code + state + iss
+8. JamRelay redirects to the client's registered callback with code + state + iss
 9. client POSTs /oauth/token
 10. client calls /mcp with the access token
 11. refresh tokens rotate when refreshed
 ```
 
-A DCR registration alone grants **no Spotify access**. Owner approval is still required before TuneLink issues an authorization code.
+A DCR registration alone grants **no Spotify access**. Owner approval is still required before JamRelay issues an authorization code.
 
 ## Static multi-client registry
 
@@ -100,14 +100,14 @@ Example:
 {
   "clients": [
     {
-      "clientId": "chatgpt-tunelink",
+      "clientId": "chatgpt-jamrelay",
       "clientName": "ChatGPT",
       "clientSecret": "REPLACE_ME",
       "redirectUris": ["https://chatgpt.com/connector/oauth/REPLACE_WITH_CALLBACK_ID"],
       "tokenEndpointAuthMethods": ["client_secret_basic", "client_secret_post"]
     },
     {
-      "clientId": "vscode-tunelink",
+      "clientId": "vscode-jamrelay",
       "clientName": "VS Code",
       "redirectUris": ["http://127.0.0.1:33418", "https://vscode.dev/redirect"],
       "tokenEndpointAuthMethods": ["none"],
@@ -117,11 +117,11 @@ Example:
 }
 ```
 
-Restart TuneLink after changing the static registry.
+Restart JamRelay after changing the static registry.
 
 ## Redirect URI policy
 
-TuneLink always validates the authorization request against redirect URIs registered for that exact client.
+JamRelay always validates the authorization request against redirect URIs registered for that exact client.
 
 It accepts:
 
@@ -141,7 +141,7 @@ The protected resource is:
 https://mcp.example.com/mcp
 ```
 
-TuneLink validates a supplied OAuth `resource` parameter against that endpoint. Omission is temporarily tolerated for compatibility with older clients.
+JamRelay validates a supplied OAuth `resource` parameter against that endpoint. Omission is temporarily tolerated for compatibility with older clients.
 
 Authorization redirects include:
 
@@ -153,7 +153,7 @@ Gemini CLI explicitly requires this RFC 9207 issuer binding, and the MCP 2026-07
 
 ## Discovery endpoints
 
-TuneLink serves both protected-resource discovery forms:
+JamRelay serves both protected-resource discovery forms:
 
 ```text
 /.well-known/oauth-protected-resource

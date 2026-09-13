@@ -6,7 +6,7 @@ sourceHash: a9cb47be34b8
 
 # MCP OAuth
 
-TuneLink besitzt zwei unabhängige Autorisierungsebenen: **AI-Client → TuneLink** und **TuneLink → Spotify**. MCP OAuth ersetzt Spotify OAuth nicht.
+JamRelay besitzt zwei unabhängige Autorisierungsebenen: **AI-Client → JamRelay** und **JamRelay → Spotify**. MCP OAuth ersetzt Spotify OAuth nicht.
 
 ## Unterstützte Funktionen
 
@@ -36,7 +36,7 @@ Discovery verwendet `/.well-known/oauth-protected-resource`, `/.well-known/oauth
 ## Bestehendes ChatGPT-Setup
 
 ```dotenv
-MCP_OAUTH_CLIENT_ID=chatgpt-tunelink
+MCP_OAUTH_CLIENT_ID=chatgpt-jamrelay
 MCP_OAUTH_CLIENT_SECRET=<STRONG_RANDOM_SECRET>
 MCP_OAUTH_REDIRECT_URI=<EXACT_CALLBACK_FROM_CHATGPT>
 MCP_OAUTH_OWNER_SECRET=<OWNER_APPROVAL_SECRET>
@@ -50,7 +50,7 @@ Setze `MCP_OAUTH_CLIENTS_PATH` und beginne mit `examples/mcp-oauth-clients.examp
 
 ## DCR-Sicherheit
 
-`POST /oauth/register` ist protokollbedingt nicht authentifiziert, aber eine Registrierung **gewährt keinen Spotify-Zugriff**. Erst Owner Approval erlaubt die Ausgabe eines Authorization Codes. TuneLink begrenzt und bereinigt dynamische Registrierungen, erzwingt S256, prüft Redirects und speichert dynamische Secrets gehasht.
+`POST /oauth/register` ist protokollbedingt nicht authentifiziert, aber eine Registrierung **gewährt keinen Spotify-Zugriff**. Erst Owner Approval erlaubt die Ausgabe eines Authorization Codes. JamRelay begrenzt und bereinigt dynamische Registrierungen, erzwingt S256, prüft Redirects und speichert dynamische Secrets gehasht.
 
 DCR kann mit `MCP_OAUTH_DCR_ENABLED=false` deaktiviert werden. Native Clients dürfen Loopback-HTTP-Callbacks registrieren.
 
@@ -60,4 +60,4 @@ Lokal: `./data/mcp-oauth.json`; Docker Production: `/data/mcp-oauth.json`.
 
 ## CIMD
 
-MCP 2026-07-28 bevorzugt Client ID Metadata Documents und deprecates DCR langfristig. TuneLink v1.0.0 bewirbt CIMD bewusst nicht, da dafür client-gesteuerte Metadaten sicher geladen und SSRF/DNS-Rebinding abgewehrt werden müssten.
+MCP 2026-07-28 bevorzugt Client ID Metadata Documents und deprecates DCR langfristig. JamRelay v1.0.0 bewirbt CIMD bewusst nicht, da dafür client-gesteuerte Metadaten sicher geladen und SSRF/DNS-Rebinding abgewehrt werden müssten.

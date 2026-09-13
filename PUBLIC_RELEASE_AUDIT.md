@@ -43,7 +43,7 @@ Do not commit `.env`, Spotify/MCP token stores, Cloudflare credentials, producti
 
 ## Public-name note
 
-The repository currently uses the public name **TuneLink**. This audit does not perform trademark clearance or guarantee name uniqueness. That is a release-owner branding decision rather than a code-quality gate.
+The repository currently uses the public name **JamRelay**. This audit does not perform trademark clearance or guarantee name uniqueness. That is a release-owner branding decision rather than a code-quality gate.
 
 ## Final release command
 

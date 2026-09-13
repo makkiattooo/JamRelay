@@ -4,7 +4,7 @@ title: MCP OAuth
 
 # MCP OAuth
 
-TuneLink includes an OAuth authorization server for remote MCP clients. Spotify OAuth is separate and continues to use the `SPOTIFY_*` variables.
+JamRelay includes an OAuth authorization server for remote MCP clients. Spotify OAuth is separate and continues to use the `SPOTIFY_*` variables.
 
 ## Supported features
 
@@ -51,7 +51,7 @@ Discovery chain:
 The original single pre-registered client variables remain supported:
 
 ```dotenv
-MCP_OAUTH_CLIENT_ID=chatgpt-tunelink
+MCP_OAUTH_CLIENT_ID=chatgpt-jamrelay
 MCP_OAUTH_CLIENT_SECRET=<STRONG_RANDOM_SECRET>
 MCP_OAUTH_REDIRECT_URI=<EXACT_CALLBACK_FROM_CHATGPT>
 MCP_OAUTH_OWNER_SECRET=<OWNER_APPROVAL_SECRET>
@@ -85,7 +85,7 @@ Each static client can have several redirect URIs. Clients without a secret can 
 
 `POST /oauth/register` is unauthenticated by design because an unknown MCP client must obtain a client ID before authorization can begin. Registration does **not** authorize Spotify access.
 
-TuneLink limits the exposed registration surface by:
+JamRelay limits the exposed registration surface by:
 
 - OAuth endpoint rate limiting;
 - a bounded dynamic-client registry;
@@ -110,7 +110,7 @@ Native/CLI clients may register a random loopback callback such as:
 http://localhost:49152/oauth/callback
 ```
 
-TuneLink accepts loopback HTTP callbacks. For clients that explicitly register as `application_type=native`, it also accepts private-use callback schemes while rejecting dangerous content/file schemes.
+JamRelay accepts loopback HTTP callbacks. For clients that explicitly register as `application_type=native`, it also accepts private-use callback schemes while rejecting dangerous content/file schemes.
 
 ## Persistent OAuth store
 
@@ -132,7 +132,7 @@ The store contains hashed authorization codes/tokens, refresh-token state, and D
 
 ## CIMD status
 
-The MCP 2026-07-28 specification prefers **Client ID Metadata Documents (CIMD)** and deprecates DCR long-term. TuneLink intentionally does not advertise CIMD in this release.
+The MCP 2026-07-28 specification prefers **Client ID Metadata Documents (CIMD)** and deprecates DCR long-term. JamRelay intentionally does not advertise CIMD in this release.
 
 Supporting CIMD on the authorization-server side means fetching client-controlled HTTPS metadata. That should be added only with deliberate SSRF and DNS-rebinding protections. Current compatibility is provided through pre-registration plus DCR.
 

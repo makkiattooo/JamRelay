@@ -1,11 +1,11 @@
 ---
 title: ChatGPT
-description: Connect TuneLink to ChatGPT using a remote MCP server and a pre-registered OAuth client.
+description: Connect JamRelay to ChatGPT using a remote MCP server and a pre-registered OAuth client.
 ---
 
 # ChatGPT
 
-TuneLink can be connected to ChatGPT as a custom remote MCP app using a public HTTPS endpoint.
+JamRelay can be connected to ChatGPT as a custom remote MCP app using a public HTTPS endpoint.
 
 > [!NOTE]
 > Product labels and availability can vary by ChatGPT plan, workspace, account, and rollout. The UI may use terms such as **Apps**, **Plugins**, **Custom app**, or **Developer mode**.
@@ -14,10 +14,10 @@ TuneLink can be connected to ChatGPT as a custom remote MCP app using a public H
 
 For ChatGPT, use a **pre-registered confidential OAuth client**. ChatGPT shows an exact callback URL during setup and allows you to enter your own client ID and client secret.
 
-An existing TuneLink deployment using the legacy variables remains supported:
+An existing JamRelay deployment using the legacy variables remains supported:
 
 ```dotenv
-MCP_OAUTH_CLIENT_ID=chatgpt-tunelink
+MCP_OAUTH_CLIENT_ID=chatgpt-jamrelay
 MCP_OAUTH_CLIENT_SECRET=<STRONG_RANDOM_SECRET>
 MCP_OAUTH_REDIRECT_URI=<EXACT_CALLBACK_FROM_CHATGPT>
 MCP_OAUTH_OWNER_SECRET=<OWNER_APPROVAL_SECRET>
@@ -52,25 +52,25 @@ Token endpoint authentication
 client_secret_basic
 ```
 
-Use the client ID and client secret configured in TuneLink. Do **not** use the Spotify client ID or Spotify client secret here.
+Use the client ID and client secret configured in JamRelay. Do **not** use the Spotify client ID or Spotify client secret here.
 
 ## Callback
 
-Copy the callback displayed by ChatGPT **exactly**. TuneLink validates redirect URIs exactly for pre-registered clients.
+Copy the callback displayed by ChatGPT **exactly**. JamRelay validates redirect URIs exactly for pre-registered clients.
 
 ## Owner approval
 
-When ChatGPT starts authorization, TuneLink displays the owner approval page. Enter:
+When ChatGPT starts authorization, JamRelay displays the owner approval page. Enter:
 
 ```dotenv
 MCP_OAUTH_OWNER_SECRET=...
 ```
 
-That secret is local to TuneLink and is never given to ChatGPT or Spotify.
+That secret is local to JamRelay and is never given to ChatGPT or Spotify.
 
 ## Verify
 
-Start a fresh conversation with TuneLink enabled and try:
+Start a fresh conversation with JamRelay enabled and try:
 
 ```text
 What is currently playing on Spotify?

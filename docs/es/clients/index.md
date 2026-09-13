@@ -6,7 +6,7 @@ sourceHash: 92ba01eb8652
 
 # Compatibilidad de clientes de IA
 
-Endpoint remoto: `https://mcp.example.com/mcp`. TuneLink admite MCP OAuth y Bearer estático opcional.
+Endpoint remoto: `https://mcp.example.com/mcp`. JamRelay admite MCP OAuth y Bearer estático opcional.
 
 | Cliente           | HTTP remoto | OAuth | Modo recomendado         | Estado                         |
 | ----------------- | ----------- | ----- | ------------------------ | ------------------------------ |

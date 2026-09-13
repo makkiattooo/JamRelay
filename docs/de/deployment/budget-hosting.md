@@ -1,11 +1,11 @@
 ---
 title: Kostenlos und günstig betreiben
-description: TuneLink kostenlos oder mit sehr kleinem Monatsbudget betreiben.
+description: JamRelay kostenlos oder mit sehr kleinem Monatsbudget betreiben.
 ---
 
 # Kostenlos und günstig betreiben
 
-TuneLink benötigt nur wenige Ressourcen.
+JamRelay benötigt nur wenige Ressourcen.
 
 ## Nach Budget auswählen
 
@@ -19,14 +19,14 @@ TuneLink benötigt nur wenige Ressourcen.
 ## Kostenlos zu Hause
 
 ```text
-AI-Client → HTTPS → Cloudflare Tunnel → TuneLink → Spotify
+AI-Client → HTTPS → Cloudflare Tunnel → JamRelay → Spotify
 ```
 
 Das funktioniert auch hinter CGNAT und ohne Portweiterleitung.
 
 ## Günstiger VPS
 
-Für eine private Instanz reichen typischerweise 1 Shared vCPU, 512 MB–1 GB RAM und wenige GB persistenter Speicher. Größere Server sind für TuneLink allein normalerweise unnötig.
+Für eine private Instanz reichen typischerweise 1 Shared vCPU, 512 MB–1 GB RAM und wenige GB persistenter Speicher. Größere Server sind für JamRelay allein normalerweise unnötig.
 
 Anbieter wie Hetzner, OVHcloud, DigitalOcean, Vultr oder regionale Provider bieten kleine VMs an. Preise ändern sich häufig und werden deshalb hier nicht fest eingebaut.
 

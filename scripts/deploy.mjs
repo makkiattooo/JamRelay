@@ -26,19 +26,34 @@ function expectedSchemaVersion() {
 }
 
 const defaults = {
-  host: process.env.TUNELINK_VPS_HOST ?? '91.134.132.235',
+  // JAMRELAY_* is canonical; TUNELINK_* and the live paths below are legacy
+  // compatibility aliases retained to protect the existing deployment.
+  host: process.env.JAMRELAY_VPS_HOST ?? process.env.TUNELINK_VPS_HOST ?? '91.134.132.235',
 
-  user: process.env.TUNELINK_VPS_USER ?? 'ubuntu',
+  user: process.env.JAMRELAY_VPS_USER ?? process.env.TUNELINK_VPS_USER ?? 'ubuntu',
 
-  appPath: process.env.TUNELINK_VPS_APP_PATH ?? '/srv/tunelink',
+  appPath:
+    process.env.JAMRELAY_VPS_APP_PATH ?? process.env.TUNELINK_VPS_APP_PATH ?? '/srv/tunelink',
 
-  appEnvFile: process.env.TUNELINK_VPS_APP_ENV_FILE ?? '/srv/tunelink/.env',
+  appEnvFile:
+    process.env.JAMRELAY_VPS_APP_ENV_FILE ??
+    process.env.TUNELINK_VPS_APP_ENV_FILE ??
+    '/srv/tunelink/.env',
 
-  tunnelTokenFile: process.env.TUNELINK_VPS_TUNNEL_TOKEN_FILE ?? '/etc/tunelink/tunnel-token',
+  tunnelTokenFile:
+    process.env.JAMRELAY_VPS_TUNNEL_TOKEN_FILE ??
+    process.env.TUNELINK_VPS_TUNNEL_TOKEN_FILE ??
+    '/etc/tunelink/tunnel-token',
 
-  localBaseUrl: process.env.TUNELINK_LOCAL_BASE_URL ?? 'http://127.0.0.1:3010',
+  localBaseUrl:
+    process.env.JAMRELAY_LOCAL_BASE_URL ??
+    process.env.TUNELINK_LOCAL_BASE_URL ??
+    'http://127.0.0.1:5267',
 
-  publicBaseUrl: process.env.TUNELINK_PUBLIC_BASE_URL ?? 'https://tunelink-mcp.mealoo.pl',
+  publicBaseUrl:
+    process.env.JAMRELAY_PUBLIC_BASE_URL ??
+    process.env.TUNELINK_PUBLIC_BASE_URL ??
+    'https://tunelink-mcp.mealoo.pl',
 };
 
 function createStamp() {
@@ -165,7 +180,7 @@ Options:
   new URL(options.localBaseUrl);
   new URL(options.publicBaseUrl);
 
-  options.tarballPath = `/home/${options.user}/tunelink-${options.tag}.tar.gz`;
+  options.tarballPath = `/home/${options.user}/jamrelay-${options.tag}.tar.gz`;
   options.expectedSchemaVersion = expectedSchemaVersion();
 
   return options;
@@ -493,7 +508,7 @@ restore_source() {
     return 0
   fi
 
-  echo "Restoring previous TuneLink source..." >&2
+  echo "Restoring previous JamRelay source..." >&2
 
   sudo find "$app_dir" \\
     -mindepth 1 \\
@@ -654,7 +669,7 @@ done
 exec 9>"$lock_file"
 
 if ! flock -n 9; then
-  echo "Another TuneLink deploy is already running." >&2
+  echo "Another JamRelay deploy is already running." >&2
   exit 1
 fi
 
@@ -666,7 +681,7 @@ fi
 
 
 if [ ! -d "$app_dir" ]; then
-  echo "TuneLink directory missing: $app_dir" >&2
+  echo "JamRelay directory missing: $app_dir" >&2
   exit 1
 fi
 
@@ -697,10 +712,10 @@ fi
 
 
 if ! sudo grep -Eq \\
-  '^PORT=3010$' \\
+  '^PORT=5267$' \\
   "$app_env_file"; then
 
-  echo "PORT=3010 missing from app env." >&2
+  echo "PORT=5267 missing from app env." >&2
   exit 1
 fi
 
@@ -806,7 +821,7 @@ if [ -n "$(
 fi
 
 
-echo "Installing new TuneLink source..."
+echo "Installing new JamRelay source..."
 
 source_changed=1
 
@@ -871,7 +886,7 @@ if [ "$networks" != "tunelink_internal " ]; then
 fi
 
 
-echo "Building TuneLink..."
+echo "Building JamRelay..."
 
 compose build app
 
@@ -889,7 +904,7 @@ compose up \\
 
 
 if ! wait_new_release_health; then
-  echo "New tunelink_app failed health check." >&2
+  echo "New JamRelay app failed health check." >&2
 
   sudo docker logs \\
     --tail=100 \\
@@ -951,10 +966,10 @@ echo "tunelink_tunnel running."
 
 
 if [ "$skip_public_check" -ne 1 ]; then
-  echo "Checking public TuneLink health..."
+  echo "Checking public JamRelay health..."
 
   if ! wait_public_health; then
-    echo "Public TuneLink health failed: $public_health_url" >&2
+    echo "Public JamRelay health failed: $public_health_url" >&2
 
     sudo docker logs \\
       --tail=100 \\
@@ -964,7 +979,7 @@ if [ "$skip_public_check" -ne 1 ]; then
     exit 1
   fi
 
-  echo "Public TuneLink health OK."
+  echo "Public JamRelay health OK."
 fi
 
 
@@ -975,7 +990,7 @@ app_changed=0
 tunnel_changed=0
 
 
-echo "TuneLink deploy completed successfully."
+echo "JamRelay deploy completed successfully."
 `;
 }
 
@@ -987,7 +1002,7 @@ async function main() {
 
   const remoteTarget = `${options.user}@${options.host}`;
 
-  const localTarballPath = path.resolve(os.tmpdir(), `tunelink-${options.tag}.tar.gz`);
+  const localTarballPath = path.resolve(os.tmpdir(), `jamrelay-${options.tag}.tar.gz`);
 
   if (options.dryRun) {
     console.log(
@@ -1029,7 +1044,7 @@ async function main() {
       input: remoteScript(options),
     });
 
-    console.log(`\n✓ TuneLink deployed: ${options.tag}`);
+    console.log(`\n✓ JamRelay deployed: ${options.tag}`);
   } finally {
     if (fs.existsSync(localTarballPath)) {
       fs.unlinkSync(localTarballPath);

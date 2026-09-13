@@ -1,11 +1,11 @@
 ---
 title: Despliegue gratis o económico
-description: Ejecuta TuneLink gratis o con un presupuesto mensual muy pequeño.
+description: Ejecuta JamRelay gratis o con un presupuesto mensual muy pequeño.
 ---
 
 # Despliegue gratis o económico
 
-TuneLink necesita pocos recursos.
+JamRelay necesita pocos recursos.
 
 ## Elegir según presupuesto
 
@@ -19,14 +19,14 @@ TuneLink necesita pocos recursos.
 ## Hosting gratuito en casa
 
 ```text
-Cliente IA → HTTPS → Cloudflare Tunnel → TuneLink → Spotify
+Cliente IA → HTTPS → Cloudflare Tunnel → JamRelay → Spotify
 ```
 
 Funciona detrás de CGNAT y no requiere abrir puertos de entrada.
 
 ## VPS económico
 
-Una instancia privada suele necesitar solo 1 vCPU compartida, 512 MB–1 GB de RAM y unos pocos GB de almacenamiento persistente. Para TuneLink por sí solo normalmente no hace falta una máquina mayor.
+Una instancia privada suele necesitar solo 1 vCPU compartida, 512 MB–1 GB de RAM y unos pocos GB de almacenamiento persistente. Para JamRelay por sí solo normalmente no hace falta una máquina mayor.
 
 Proveedores como Hetzner, OVHcloud, DigitalOcean, Vultr y otros ofrecen VM pequeñas. Los precios cambian con frecuencia, por lo que esta documentación evita fijar una cifra concreta.
 

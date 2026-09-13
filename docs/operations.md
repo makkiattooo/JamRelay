@@ -7,8 +7,8 @@ This page is for operating an already configured deployment.
 ```bash
 docker compose up -d --build
 docker compose ps
-docker compose logs --tail=100 tunelink
-docker compose restart tunelink
+docker compose logs --tail=100 jamrelay
+docker compose restart jamrelay
 ```
 
 For Node deployments, use a process supervisor and keep `.env` outside shell history and logs. The application listens on `HOST` and `PORT`; the reverse proxy owns the public HTTPS listener.

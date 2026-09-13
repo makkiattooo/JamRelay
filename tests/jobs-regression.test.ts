@@ -26,7 +26,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 async function setup() {
-  root = await mkdtemp(join(tmpdir(), 'tunelink-jobs-'));
+  root = await mkdtemp(join(tmpdir(), 'jamrelay-jobs-'));
   initializeDatabase({ dataDir: root, migrationsDir: join(process.cwd(), 'db/migrations') });
 }
 const directItems = (count: number) =>

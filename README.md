@@ -1,10 +1,10 @@
-# TuneLink
+# JamRelay
 
 Self-hosted MCP server for connecting AI assistants to your own Spotify account.
 
-> **Unofficial project:** TuneLink is not affiliated with, endorsed by, or sponsored by Spotify, OpenAI, Anthropic, Google, or any other AI platform vendor.
+> **Unofficial project:** JamRelay is not affiliated with, endorsed by, or sponsored by Spotify, OpenAI, Anthropic, Google, or any other AI platform vendor.
 
-TuneLink exposes Spotify search, playlist, library, discovery and playback tools over MCP Streamable HTTP. It supports Spotify OAuth, multi-client MCP OAuth with PKCE, Dynamic Client Registration (DCR), optional static Bearer authentication, encrypted token persistence, a persistent SQLite State DB, and Docker deployment.
+JamRelay exposes Spotify search, playlist, library, discovery and playback tools over MCP Streamable HTTP. It supports Spotify OAuth, multi-client MCP OAuth with PKCE, Dynamic Client Registration (DCR), optional static Bearer authentication, encrypted token persistence, a persistent SQLite State DB, and Docker deployment.
 
 ## Documentation
 
@@ -99,6 +99,6 @@ See [SECURITY.md](SECURITY.md). Keep `.env`, OAuth token stores and `/data` out 
 
 ## License
 
-TuneLink is licensed under the GNU Affero General Public License v3.0 only (`AGPL-3.0-only`).
+JamRelay is licensed under the GNU Affero General Public License v3.0 only (`AGPL-3.0-only`).
 
 See [LICENSE](LICENSE) for the complete license text and [LICENSING.md](LICENSING.md) for licensing history and additional information.

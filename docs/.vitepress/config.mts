@@ -11,7 +11,7 @@ const automaticPagesBase =
 const pagesBase = process.env.DOCS_BASE ?? automaticPagesBase;
 
 export default defineConfig({
-  title: 'TuneLink',
+  title: 'JamRelay',
   description: 'Self-hosted MCP bridge between AI assistants and Spotify.',
   lang: 'en',
   base: pagesBase,

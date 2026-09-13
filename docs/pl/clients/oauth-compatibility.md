@@ -10,7 +10,7 @@ sourceHash: 26dfccbf5620
 AI / MCP client
    │ MCP OAuth lub Bearer
    ▼
-TuneLink
+JamRelay
    │ Spotify OAuth
    ▼
 Spotify Web API

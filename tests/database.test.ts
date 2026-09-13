@@ -18,7 +18,7 @@ import {
 const repositoryMigration = join(process.cwd(), 'db', 'migrations', '0001_state_db.sql');
 
 async function fixtureDirectory(...migrations: Array<[string, string]>) {
-  const root = await mkdtemp(join(tmpdir(), 'tunelink-db-'));
+  const root = await mkdtemp(join(tmpdir(), 'jamrelay-db-'));
   const directory = join(root, 'migrations');
   await mkdir(directory);
   for (const [filename, content] of migrations) await writeFile(join(directory, filename), content);
@@ -27,9 +27,9 @@ async function fixtureDirectory(...migrations: Array<[string, string]>) {
 
 afterEach(() => closeDatabase());
 
-describe('TuneLink State DB', () => {
+describe('JamRelay State DB', () => {
   it('initializes all state tables in temporary storage', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'tunelink-db-'));
+    const root = await mkdtemp(join(tmpdir(), 'jamrelay-db-'));
     try {
       const db = initializeDatabase({
         dataDir: root,

@@ -1,4 +1,6 @@
 services:
+  # Legacy production container/network/volume names are retained to avoid
+  # creating parallel infrastructure during the later migration.
   app:
     container_name: tunelink_app
     build: .
@@ -8,10 +10,11 @@ services:
       - .env
 
     environment:
-      TUNELINK_DATA_DIR: /data
+      JAMRELAY_DATA_DIR: /data
+      PORT: 5267
 
     ports:
-      - '127.0.0.1:3010:3010'
+      - '127.0.0.1:5267:5267'
 
     volumes:
       - tunelink_data:/data

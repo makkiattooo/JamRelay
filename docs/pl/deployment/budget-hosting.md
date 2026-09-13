@@ -1,11 +1,11 @@
 ---
 title: Darmowe i tanie wdrożenie
-description: Jak uruchomić TuneLink za darmo albo za mały miesięczny koszt.
+description: Jak uruchomić JamRelay za darmo albo za mały miesięczny koszt.
 ---
 
 # Darmowe i tanie wdrożenie
 
-TuneLink jest lekki. Nie potrzebujesz drogiego serwera.
+JamRelay jest lekki. Nie potrzebujesz drogiego serwera.
 
 ## Wybór według budżetu
 
@@ -18,10 +18,10 @@ TuneLink jest lekki. Nie potrzebujesz drogiego serwera.
 
 ## Wariant za 0 zł
 
-Uruchom TuneLink na własnym sprzęcie i wystaw tylko usługę MCP przez tunnel:
+Uruchom JamRelay na własnym sprzęcie i wystaw tylko usługę MCP przez tunnel:
 
 ```text
-Klient AI → HTTPS → Cloudflare Tunnel → TuneLink → Spotify
+Klient AI → HTTPS → Cloudflare Tunnel → JamRelay → Spotify
 ```
 
 Działa za CGNAT-em i nie wymaga otwierania portów na routerze.
@@ -38,7 +38,7 @@ Ubuntu/Debian
 Docker
 ```
 
-Nie ma sensu kupować większej maszyny tylko dla TuneLink.
+Nie ma sensu kupować większej maszyny tylko dla JamRelay.
 
 Przykładowi dostawcy małych VPS-ów to Hetzner, OVHcloud, DigitalOcean, Vultr i lokalni dostawcy. Ceny często się zmieniają, dlatego dokumentacja celowo nie wpisuje jednej „aktualnej” kwoty.
 
@@ -56,7 +56,7 @@ Przykładowi dostawcy małych VPS-ów to Hetzner, OVHcloud, DigitalOcean, Vultr 
 
 ## Uwaga na PaaS
 
-Darmowy lub bardzo tani PaaS nadaje się na stałe tylko wtedy, gdy zapewnia trwały storage. Obecny TuneLink zapisuje zaszyfrowane tokeny i stan OAuth na dysku.
+Darmowy lub bardzo tani PaaS nadaje się na stałe tylko wtedy, gdy zapewnia trwały storage. Obecny JamRelay zapisuje zaszyfrowane tokeny i stan OAuth na dysku.
 
 Przy ephemeral filesystem używaj platformy tylko testowo albo najpierw przenieś token store do zewnętrznego trwałego storage.
 
@@ -66,4 +66,4 @@ Stała domena lub subdomena bardzo ułatwia OAuth. Jeśli już masz domenę, sub
 
 ## Czego nie kupować
 
-Dla samego TuneLink zwykle nie potrzebujesz kilku rdzeni, wielu GB RAM, dużego SSD ani płatnego publicznego IPv4, jeśli korzystasz z Cloudflare Tunnel.
+Dla samego JamRelay zwykle nie potrzebujesz kilku rdzeni, wielu GB RAM, dużego SSD ani płatnego publicznego IPv4, jeśli korzystasz z Cloudflare Tunnel.

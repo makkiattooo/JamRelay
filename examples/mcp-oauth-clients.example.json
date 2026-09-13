@@ -1,14 +1,14 @@
 {
   "clients": [
     {
-      "clientId": "chatgpt-tunelink",
+      "clientId": "chatgpt-jamrelay",
       "clientName": "ChatGPT",
       "clientSecret": "REPLACE_WITH_A_STRONG_SECRET",
       "redirectUris": ["https://chatgpt.com/connector/oauth/REPLACE_WITH_CALLBACK_ID"],
       "tokenEndpointAuthMethods": ["client_secret_basic", "client_secret_post"]
     },
     {
-      "clientId": "cursor-tunelink",
+      "clientId": "cursor-jamrelay",
       "clientName": "Cursor",
       "clientSecret": "REPLACE_WITH_A_STRONG_SECRET",
       "redirectUris": [
@@ -19,14 +19,14 @@
       "applicationType": "native"
     },
     {
-      "clientId": "vscode-tunelink",
+      "clientId": "vscode-jamrelay",
       "clientName": "VS Code",
       "redirectUris": ["http://127.0.0.1:33418", "https://vscode.dev/redirect"],
       "tokenEndpointAuthMethods": ["none"],
       "applicationType": "native"
     },
     {
-      "clientId": "claude-tunelink",
+      "clientId": "claude-jamrelay",
       "clientName": "Claude",
       "clientSecret": "REPLACE_WITH_A_STRONG_SECRET",
       "redirectUris": ["https://claude.ai/api/mcp/auth_callback"],

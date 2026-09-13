@@ -1,11 +1,11 @@
 ---
 title: MCP Inspector
-description: Test TuneLink discovery, OAuth, Bearer auth, tools, and protocol behavior with MCP Inspector.
+description: Test JamRelay discovery, OAuth, Bearer auth, tools, and protocol behavior with MCP Inspector.
 ---
 
 # MCP Inspector
 
-Use MCP Inspector to validate TuneLink independently of a production AI client.
+Use MCP Inspector to validate JamRelay independently of a production AI client.
 
 It is useful for testing:
 
@@ -37,7 +37,7 @@ Choose Streamable HTTP and enter:
 https://mcp.example.com/mcp
 ```
 
-Current Inspector releases support modern MCP OAuth flows, including dynamic/static client information depending on the selected mode. Let Inspector perform discovery first rather than manually hard-coding TuneLink endpoints unless you are debugging discovery itself.
+Current Inspector releases support modern MCP OAuth flows, including dynamic/static client information depending on the selected mode. Let Inspector perform discovery first rather than manually hard-coding JamRelay endpoints unless you are debugging discovery itself.
 
 ## Recommended release checks
 

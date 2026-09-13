@@ -3,7 +3,7 @@
 ```bash
 docker compose up -d --build
 docker compose ps
-docker compose logs --tail=100 tunelink
+docker compose logs --tail=100 jamrelay
 ```
 
 Sprawdź `/health`, metadata OAuth, a potem z klienta `get_devices` lub `get_currently_playing`. `/data` zawiera zaszyfrowane tokeny Spotify i store MCP OAuth; backup musi być chroniony, a klucz szyfrowania przechowywany osobno.

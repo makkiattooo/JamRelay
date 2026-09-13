@@ -52,7 +52,7 @@ describe('MCP OAuth', () => {
     overrides: Record<string, unknown> = {},
     staticClients?: Record<string, unknown>,
   ) {
-    directory = await mkdtemp(join(tmpdir(), 'tunelink-oauth-'));
+    directory = await mkdtemp(join(tmpdir(), 'jamrelay-oauth-'));
     const clientsPath = join(directory, 'clients.json');
     if (staticClients) await writeFile(clientsPath, JSON.stringify(staticClients));
     const app = createApp(cfg(join(directory, 'oauth.json'), clientsPath, overrides), {
@@ -536,7 +536,7 @@ describe('MCP OAuth', () => {
   });
 
   it('rejects an invalid code verifier without consuming the code', async () => {
-    directory = await mkdtemp(join(tmpdir(), 'tunelink-pkce-'));
+    directory = await mkdtemp(join(tmpdir(), 'jamrelay-pkce-'));
     const store = new McpOAuthStore(join(directory, 'oauth.json'));
     const code = await store.issueCode({
       clientId: 'chatgpt-client',

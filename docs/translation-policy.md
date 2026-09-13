@@ -1,11 +1,11 @@
 ---
 title: Translation policy
-description: How TuneLink maintains English, Polish, German, French and Spanish documentation.
+description: How JamRelay maintains English, Polish, German, French and Spanish documentation.
 ---
 
 # Translation policy
 
-English is the **canonical source of truth** for TuneLink documentation.
+English is the **canonical source of truth** for JamRelay documentation.
 
 - **English** — canonical and expected to be current.
 - **Polish** — high-priority translation.

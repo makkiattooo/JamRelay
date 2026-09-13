@@ -13,7 +13,7 @@ Minimalna konfiguracja OAuth/DCR:
 ```json
 {
   "mcpServers": {
-    "tunelink": { "url": "https://mcp.example.com/mcp" }
+    "jamrelay": { "url": "https://mcp.example.com/mcp" }
   }
 }
 ```
@@ -30,11 +30,11 @@ Dla konkretnej wersji można też użyć static OAuth:
 ```json
 {
   "mcpServers": {
-    "tunelink": {
+    "jamrelay": {
       "url": "https://mcp.example.com/mcp",
       "auth": {
-        "CLIENT_ID": "${env:TUNELINK_OAUTH_CLIENT_ID}",
-        "CLIENT_SECRET": "${env:TUNELINK_OAUTH_CLIENT_SECRET}"
+        "CLIENT_ID": "${env:JAMRELAY_OAUTH_CLIENT_ID}",
+        "CLIENT_SECRET": "${env:JAMRELAY_OAUTH_CLIENT_SECRET}"
       }
     }
   }

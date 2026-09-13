@@ -6,7 +6,7 @@ sourceHash: 92ba01eb8652
 
 # AI-Client-Kompatibilität
 
-Remote MCP Streamable HTTP: `https://mcp.example.com/mcp`. TuneLink unterstützt MCP OAuth und optional einen statischen Bearer-Key.
+Remote MCP Streamable HTTP: `https://mcp.example.com/mcp`. JamRelay unterstützt MCP OAuth und optional einen statischen Bearer-Key.
 
 | Client            | Remote HTTP | OAuth | Empfehlung               | Status                              |
 | ----------------- | ----------- | ----- | ------------------------ | ----------------------------------- |

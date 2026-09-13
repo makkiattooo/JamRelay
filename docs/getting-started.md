@@ -17,7 +17,7 @@ npm run dev
 
 Fill `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `TOKEN_ENCRYPTION_KEY`, and `PUBLIC_BASE_URL` in `.env`. For a protected remote deployment, use `MCP_AUTH_MODE=bearer` with a strong `MCP_API_KEY`, or configure MCP OAuth as described in [MCP authentication](/oauth).
 
-Open `http://127.0.0.1:3000/auth/spotify/login`, approve access, then check `/auth/status` and `/health`. Configure the client with `http://127.0.0.1:3000/mcp` for local use.
+Open `http://127.0.0.1:5267/auth/spotify/login`, approve access, then check `/auth/status` and `/health`. Configure the client with `http://127.0.0.1:5267/mcp` for local use.
 
 ## Features implemented
 

@@ -1,18 +1,18 @@
 ---
 title: Free hosting options
-description: Run TuneLink without a paid VPS.
+description: Run JamRelay without a paid VPS.
 ---
 
 # Free hosting options
 
-You do **not** need a paid VPS to run TuneLink.
+You do **not** need a paid VPS to run JamRelay.
 
 The simplest free path is usually:
 
 ```text
 Your PC / home server
         ↓
-     TuneLink
+     JamRelay
         ↓
  Cloudflare Tunnel
         ↓
@@ -28,7 +28,7 @@ This keeps the current file-based token stores and requires almost no architectu
 ### Requirements
 
 - Node.js 22+ or Docker
-- a computer that can stay online while you use TuneLink
+- a computer that can stay online while you use JamRelay
 - a stable HTTPS hostname for remote OAuth clients
 - your own Spotify Developer application
 
@@ -46,7 +46,7 @@ or:
 docker compose up -d
 ```
 
-Point a Cloudflare Tunnel hostname such as `mcp.example.com` at the local service, normally `http://127.0.0.1:3000`.
+Point a Cloudflare Tunnel hostname such as `mcp.example.com` at the local service, normally `http://127.0.0.1:5267`.
 
 ### Good fit
 
@@ -67,11 +67,11 @@ A free-tier VM can behave almost exactly like a small VPS:
 ```text
 Cloud VM
 ├── Docker
-│   └── TuneLink
+│   └── JamRelay
 └── cloudflared / reverse proxy
 ```
 
-Choose a provider that offers **persistent disk storage**. TuneLink stores encrypted Spotify tokens and MCP OAuth state on disk, so ephemeral-only hosting is a poor permanent fit.
+Choose a provider that offers **persistent disk storage**. JamRelay stores encrypted Spotify tokens and MCP OAuth state on disk, so ephemeral-only hosting is a poor permanent fit.
 
 Free VM capacity and provider rules change frequently. Treat a free tier as a convenience rather than a permanent guarantee.
 
@@ -79,7 +79,7 @@ Free VM capacity and provider rules change frequently. Treat a free tier as a co
 
 Some free application platforms sleep or scale to zero and use ephemeral filesystems.
 
-That is fine for experiments, but the current TuneLink storage model expects persistent files such as:
+That is fine for experiments, but the current JamRelay storage model expects persistent files such as:
 
 ```text
 ./data/spotify-token.json
@@ -95,7 +95,7 @@ A PaaS becomes a much better permanent option after moving token storage to an e
 For a first-time user without a VPS:
 
 ```text
-1. Run TuneLink locally
+1. Run JamRelay locally
 2. Complete Spotify OAuth
 3. Test MCP locally
 4. Add a stable Cloudflare Tunnel hostname

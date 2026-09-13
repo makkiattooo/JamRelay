@@ -1,11 +1,11 @@
 ---
 title: Free and low-cost deployment
-description: Ways to run TuneLink for free or with a small monthly budget.
+description: Ways to run JamRelay for free or with a small monthly budget.
 ---
 
 # Free and low-cost deployment
 
-TuneLink is lightweight. You do not need an expensive server.
+JamRelay is lightweight. You do not need an expensive server.
 
 ## Choose by budget
 
@@ -18,17 +18,17 @@ TuneLink is lightweight. You do not need an expensive server.
 
 ## Zero-cost setup
 
-Use an existing computer and expose only TuneLink through a secure tunnel:
+Use an existing computer and expose only JamRelay through a secure tunnel:
 
 ```text
-AI client → HTTPS → Cloudflare Tunnel → TuneLink → Spotify
+AI client → HTTPS → Cloudflare Tunnel → JamRelay → Spotify
 ```
 
 This works behind CGNAT and does not require opening inbound router ports.
 
 ## Low-cost VPS
 
-A tiny VPS is already enough for a private TuneLink instance. Look for:
+A tiny VPS is already enough for a private JamRelay instance. Look for:
 
 ```text
 1 shared vCPU
@@ -46,7 +46,7 @@ Providers commonly used for small self-hosted workloads include Hetzner, OVHclou
 
 1. Choose a small VM with persistent disk.
 2. Install Docker.
-3. Clone TuneLink.
+3. Clone JamRelay.
 4. Keep `.env` outside version control.
 5. Mount persistent `/data` storage.
 6. Use Cloudflare Tunnel or an HTTPS reverse proxy.
@@ -66,7 +66,7 @@ A custom domain is useful for stable OAuth callbacks, but users who already own 
 
 ## What not to buy
 
-For TuneLink alone you generally do not need:
+For JamRelay alone you generally do not need:
 
 - multiple dedicated CPU cores
 - several gigabytes of RAM

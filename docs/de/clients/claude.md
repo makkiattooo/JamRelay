@@ -6,7 +6,7 @@ sourceHash: efd98c1fa4d9
 
 # Claude
 
-Claude unterstützt Remote-MCP mit OAuth. TuneLink unterstützt DCR und statische Client-Zugangsdaten.
+Claude unterstützt Remote-MCP mit OAuth. JamRelay unterstützt DCR und statische Client-Zugangsdaten.
 
 ```dotenv
 MCP_OAUTH_OWNER_SECRET=<STARKES_SECRET>
@@ -18,7 +18,7 @@ Füge `https://mcp.example.com/mcp` hinzu. Für gehostete Claude-Oberflächen do
 Claude Code:
 
 ```bash
-claude mcp add --transport http tunelink https://mcp.example.com/mcp
+claude mcp add --transport http jamrelay https://mcp.example.com/mcp
 ```
 
 DCR erlaubt einen Loopback-Callback ohne vorher festgelegten Port. Gehostete Claude-Connectoren benötigen einen öffentlich erreichbaren HTTPS-Endpunkt. Der Protokollpfad ist implementiert; ein aktueller Client-Build ist noch separat Ende-zu-Ende zu testen.

@@ -1,5 +1,5 @@
 {
-  "name": "tunelink",
+  "name": "jamrelay",
   "version": "1.0.0",
   "private": true,
   "description": "Self-hosted MCP server for connecting AI assistants with Spotify.",

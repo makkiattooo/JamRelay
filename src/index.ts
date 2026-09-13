@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { McpServer, createMcpHandler } from '@modelcontextprotocol/server';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import pino, { type Logger } from 'pino';
-import { getConfig, type Config } from './config.js';
+import { APP_NAME, getConfig, type Config } from './config.js';
 import { TokenStore } from './spotify/token-store.js';
 import { SpotifyAuth } from './spotify/auth.js';
 import { SpotifyClient } from './spotify/client.js';
@@ -106,7 +106,7 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
   };
   const mcpHandler = createMcpHandler(
     () => {
-      const server = new McpServer({ name: 'tunelink', version: '1.0.0' });
+      const server = new McpServer({ name: 'jamrelay', version: '1.0.0' });
       registerTools(server, client, logger, isDatabaseInitialized());
       return server;
     },
@@ -151,20 +151,20 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
     sendApiError(res, new ApiError(404, 'RESOURCE_NOT_FOUND', 'Resource not found.')),
   );
   app.use(apiErrorHandler);
-  (app as typeof app & { tunelinkClient: SpotifyClient }).tunelinkClient = client;
+  (app as typeof app & { jamrelayClient: SpotifyClient }).jamrelayClient = client;
   return app;
 }
 export async function startServer(cfg = getConfig()) {
   const logger = pino({ level: cfg.LOG_LEVEL });
   initializeDatabase({
-    dataDir: cfg.TUNELINK_DATA_DIR,
-    dbPath: cfg.TUNELINK_DB_PATH,
+    dataDir: cfg.JAMRELAY_DATA_DIR,
+    dbPath: cfg.JAMRELAY_DB_PATH,
     logger,
   });
   recoverInterruptedJobs();
   const app = createApp(cfg, { logger });
   const jobRunner = new JobRunner(
-    (app as typeof app & { tunelinkClient: SpotifyClient }).tunelinkClient,
+    (app as typeof app & { jamrelayClient: SpotifyClient }).jamrelayClient,
     logger,
   );
   jobRunner.start();
@@ -176,7 +176,7 @@ export async function startServer(cfg = getConfig()) {
     if (shuttingDown) return;
     shuttingDown = true;
     void jobRunner.stop();
-    logger.info({ event: 'shutdown', signal }, 'TuneLink shutdown requested');
+    logger.info({ event: 'shutdown', signal }, `${APP_NAME} shutdown requested`);
     server.close((error) => {
       if (error) logger.error({ err: error }, 'HTTP server shutdown failed');
       closeDatabase();
@@ -188,6 +188,6 @@ export async function startServer(cfg = getConfig()) {
 }
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url)
   startServer().catch((error: unknown) => {
-    pino().error({ err: error }, 'TuneLink startup failed');
+    pino().error({ err: error }, `${APP_NAME} startup failed`);
     process.exitCode = 1;
   });

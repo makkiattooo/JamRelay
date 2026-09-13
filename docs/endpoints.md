@@ -50,7 +50,7 @@ Without a valid bearer credential, `/mcp` returns `401` with a `WWW-Authenticate
 
 ## OAuth metadata
 
-Protected-resource metadata advertises `/mcp`, the authorization server, and Bearer header usage. TuneLink serves both the root and path-suffixed RFC 9728 discovery URLs.
+Protected-resource metadata advertises `/mcp`, the authorization server, and Bearer header usage. JamRelay serves both the root and path-suffixed RFC 9728 discovery URLs.
 
 Authorization-server metadata advertises:
 
@@ -61,4 +61,4 @@ Authorization-server metadata advertises:
 - `client_secret_post`;
 - `/oauth/register` when DCR is enabled.
 
-TuneLink can resolve OAuth clients from the backwards-compatible legacy environment variables, the static multi-client registry, or the dynamic-client store.
+JamRelay can resolve OAuth clients from the backwards-compatible legacy environment variables, the static multi-client registry, or the dynamic-client store.

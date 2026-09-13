@@ -17,7 +17,7 @@ npm run dev
 
 The development command loads `.env` automatically. Local token files default to `./data/`, so a non-Docker installation does not require a system-level `/data` directory.
 
-Use `http://127.0.0.1:3000` in `.env` and register the matching Spotify callback.
+Use `http://127.0.0.1:5267` in `.env` and register the matching Spotify callback.
 
 ## Local production
 
@@ -30,8 +30,8 @@ npm start
 ## Docker
 
 ```bash
-docker build -t tunelink .
-docker run --env-file .env -p 127.0.0.1:3000:3000 -v tunelink-data:/data tunelink
+docker build -t jamrelay .
+docker run --env-file .env -p 127.0.0.1:5267:5267 -v jamrelay-data:/data jamrelay
 ```
 
 ## Docker Compose
@@ -50,16 +50,16 @@ Install Node.js 22 or Docker, copy `.env`, persist `/data`, restrict the applica
 
 ```ini
 [Unit]
-Description=TuneLink MCP server
+Description=JamRelay MCP server
 After=network-online.target
 
 [Service]
-WorkingDirectory=/opt/tunelink
-EnvironmentFile=/opt/tunelink/.env
-ExecStart=/usr/bin/node /opt/tunelink/dist/index.js
+WorkingDirectory=/opt/jamrelay
+EnvironmentFile=/opt/jamrelay/.env
+ExecStart=/usr/bin/node /opt/jamrelay/dist/index.js
 Restart=on-failure
-User=tunelink
-Group=tunelink
+User=jamrelay
+Group=jamrelay
 NoNewPrivileges=true
 PrivateTmp=true
 
@@ -75,7 +75,7 @@ For Caddy:
 
 ```text
 mcp.example.com {
-  reverse_proxy 127.0.0.1:3000
+  reverse_proxy 127.0.0.1:5267
 }
 ```
 
@@ -85,7 +85,7 @@ For nginx:
 server {
     listen 443 ssl;
     server_name mcp.example.com;
-    location / { proxy_pass http://127.0.0.1:3000; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
+    location / { proxy_pass http://127.0.0.1:5267; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
 }
 ```
 
@@ -96,7 +96,7 @@ The proxy must forward the original host and scheme. If it terminates TLS, keep 
 ## Cloudflare Tunnel
 
 ```text
-Internet → Cloudflare → cloudflared → MCP application (127.0.0.1:3000)
+Internet → Cloudflare → cloudflared → MCP application (127.0.0.1:5267)
 ```
 
 Run `cloudflared` separately, map only the intended hostname, and store its credentials outside the repository. Do not place tunnel tokens in Compose files or documentation.

@@ -1,6 +1,6 @@
 # Bezpieczeństwo
 
-TuneLink jest self-hosted. Operator odpowiada za host, HTTPS, reverse proxy, sekrety, backupy, logi i aktualizacje. MCP należy traktować jako panel sterowania kontem Spotify.
+JamRelay jest self-hosted. Operator odpowiada za host, HTTPS, reverse proxy, sekrety, backupy, logi i aktualizacje. MCP należy traktować jako panel sterowania kontem Spotify.
 
 Najważniejsze zasady: silne osobne sekrety, prywatny `/data`, port aplikacji tylko lokalnie/prywatnie, `TRUST_PROXY=true` wyłącznie za zaufanym proxy, brak sekretów w issue/logach oraz potwierdzanie operacji zapisu w kliencie.
 

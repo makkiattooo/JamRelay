@@ -9,7 +9,7 @@ sourceHash: dd20a9dff117
 Cursor admite Streamable HTTP remoto, OAuth, credenciales OAuth estáticas y headers personalizados. Configuración mínima con DCR:
 
 ```json
-{ "mcpServers": { "tunelink": { "url": "https://mcp.example.com/mcp" } } }
+{ "mcpServers": { "jamrelay": { "url": "https://mcp.example.com/mcp" } } }
 ```
 
 Callbacks documentados actualmente:

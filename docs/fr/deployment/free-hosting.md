@@ -1,18 +1,18 @@
 ---
 title: Options d’hébergement gratuites
-description: 'Exécuter TuneLink sans VPS grâce à une machine locale, Cloudflare Tunnel, une VM gratuite ou un PaaS gratuit.'
+description: 'Exécuter JamRelay sans VPS grâce à une machine locale, Cloudflare Tunnel, une VM gratuite ou un PaaS gratuit.'
 ---
 
 # Options d’hébergement gratuites
 
-Vous n’avez **pas besoin d’un VPS payant** pour exécuter TuneLink.
+Vous n’avez **pas besoin d’un VPS payant** pour exécuter JamRelay.
 
 Pour la plupart des utilisateurs, la solution gratuite la plus simple est :
 
 ```text
 Votre PC / serveur domestique
               ↓
-         TuneLink
+         JamRelay
               ↓
        Cloudflare Tunnel
               ↓
@@ -33,11 +33,11 @@ C’est l’alternative gratuite la plus proche d’un VPS.
 ### Prérequis
 
 - Node.js 22+ ou Docker
-- une machine pouvant rester active quand TuneLink doit être disponible
+- une machine pouvant rester active quand JamRelay doit être disponible
 - un compte Cloudflare
 - un domaine géré par Cloudflare si vous souhaitez un nom d’hôte stable
 
-Démarrer TuneLink localement :
+Démarrer JamRelay localement :
 
 ```bash
 npm ci
@@ -54,7 +54,7 @@ docker compose up -d
 Puis faire pointer un hostname Cloudflare Tunnel vers :
 
 ```text
-http://127.0.0.1:3010
+http://127.0.0.1:5267
 ```
 
 Votre endpoint MCP public peut alors ressembler à :
@@ -69,7 +69,7 @@ https://mcp.example.com/mcp
 - stockage local persistant
 - aucune redirection de port
 - fonctionne derrière un CGNAT
-- aucune modification de l’architecture TuneLink
+- aucune modification de l’architecture JamRelay
 - migration facile vers un VPS plus tard
 
 ### Limites
@@ -82,13 +82,13 @@ https://mcp.example.com/mcp
 
 ## Option 2 — Serveur domestique, NAS ou Raspberry Pi
 
-Si vous possédez déjà un serveur domestique ou un NAS, TuneLink représente une charge très légère.
+Si vous possédez déjà un serveur domestique ou un NAS, JamRelay représente une charge très légère.
 
 Architecture typique :
 
 ```text
 Docker
-├── TuneLink
+├── JamRelay
 └── cloudflared
 ```
 
@@ -116,7 +116,7 @@ Le déploiement est presque identique à celui d’un VPS :
 ```text
 VM cloud gratuite
 ├── Docker
-│   └── TuneLink
+│   └── JamRelay
 └── cloudflared
 ```
 
@@ -135,15 +135,15 @@ VM cloud gratuite
 - il faut respecter les limites du free tier
 
 > [!WARNING]
-> Ne concevez pas TuneLink en supposant qu’une offre cloud gratuite restera inchangée pour toujours.
+> Ne concevez pas JamRelay en supposant qu’une offre cloud gratuite restera inchangée pour toujours.
 
 ---
 
 ## Option 4 — PaaS gratuits
 
-Des plateformes comme Render ou Koyeb peuvent exécuter gratuitement des services Node.js, mais elles ne sont **pas idéales pour TuneLink sans modifier le stockage persistant**.
+Des plateformes comme Render ou Koyeb peuvent exécuter gratuitement des services Node.js, mais elles ne sont **pas idéales pour JamRelay sans modifier le stockage persistant**.
 
-TuneLink conserve des données OAuth sur disque, par exemple :
+JamRelay conserve des données OAuth sur disque, par exemple :
 
 ```text
 /data/mcp-oauth.json
@@ -173,7 +173,7 @@ Le stockage local des jetons reste donc le principal problème.
 
 ### Quand un PaaS devient intéressant
 
-Un PaaS gratuit devient beaucoup plus pratique si TuneLink prend en charge un stockage externe persistant, par exemple :
+Un PaaS gratuit devient beaucoup plus pratique si JamRelay prend en charge un stockage externe persistant, par exemple :
 
 ```text
 PostgreSQL
@@ -188,7 +188,7 @@ D’ici là, utilisez surtout ces plateformes pour les tests.
 
 ## Comparaison
 
-| Option                       |       Coût d’hébergement |            24/7 possible |  Stockage persistant | Modifications de TuneLink   |
+| Option                       |       Coût d’hébergement |            24/7 possible |  Stockage persistant | Modifications de JamRelay   |
 | ---------------------------- | -----------------------: | -----------------------: | -------------------: | --------------------------- |
 | PC local + Cloudflare Tunnel |                 Gratuit* | ✅ si le PC reste allumé |                   ✅ | Aucune                      |
 | Serveur domestique / NAS     |                 Gratuit* |                       ✅ |                   ✅ | Aucune                      |
@@ -203,7 +203,7 @@ D’ici là, utilisez surtout ces plateformes pour les tests.
 Pour un nouvel utilisateur :
 
 ```text
-1. Exécuter TuneLink localement
+1. Exécuter JamRelay localement
 2. Tester Spotify OAuth
 3. Tester MCP localement
 4. Ajouter Cloudflare Tunnel

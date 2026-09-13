@@ -16,7 +16,7 @@ DCR               ✅
 CIMD              noch nicht beworben
 ```
 
-| Client     | Dokumentiertes Verhalten                                     | Bester TuneLink-Pfad    |
+| Client     | Dokumentiertes Verhalten                                     | Bester JamRelay-Pfad    |
 | ---------- | ------------------------------------------------------------ | ----------------------- |
 | ChatGPT    | exakter Callback + Client ID/Secret                          | Static Pre-Registration |
 | Claude     | DCR + optionale statische Credentials                        | DCR/static              |
