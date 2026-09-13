@@ -180,6 +180,86 @@ describe('MCP OAuth', () => {
     expect(wrongResource.status).toBe(400);
     const denied = await authorize(root, 'wrong');
     expect(denied.response.status).toBe(401);
+    expect(await denied.response.text()).toContain('Invalid owner secret');
+  });
+
+  it('renders a branded, non-cacheable authorization page without exposing callback details', async () => {
+    const root = await start();
+    const query = new URLSearchParams({
+      client_id: 'chatgpt-client',
+      redirect_uri: 'https://chatgpt.com/connector/oauth/callback',
+      response_type: 'code',
+      code_challenge: challenge('verifier-value'),
+      code_challenge_method: 'S256',
+      state: 'safe-state',
+      resource: `${base}/mcp`,
+    });
+    const page = await fetch(`${root}/oauth/authorize?${query}`);
+    const html = await page.text();
+    expect(page.status).toBe(200);
+    expect(page.headers.get('cache-control')).toBe('no-store');
+    expect(page.headers.get('content-security-policy')).toContain("default-src 'none'");
+    expect(page.headers.get('referrer-policy')).toBe('no-referrer');
+    expect(html).toContain('Connect ChatGPT to JamRelay');
+    expect(html).toContain('/assets/icons/jamrelay-icon-dark.png.png');
+    expect(html).toContain('JamRelay Connect');
+    expect(html).toContain('Authorize access');
+    expect(html).toContain('type="password"');
+    expect(html).not.toContain('https://chatgpt.com/connector/oauth/callback</');
+    expect(html).not.toContain('value="owner-secret"');
+  });
+
+  it('shows specific OAuth request errors and redirects cancellation safely', async () => {
+    const root = await start();
+    const invalidClient = await fetch(
+      `${root}/oauth/authorize?${new URLSearchParams({
+        client_id: 'unknown-client',
+        redirect_uri: 'https://chatgpt.com/connector/oauth/callback',
+        response_type: 'code',
+      })}`,
+    );
+    expect(invalidClient.status).toBe(400);
+    expect(await invalidClient.text()).toContain('Invalid client');
+
+    const invalidRedirect = await fetch(
+      `${root}/oauth/authorize?${new URLSearchParams({
+        client_id: 'chatgpt-client',
+        redirect_uri: 'https://example.com/wrong',
+        response_type: 'code',
+      })}`,
+    );
+    expect(invalidRedirect.status).toBe(400);
+    expect(await invalidRedirect.text()).toContain('Invalid redirect URI');
+
+    const invalidRequest = await fetch(
+      `${root}/oauth/authorize?${new URLSearchParams({
+        client_id: 'chatgpt-client',
+        redirect_uri: 'https://chatgpt.com/connector/oauth/callback',
+        response_type: 'code',
+      })}`,
+    );
+    expect(invalidRequest.status).toBe(400);
+    expect(await invalidRequest.text()).toContain('Invalid OAuth request');
+
+    const cancelled = await fetch(`${root}/oauth/authorize`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: 'chatgpt-client',
+        redirect_uri: 'https://chatgpt.com/connector/oauth/callback',
+        response_type: 'code',
+        code_challenge: challenge('verifier-value'),
+        code_challenge_method: 'S256',
+        state: 'cancel-state',
+        resource: `${base}/mcp`,
+        decision: 'cancel',
+      }),
+      redirect: 'manual',
+    });
+    const location = new URL(cancelled.headers.get('location')!);
+    expect(cancelled.status).toBe(302);
+    expect(location.searchParams.get('error')).toBe('access_denied');
+    expect(location.searchParams.get('state')).toBe('cancel-state');
   });
 
   it('runs authorization code PKCE once and preserves state and issuer', async () => {

@@ -4,6 +4,11 @@ import { dirname } from 'node:path';
 import express from 'express';
 import { z } from 'zod';
 import type { Config } from '../config.js';
+import {
+  oauthPageHeaders,
+  renderAuthorizePage,
+  renderOAuthErrorPage,
+} from './oauth-authorize-page.js';
 
 type TokenEndpointAuthMethod = 'none' | 'client_secret_basic' | 'client_secret_post';
 
@@ -70,12 +75,6 @@ const sameDigest = (candidate: string, expectedDigest: string) => {
   const y = Buffer.from(expectedDigest, 'hex');
   return x.length === y.length && timingSafeEqual(x, y);
 };
-const escapeHtml = (value: string) =>
-  value.replace(
-    /[&<>"']/g,
-    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
-  );
-
 const staticClientSchema = z
   .object({
     clientId: z.string().min(1),
@@ -637,39 +636,65 @@ export function registerMcpOAuthRoutes(
   app.get('/oauth/authorize', async (req, res) => {
     if (!cfg.MCP_OAUTH_OWNER_SECRET) return unavailable(req, res);
     const q = req.query;
-    const clientId = String(q.client_id ?? '');
-    const redirectUri = String(q.redirect_uri ?? '');
-    const requestedResource = q.resource ? String(q.resource) : undefined;
+    const clientId = typeof q.client_id === 'string' ? q.client_id : '';
+    const redirectUri = typeof q.redirect_uri === 'string' ? q.redirect_uri : '';
+    const requestedResource = typeof q.resource === 'string' ? q.resource : undefined;
+    const state = typeof q.state === 'string' ? q.state : '';
     const client = await resolveClient(clientId);
 
+    const headers = res.set(oauthPageHeaders);
+    if (!client)
+      return headers
+        .status(400)
+        .type('html')
+        .send(
+          renderOAuthErrorPage({
+            title: 'Invalid client',
+            message: 'This OAuth client is not registered with JamRelay.',
+          }),
+        );
+    if (!client.redirectUris.includes(redirectUri))
+      return headers
+        .status(400)
+        .type('html')
+        .send(
+          renderOAuthErrorPage({
+            title: 'Invalid redirect URI',
+            message: 'The callback registered for this client does not match this request.',
+          }),
+        );
     if (
       q.response_type !== 'code' ||
-      !client ||
-      !client.redirectUris.includes(redirectUri) ||
       !q.code_challenge ||
       q.code_challenge_method !== 'S256' ||
-      !validResource(requestedResource)
+      !validResource(requestedResource) ||
+      (q.state !== undefined && typeof q.state !== 'string')
     ) {
-      return res.status(400).type('html').send('Invalid authorization request');
+      return headers
+        .status(400)
+        .type('html')
+        .send(
+          renderOAuthErrorPage({
+            title: 'Invalid OAuth request',
+            message:
+              'The authorization request is missing required security parameters or is not supported.',
+          }),
+        );
     }
 
-    const fields = Object.entries({
+    const fields = {
       client_id: clientId,
       redirect_uri: redirectUri,
       response_type: 'code',
       code_challenge: String(q.code_challenge),
       code_challenge_method: 'S256',
-      state: q.state ? String(q.state) : '',
+      state,
       resource: requestedResource ?? resource,
-    })
-      .map(([key, value]) => `<input type="hidden" name="${key}" value="${escapeHtml(value)}">`)
-      .join('');
+    };
 
-    res
+    return headers
       .type('html')
-      .send(
-        `<!doctype html><meta charset="utf-8"><title>Authorize MCP client</title><h1>Authorize ${escapeHtml(client.clientName)} to access JamRelay</h1><p>Redirect: <code>${escapeHtml(redirectUri)}</code></p><form method="post" action="/oauth/authorize">${fields}<label>Owner secret <input name="owner_secret" type="password" required autocomplete="current-password"></label><button type="submit">Authorize</button></form>`,
-      );
+      .send(renderAuthorizePage({ clientName: client.clientName, fields }));
   });
 
   app.post('/oauth/authorize', express.urlencoded({ extended: false }), async (req, res) => {
@@ -679,16 +704,49 @@ export function registerMcpOAuthRoutes(
     const body = (req.body ?? {}) as Record<string, string>;
     const client = await resolveClient(body.client_id ?? '');
     const requestedResource = body.resource || resource;
-    const valid =
-      client &&
-      client.redirectUris.includes(body.redirect_uri ?? '') &&
+    const headers = res.set(oauthPageHeaders).type('html');
+    if (!client)
+      return headers.status(400).send(
+        renderOAuthErrorPage({
+          title: 'Invalid client',
+          message: 'This OAuth client is not registered with JamRelay.',
+        }),
+      );
+    if (!client.redirectUris.includes(body.redirect_uri ?? ''))
+      return headers.status(400).send(
+        renderOAuthErrorPage({
+          title: 'Invalid redirect URI',
+          message: 'The callback registered for this client does not match this request.',
+        }),
+      );
+    const validRequest =
       body.response_type === 'code' &&
       body.code_challenge_method === 'S256' &&
       Boolean(body.code_challenge) &&
       validResource(requestedResource) &&
-      same(body.owner_secret ?? '', cfg.MCP_OAUTH_OWNER_SECRET);
-
-    if (!valid || !client) return res.status(401).type('html').send('Authorization denied');
+      typeof body.state === 'string';
+    if (!validRequest)
+      return headers.status(400).send(
+        renderOAuthErrorPage({
+          title: 'Invalid OAuth request',
+          message:
+            'The authorization request could not be validated. Start the connection again from ChatGPT.',
+        }),
+      );
+    if (body.decision === 'cancel') {
+      const redirect = new URL(body.redirect_uri);
+      redirect.searchParams.set('error', 'access_denied');
+      redirect.searchParams.set('iss', origin);
+      if (body.state) redirect.searchParams.set('state', body.state);
+      return res.redirect(302, redirect.toString());
+    }
+    if (!same(body.owner_secret ?? '', cfg.MCP_OAUTH_OWNER_SECRET))
+      return headers.status(401).send(
+        renderOAuthErrorPage({
+          title: 'Invalid owner secret',
+          message: 'The owner secret did not match. Check it and try again.',
+        }),
+      );
 
     if (client.source === 'dynamic') await store.touchDynamicClient(client.clientId, true);
     const code = await store.issueCode({

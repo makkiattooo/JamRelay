@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
@@ -166,6 +167,8 @@ Options:
   new URL(options.publicBaseUrl);
 
   options.tarballPath = `/home/${options.user}/jamrelay-${options.tag}.tar.gz`;
+  options.assetsTarballPath = `/home/${options.user}/jamrelay-assets-${options.tag}.tar.gz`;
+  options.assetsManifestPath = `/home/${options.user}/jamrelay-assets-${options.tag}.manifest`;
   options.expectedSchemaVersion = expectedSchemaVersion();
 
   return options;
@@ -309,6 +312,10 @@ function buildTarball(tarballPath) {
 
     '--exclude=scripts/deploy.mjs',
 
+    '--exclude=assets',
+
+    '--exclude=assets/**',
+
     '.',
   ]);
 
@@ -321,6 +328,84 @@ function buildTarball(tarballPath) {
   }
 }
 
+function assetManifest() {
+  const root = path.join(repoRoot, 'assets');
+  const files = [];
+  const visit = (directory) => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const absolute = path.join(directory, entry.name);
+      if (entry.isDirectory()) visit(absolute);
+      else if (entry.isFile()) {
+        const relative = path.relative(root, absolute).split(path.sep).join('/');
+        const hash = crypto.createHash('sha256').update(fs.readFileSync(absolute)).digest('hex');
+        files.push([relative, hash]);
+      }
+    }
+  };
+  visit(root);
+  return new Map(files.sort(([a], [b]) => a.localeCompare(b, 'en')));
+}
+
+function shellQuote(value) {
+  return "'" + value.replaceAll("'", "'\"'\"'") + "'";
+}
+
+function readRemoteAssetManifest(remoteTarget, options) {
+  const manifestPath = `${options.appPath}/.jamrelay-assets.manifest`;
+  const assetsPath = `${options.appPath}/assets`;
+  const result = spawnSync(
+    'ssh',
+    [
+      remoteTarget,
+      `if [ -f ${shellQuote(manifestPath)} ]; then cat -- ${shellQuote(manifestPath)}; elif [ -d ${shellQuote(assetsPath)} ]; then cd ${shellQuote(assetsPath)} && find . -type f -print0 | xargs -0 -r sha256sum; fi`,
+    ],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+  if (result.status !== 0) return new Map();
+  const manifest = new Map();
+  for (const line of result.stdout.split(/\r?\n/)) {
+    const [hash, ...parts] = line.trim().split(/\s+/);
+    if (hash && parts.length) {
+      manifest.set(parts.join(' ').replace(/^\.\//, ''), hash);
+    }
+  }
+  return manifest;
+}
+
+function prepareAssetSync(remoteTarget, options, localPaths) {
+  const local = assetManifest();
+  const remote = readRemoteAssetManifest(remoteTarget, options);
+  const changed = [...local].filter(([relative, hash]) => remote.get(relative) !== hash);
+  const manifestPath = path.resolve(os.tmpdir(), `jamrelay-assets-${options.tag}.manifest`);
+  fs.writeFileSync(
+    manifestPath,
+    [...local].map(([relative, hash]) => `${hash}  ${relative}`).join('\n') + '\n',
+    'utf8',
+  );
+
+  let patchPath;
+  if (changed.length) {
+    patchPath = path.resolve(os.tmpdir(), `jamrelay-assets-${options.tag}.tar.gz`);
+    const listPath = path.resolve(os.tmpdir(), `jamrelay-assets-${options.tag}.list`);
+    fs.writeFileSync(listPath, changed.map(([relative]) => `assets/${relative}`).join('\n') + '\n');
+    runStep('Build changed assets archive', 'tar', [
+      '-czf',
+      patchPath,
+      '-C',
+      repoRoot,
+      '--files-from',
+      listPath,
+    ]);
+    localPaths.push(listPath);
+  }
+
+  return {
+    localManifestPath: manifestPath,
+    localPatchPath: patchPath,
+    changed: changed.length > 0,
+  };
+}
+
 function remoteScript(options) {
   return `set -euo pipefail
 
@@ -328,6 +413,9 @@ app_dir=${JSON.stringify(options.appPath)}
 app_env_file=${JSON.stringify(options.appEnvFile)}
 token_file=${JSON.stringify(options.tunnelTokenFile)}
 tarball_path=${JSON.stringify(options.tarballPath)}
+assets_tarball_path=${JSON.stringify(options.assetsTarballPath)}
+assets_manifest_path=${JSON.stringify(options.assetsManifestPath)}
+assets_changed=${options.assetsChanged ? '1' : '0'}
 
 local_health_url=${JSON.stringify(`${options.localBaseUrl}/health`)}
 
@@ -499,6 +587,7 @@ restore_source() {
     -mindepth 1 \\
     -maxdepth 1 \\
     ! -name '.env' \\
+    ! -name 'assets' \\
     -exec rm -rf -- {} +
 
   if [ "$source_backup_exists" -eq 1 ]; then
@@ -615,6 +704,9 @@ cleanup() {
   rm -f "$tarball_path" \\
     >/dev/null 2>&1 || true
 
+  rm -f "$assets_tarball_path" "$assets_manifest_path" \\
+    >/dev/null 2>&1 || true
+
   sudo rm -f "$backup_path" \\
     >/dev/null 2>&1 || true
 
@@ -634,7 +726,7 @@ cleanup() {
 trap cleanup EXIT
 
 
-for command in \\
+  for command in \\
   docker \\
   curl \\
   tar \\
@@ -791,11 +883,14 @@ if [ -n "$(
     -mindepth 1 \\
     -maxdepth 1 \\
     ! -name '.env' \\
+    ! -name 'assets' \\
     -print -quit
 )" ]; then
 
   sudo tar \\
     --exclude='./.env' \\
+    --exclude='./assets' \\
+    --exclude='./assets/**' \\
     -czf "$backup_path" \\
     -C "$app_dir" \\
     .
@@ -815,12 +910,32 @@ sudo find "$app_dir" \\
   -mindepth 1 \\
   -maxdepth 1 \\
   ! -name '.env' \\
+  ! -name 'assets' \\
   -exec rm -rf -- {} +
 
 
 sudo tar \\
   -xzf "$tarball_path" \\
   -C "$app_dir"
+
+
+if [ "$assets_changed" -eq 1 ]; then
+  sudo tar \\
+    -xzf "$assets_tarball_path" \\
+    -C "$app_dir"
+
+  sudo install \\
+    -m 0644 \\
+    "$assets_manifest_path" \\
+    "$app_dir/.jamrelay-assets.manifest"
+
+  while IFS= read -r -d '' asset_file; do
+    relative="\${asset_file#"$app_dir/assets/"}"
+    if ! grep -Fq "  $relative" "$assets_manifest_path"; then
+      sudo rm -f -- "$asset_file"
+    fi
+  done < <(sudo find "$app_dir/assets" -type f -print0 2>/dev/null || true)
+fi
 
 
 if [ ! -f "$app_dir/compose.yml" ]; then
@@ -988,6 +1103,7 @@ async function main() {
   const remoteTarget = `${options.user}@${options.host}`;
 
   const localTarballPath = path.resolve(os.tmpdir(), `jamrelay-${options.tag}.tar.gz`);
+  const localTemporaryPaths = [localTarballPath];
 
   if (options.dryRun) {
     console.log(
@@ -1023,7 +1139,25 @@ async function main() {
 
     buildTarball(localTarballPath);
 
+    const assets = prepareAssetSync(remoteTarget, options, localTemporaryPaths);
+    options.assetsChanged = assets.changed;
+    localTemporaryPaths.push(assets.localManifestPath);
+
     runStep('Upload project', 'scp', [localTarballPath, `${remoteTarget}:${options.tarballPath}`]);
+
+    runStep('Upload assets manifest', 'scp', [
+      assets.localManifestPath,
+      `${remoteTarget}:${options.assetsManifestPath}`,
+    ]);
+    if (assets.localPatchPath) {
+      localTemporaryPaths.push(assets.localPatchPath);
+      runStep('Upload changed assets', 'scp', [
+        assets.localPatchPath,
+        `${remoteTarget}:${options.assetsTarballPath}`,
+      ]);
+    } else {
+      console.log('\n✓ Assets unchanged');
+    }
 
     runStep('Deploy on VPS', 'ssh', [remoteTarget, 'bash', '-s'], {
       input: remoteScript(options),
@@ -1031,8 +1165,8 @@ async function main() {
 
     console.log(`\n✓ JamRelay deployed: ${options.tag}`);
   } finally {
-    if (fs.existsSync(localTarballPath)) {
-      fs.unlinkSync(localTarballPath);
+    for (const temporaryPath of localTemporaryPaths) {
+      if (fs.existsSync(temporaryPath)) fs.unlinkSync(temporaryPath);
     }
   }
 }

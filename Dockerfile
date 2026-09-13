@@ -13,6 +13,7 @@ COPY --from=build /app/package*.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/db ./db
+COPY assets ./assets
 RUN mkdir /data && chown node:node /data
 USER node
 EXPOSE 5267

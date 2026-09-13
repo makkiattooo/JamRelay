@@ -23,6 +23,16 @@ JamRelay includes an OAuth authorization server for remote MCP clients. Spotify 
 - RFC 7591 Dynamic Client Registration for deployed-client compatibility;
 - owner approval protected by `MCP_OAUTH_OWNER_SECRET`.
 
+## Authorization screen
+
+`GET /oauth/authorize` is served by the JamRelay backend and renders the branded
+dark authorization screen. It keeps OAuth parameters in backend-validated hidden
+form fields, never displays the full callback URL, and accepts the owner secret
+only over the password field on the approval form. Authorization pages are
+marked `no-store` and include a restrictive content security policy. Selecting
+Cancel returns the client to its registered callback with `error=access_denied`
+and the original `state`.
+
 ## Recommended configuration for automatic clients
 
 For clients that support DCR:

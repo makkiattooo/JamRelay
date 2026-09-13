@@ -23,6 +23,15 @@ JamRelay ma dwie niezależne warstwy autoryzacji: **klient AI → JamRelay** ora
 - RFC 7591 Dynamic Client Registration dla kompatybilności z istniejącymi klientami;
 - owner approval chronione przez `MCP_OAUTH_OWNER_SECRET`.
 
+## Ekran autoryzacji
+
+`GET /oauth/authorize` jest obsługiwany przez backend JamRelay i wyświetla
+markowy, ciemny ekran autoryzacji. Parametry OAuth pozostają w polach formularza
+zweryfikowanych przez backend, pełny callback URL nie jest pokazywany, a owner
+secret jest przyjmowany wyłącznie w polu typu password. Ekrany autoryzacji mają
+`no-store` i restrykcyjną politykę CSP. Anulowanie wraca do zarejestrowanego
+callbacku klienta z `error=access_denied` oraz oryginalnym `state`.
+
 ## Automatyczni klienci
 
 ```dotenv

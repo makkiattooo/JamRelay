@@ -1,6 +1,7 @@
 import express from 'express';
 import { timingSafeEqual } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { resolve } from 'node:path';
 import { McpServer, createMcpHandler } from '@modelcontextprotocol/server';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import pino, { type Logger } from 'pino';
@@ -48,6 +49,7 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
     res.setHeader('Referrer-Policy', 'no-referrer');
     next();
   });
+  app.use('/assets', express.static(resolve(process.cwd(), 'assets'), { index: false }));
   const oauthStore = new McpOAuthStore(cfg.MCP_OAUTH_STORE_PATH);
   registerMcpOAuthRoutes(app, cfg, oauthStore);
   app.get('/health', async (_req, res) => {
