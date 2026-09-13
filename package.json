@@ -1,6 +1,6 @@
 {
   "name": "jamrelay",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Self-hosted MCP server for connecting AI assistants with Spotify.",
   "type": "module",
