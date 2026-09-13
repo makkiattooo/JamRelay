@@ -87,24 +87,13 @@ description: Generated reference for variables documented in .env.example.
 
 - **Sensitive:** no
 - **Example/default in `.env.example`:** _empty_
-- **Notes:** Persistent JamRelay State DB. These are infrastructure settings, not secrets. JAMRELAY_* names are canonical; TUNELINK_* names remain deprecated aliases. Local default: ./data/tunelink.db Docker production: /data/tunelink.db (Compose sets JAMRELAY_DATA_DIR=/data). The legacy physical filename is intentionally retained for data safety.
+- **Notes:** Persistent JamRelay State DB. These are infrastructure settings, not secrets. Local default: ./data/jamrelay.db Docker production: /data/jamrelay.db (Compose sets JAMRELAY_DATA_DIR=/data).
 
 ### `JAMRELAY_DB_PATH`
 
 - **Sensitive:** no
 - **Example/default in `.env.example`:** _empty_
 - **Notes:** Optional explicit path; overrides JAMRELAY_DATA_DIR when set.
-
-### `TUNELINK_DATA_DIR`
-
-- **Sensitive:** no
-- **Example/default in `.env.example`:** _empty_
-- **Notes:** Deprecated compatibility aliases for existing deployments.
-
-### `TUNELINK_DB_PATH`
-
-- **Sensitive:** no
-- **Example/default in `.env.example`:** _empty_
 
 ## Token encryption
 

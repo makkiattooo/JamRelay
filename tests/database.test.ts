@@ -52,7 +52,7 @@ describe('JamRelay State DB', () => {
           'job_items',
         ]),
       );
-      expect(getDatabasePath()).toBe(join(root, 'tunelink.db'));
+      expect(getDatabasePath()).toBe(join(root, 'jamrelay.db'));
     } finally {
       closeDatabase();
       await rm(root, { recursive: true, force: true });
@@ -237,7 +237,7 @@ describe('JamRelay State DB', () => {
       '0001_marker.sql',
       'CREATE TABLE marker (id INTEGER);\n',
     ]);
-    const db = new DatabaseSync(join(fixture.root, 'tunelink.db'));
+    const db = new DatabaseSync(join(fixture.root, 'jamrelay.db'));
     db.exec(
       'CREATE TABLE schema_migrations (version TEXT PRIMARY KEY, checksum TEXT NOT NULL, provenance TEXT NOT NULL, applied_at INTEGER NOT NULL);',
     );
@@ -264,7 +264,7 @@ describe('JamRelay State DB', () => {
       '0001_marker.sql',
       'CREATE TABLE marker (id INTEGER);\n',
     ]);
-    const malformedDb = new DatabaseSync(join(malformed.root, 'tunelink.db'));
+    const malformedDb = new DatabaseSync(join(malformed.root, 'jamrelay.db'));
     malformedDb.exec(
       'CREATE TABLE schema_migrations (version TEXT PRIMARY KEY, checksum TEXT NOT NULL, provenance TEXT NOT NULL, applied_at INTEGER NOT NULL);',
     );
@@ -291,7 +291,7 @@ describe('JamRelay State DB', () => {
       expect(() =>
         initializeDatabase({ dataDir: fixture.root, migrationsDir: fixture.directory }),
       ).toThrow(/Database migration failed/);
-      const failedDb = new DatabaseSync(join(fixture.root, 'tunelink.db'));
+      const failedDb = new DatabaseSync(join(fixture.root, 'jamrelay.db'));
       expect(
         failedDb.prepare("SELECT name FROM sqlite_master WHERE name = 'partial'").get(),
       ).toBeUndefined();
@@ -306,7 +306,7 @@ describe('JamRelay State DB', () => {
   it('upgrades a legacy schema_migrations table with the repository checksum', async () => {
     const content = 'CREATE TABLE marker (id INTEGER);\n';
     const fixture = await fixtureDirectory(['0001_marker.sql', content]);
-    const legacyDb = new DatabaseSync(join(fixture.root, 'tunelink.db'));
+    const legacyDb = new DatabaseSync(join(fixture.root, 'jamrelay.db'));
     legacyDb.exec(
       'CREATE TABLE schema_migrations (version TEXT PRIMARY KEY, applied_at INTEGER NOT NULL);',
     );

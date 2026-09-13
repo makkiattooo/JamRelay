@@ -26,34 +26,19 @@ function expectedSchemaVersion() {
 }
 
 const defaults = {
-  // JAMRELAY_* is canonical; TUNELINK_* and the live paths below are legacy
-  // compatibility aliases retained to protect the existing deployment.
-  host: process.env.JAMRELAY_VPS_HOST ?? process.env.TUNELINK_VPS_HOST ?? '91.134.132.235',
+  host: process.env.JAMRELAY_VPS_HOST ?? '91.134.132.235',
 
-  user: process.env.JAMRELAY_VPS_USER ?? process.env.TUNELINK_VPS_USER ?? 'ubuntu',
+  user: process.env.JAMRELAY_VPS_USER ?? 'ubuntu',
 
-  appPath:
-    process.env.JAMRELAY_VPS_APP_PATH ?? process.env.TUNELINK_VPS_APP_PATH ?? '/srv/tunelink',
+  appPath: process.env.JAMRELAY_VPS_APP_PATH ?? '/srv/jamrelay',
 
-  appEnvFile:
-    process.env.JAMRELAY_VPS_APP_ENV_FILE ??
-    process.env.TUNELINK_VPS_APP_ENV_FILE ??
-    '/srv/tunelink/.env',
+  appEnvFile: process.env.JAMRELAY_VPS_APP_ENV_FILE ?? '/srv/jamrelay/.env',
 
-  tunnelTokenFile:
-    process.env.JAMRELAY_VPS_TUNNEL_TOKEN_FILE ??
-    process.env.TUNELINK_VPS_TUNNEL_TOKEN_FILE ??
-    '/etc/tunelink/tunnel-token',
+  tunnelTokenFile: process.env.JAMRELAY_VPS_TUNNEL_TOKEN_FILE ?? '/etc/jamrelay/tunnel-token',
 
-  localBaseUrl:
-    process.env.JAMRELAY_LOCAL_BASE_URL ??
-    process.env.TUNELINK_LOCAL_BASE_URL ??
-    'http://127.0.0.1:5267',
+  localBaseUrl: process.env.JAMRELAY_LOCAL_BASE_URL ?? 'http://127.0.0.1:5267',
 
-  publicBaseUrl:
-    process.env.JAMRELAY_PUBLIC_BASE_URL ??
-    process.env.TUNELINK_PUBLIC_BASE_URL ??
-    'https://tunelink-mcp.mealoo.pl',
+  publicBaseUrl: process.env.JAMRELAY_PUBLIC_BASE_URL ?? 'https://jamrelay-mcp.mealoo.pl',
 };
 
 function createStamp() {
@@ -353,19 +338,19 @@ skip_public_check=${options.skipPublicCheck ? '1' : '0'}
 deploy_tag=${JSON.stringify(options.tag)}
 expected_schema_version=${JSON.stringify(options.expectedSchemaVersion)}
 
-project_name="tunelink"
+project_name="jamrelay"
 
-app_container="tunelink_app"
-tunnel_container="tunelink_tunnel"
+app_container="jamrelay_app"
+tunnel_container="jamrelay_tunnel"
 
-volume_name="tunelink_data"
-network_name="tunelink_internal"
+volume_name="jamrelay_data"
+network_name="jamrelay_internal"
 
-app_image="tunelink-app:latest"
-rollback_tag="tunelink-app:rollback-$deploy_tag"
+app_image="jamrelay-app:latest"
+rollback_tag="jamrelay-app:rollback-$deploy_tag"
 
-backup_path="/tmp/tunelink-source-$deploy_tag.tar.gz"
-lock_file="/tmp/tunelink-deploy.lock"
+backup_path="/tmp/jamrelay-source-$deploy_tag.tar.gz"
+lock_file="/tmp/jamrelay-deploy.lock"
 
 cloudflare_token=""
 
@@ -531,7 +516,7 @@ rollback_app() {
     return 0
   fi
 
-  echo "Rolling back tunelink_app..." >&2
+  echo "Rolling back jamrelay_app..." >&2
 
   if [ "$old_app_exists" -eq 1 ] &&
      [ "$rollback_image_saved" -eq 1 ]; then
@@ -563,7 +548,7 @@ rollback_app() {
       compose stop app >/dev/null 2>&1 || true
     fi
 
-    echo "tunelink_app rollback OK." >&2
+    echo "jamrelay_app rollback OK." >&2
     return 0
   fi
 
@@ -580,7 +565,7 @@ rollback_tunnel() {
     return 0
   fi
 
-  echo "Rolling back tunelink_tunnel..." >&2
+  echo "Rolling back jamrelay_tunnel..." >&2
 
   if [ "$old_tunnel_exists" -eq 1 ]; then
     compose up \\
@@ -867,8 +852,8 @@ volumes="$(
 )"
 
 
-if [ "$volumes" != "tunelink_data " ]; then
-  echo "Compose must contain exactly tunelink_data." >&2
+if [ "$volumes" != "jamrelay_data " ]; then
+  echo "Compose must contain exactly jamrelay_data." >&2
   exit 1
 fi
 
@@ -880,8 +865,8 @@ networks="$(
 )"
 
 
-if [ "$networks" != "tunelink_internal " ]; then
-  echo "Compose must contain exactly tunelink_internal." >&2
+if [ "$networks" != "jamrelay_internal " ]; then
+  echo "Compose must contain exactly jamrelay_internal." >&2
   exit 1
 fi
 
@@ -891,7 +876,7 @@ echo "Building JamRelay..."
 compose build app
 
 
-echo "Replacing tunelink_app..."
+echo "Replacing jamrelay_app..."
 
 app_changed=1
 
@@ -915,10 +900,10 @@ if ! wait_new_release_health; then
 fi
 
 
-echo "tunelink_app healthy."
+echo "jamrelay_app healthy."
 
 
-echo "Replacing tunelink_tunnel..."
+echo "Replacing jamrelay_tunnel..."
 
 tunnel_changed=1
 
@@ -951,7 +936,7 @@ done
 
 
 if [ "$tunnel_running" -ne 1 ]; then
-  echo "tunelink_tunnel failed to start." >&2
+  echo "jamrelay_tunnel failed to start." >&2
 
   sudo docker logs \\
     --tail=100 \\
@@ -962,7 +947,7 @@ if [ "$tunnel_running" -ne 1 ]; then
 fi
 
 
-echo "tunelink_tunnel running."
+echo "jamrelay_tunnel running."
 
 
 if [ "$skip_public_check" -ne 1 ]; then

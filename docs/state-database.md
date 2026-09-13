@@ -13,7 +13,7 @@ JamRelay uses SQLite for its first persistent state foundation because the produ
 jamrelay_app
     |
     v
-/data/tunelink.db
+/data/jamrelay.db
     |
     v
 Docker external volume: jamrelay_data
@@ -23,11 +23,11 @@ The encrypted `spotify-token.json` and the MCP OAuth store remain separate files
 
 | Location             | Purpose                                         |
 | -------------------- | ----------------------------------------------- |
-| `/data/tunelink.db`  | Production database                             |
-| `./data/tunelink.db` | Local development default                       |
+| `/data/jamrelay.db`  | Production database                             |
+| `./data/jamrelay.db` | Local development default                       |
 | `db/migrations/`     | Versioned migration source shipped in the image |
 
-`JAMRELAY_DB_PATH`, when set, overrides `JAMRELAY_DATA_DIR`. Otherwise the database is `${JAMRELAY_DATA_DIR}/tunelink.db`; Compose sets `JAMRELAY_DATA_DIR=/data`. The legacy physical filename is intentionally retained to preserve the existing database. Both variables are non-secret infrastructure configuration.
+`JAMRELAY_DB_PATH`, when set, overrides `JAMRELAY_DATA_DIR`. Otherwise the database is `${JAMRELAY_DATA_DIR}/jamrelay.db`; Compose sets `JAMRELAY_DATA_DIR=/data`. Both variables are non-secret infrastructure configuration.
 
 ## SQLite configuration
 
@@ -165,7 +165,7 @@ JamRelay detects an applied migration whose checksum changed, an applied migrati
 
 ## Backup, recovery, and security
 
-No automated backup command is implemented. Do not copy only `tunelink.db` while the app may be writing its WAL; use an application-aware SQLite backup procedure or stop the app before making a filesystem-level backup that includes the database and its `-wal`/`-shm` files. Recovery requires restoring matching `/data` contents and environment configuration, then starting the app.
+No automated backup command is implemented. Do not copy only `jamrelay.db` while the app may be writing its WAL; use an application-aware SQLite backup procedure or stop the app before making a filesystem-level backup that includes the database and its `-wal`/`-shm` files. Recovery requires restoring matching `/data` contents and environment configuration, then starting the app.
 
 The database must not contain Spotify access or refresh tokens, the Cloudflare tunnel token, client secrets, arbitrary `.env` values, raw authorization headers, full HTTP bodies, or full analytics request history. API error records are designed for normalized diagnostics and hashes rather than secret payloads.
 
@@ -176,7 +176,7 @@ Migration files use LF line endings through `.gitattributes` (`*.sql text eol=lf
 - **Cannot open / permission error:** verify that the runtime user can write `/data` and that `JAMRELAY_DB_PATH` points to a writable location.
 - **Migration failure:** inspect application startup logs and fix the migration/schema issue; health should remain unavailable until startup succeeds.
 - **Corruption:** stop the app, preserve the original database and WAL files, and restore a known-good backup before restarting.
-- **WAL files:** `tunelink.db-wal` and `tunelink.db-shm` are normal SQLite companion files and are ignored by Git.
+- **WAL files:** `jamrelay.db-wal` and `jamrelay.db-shm` are normal SQLite companion files and are ignored by Git.
 - **Schema inspection:** read-only inspection of `schema_migrations` confirms which migration filenames were applied.
 - **Local reset:** stop the local app and remove only the local `data/` database files when intentionally resetting development state. Never use a destructive reset against the production `jamrelay_data` volume.
 

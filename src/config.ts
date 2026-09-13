@@ -32,8 +32,6 @@ const schema = z.object({
   SPOTIFY_TOKEN_STORE_PATH: dataPath('spotify-token.json'),
   JAMRELAY_DATA_DIR: optionalNonEmpty,
   JAMRELAY_DB_PATH: optionalNonEmpty,
-  TUNELINK_DATA_DIR: optionalNonEmpty,
-  TUNELINK_DB_PATH: optionalNonEmpty,
   PORT: z.coerce.number().int().positive().default(DEFAULT_PORT),
   HOST: z.string().default('0.0.0.0'),
   PUBLIC_BASE_URL: z.string().url(),
@@ -74,12 +72,7 @@ const schema = z.object({
 export type Config = z.infer<typeof schema>;
 
 export function getConfig(): Config {
-  const parsed = schema.parse(process.env);
-  const c = {
-    ...parsed,
-    JAMRELAY_DATA_DIR: parsed.JAMRELAY_DATA_DIR ?? parsed.TUNELINK_DATA_DIR,
-    JAMRELAY_DB_PATH: parsed.JAMRELAY_DB_PATH ?? parsed.TUNELINK_DB_PATH,
-  };
+  const c = schema.parse(process.env);
 
   if (c.MCP_AUTH_MODE === 'bearer' && !c.MCP_API_KEY) {
     throw new Error('MCP_API_KEY is required in bearer mode');

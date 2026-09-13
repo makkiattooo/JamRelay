@@ -26,8 +26,6 @@ const useEnv = (values: Record<string, string>) => {
     'MCP_OAUTH_DCR_ENABLED',
     'JAMRELAY_DATA_DIR',
     'JAMRELAY_DB_PATH',
-    'TUNELINK_DATA_DIR',
-    'TUNELINK_DB_PATH',
   ])
     if (!(key in values)) delete process.env[key];
 };
@@ -74,25 +72,13 @@ describe('configuration', () => {
     expect(getConfig().PORT).toBe(5267);
   });
 
-  it('uses canonical JAMRELAY storage variables before legacy aliases', () => {
+  it('accepts canonical JAMRELAY storage variables', () => {
     useEnv({
       ...baseEnv(),
       JAMRELAY_DATA_DIR: '/canonical/data',
-      TUNELINK_DATA_DIR: '/legacy/data',
       JAMRELAY_DB_PATH: '/canonical/db.sqlite',
-      TUNELINK_DB_PATH: '/legacy/db.sqlite',
     });
     expect(getConfig().JAMRELAY_DATA_DIR).toBe('/canonical/data');
     expect(getConfig().JAMRELAY_DB_PATH).toBe('/canonical/db.sqlite');
-  });
-
-  it('accepts legacy TUNELINK storage aliases', () => {
-    useEnv({
-      ...baseEnv(),
-      TUNELINK_DATA_DIR: '/legacy/data',
-      TUNELINK_DB_PATH: '/legacy/db.sqlite',
-    });
-    expect(getConfig().JAMRELAY_DATA_DIR).toBe('/legacy/data');
-    expect(getConfig().JAMRELAY_DB_PATH).toBe('/legacy/db.sqlite');
   });
 });

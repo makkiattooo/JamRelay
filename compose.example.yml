@@ -1,7 +1,6 @@
 services:
-  # Legacy production container/network/volume names are intentionally retained.
   app:
-    container_name: tunelink_app
+    container_name: jamrelay_app
     build: .
     restart: unless-stopped
     env_file:
@@ -12,9 +11,9 @@ services:
     ports:
       - '127.0.0.1:5267:5267'
     volumes:
-      - tunelink_data:/data
+      - jamrelay_data:/data
     networks:
-      - tunelink_internal
+      - jamrelay_internal
     cap_drop:
       - ALL
     security_opt:
@@ -35,20 +34,20 @@ services:
       retries: 3
 
   tunnel:
-    container_name: tunelink_tunnel
+    container_name: jamrelay_tunnel
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
     env_file:
-      - /etc/tunelink/compose.env
+      - /etc/jamrelay/compose.env
     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     networks:
-      - tunelink_internal
+      - jamrelay_internal
 
 volumes:
-  tunelink_data:
+  jamrelay_data:
     external: true
-    name: tunelink_data
+    name: jamrelay_data
 
 networks:
-  tunelink_internal:
-    name: tunelink_internal
+  jamrelay_internal:
+    name: jamrelay_internal
