@@ -33,7 +33,8 @@ for (const locale of docsLocales) {
       const prefix = localeMeta[locale].prefix.replace(/^\//, '');
       const relative = page.path || 'index';
       const candidate = resolve(docsRoot, prefix, `${relative.replace(/\/$/, '/index')}.md`);
-      if (!(await exists(candidate)))
+      const englishCandidate = resolve(docsRoot, `${relative.replace(/\/$/, '/index')}.md`);
+      if (!(await exists(candidate)) && !(locale !== 'en' && (await exists(englishCandidate))))
         errors.push(`Missing navigation target: ${docsLink(locale, page.path)} -> ${candidate}`);
     }
   }

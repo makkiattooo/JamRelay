@@ -1,39 +1,53 @@
-# JamRelay
+---
+title: JamRelay — self-hosted music automation
+description: Automate Spotify playlists and playback from MCP clients with local state, safe plans and reversible changes.
+layout: home
+hero:
+  name: JamRelay
+  text: Music automation you can run yourself.
+  tagline: A self-hosted MCP server for Spotify capabilities, playlist automation and explainable local state.
+  image:
+    src: /brand/jamrelay-icon-256.webp
+    alt: JamRelay
+  actions:
+    - theme: brand
+      text: Get started
+      link: /getting-started
+    - theme: alt
+      text: Connect a client
+      link: /clients/
+features:
+  - title: Plan before changing
+    details: Dry runs, deterministic plans, snapshots, verification and reversible operations make playlist mutations inspectable.
+  - title: Database-first resolution
+    details: Known tracks are resolved from the local canonical database before Spotify Search is considered.
+  - title: Automation that composes
+    details: Rules, recipes, filtering, layout, deduplication, merge, split, sync and bulk workflows share the same engine.
+  - title: Self-hosted and local-first
+    details: OAuth credentials, state, history and derived signals stay within your deployment by default.
+---
 
-Self-hosted MCP server for connecting AI assistants to your own Spotify account.
-
-[Get started](/getting-started) · [Configuration](/configuration) · [MCP tools](/tools)
-
-> **Unofficial project.** JamRelay is not affiliated with, endorsed by, or sponsored by Spotify, OpenAI, Anthropic, Google, or any other AI platform vendor. Spotify is a trademark of Spotify AB.
-
-## What it does
-
-JamRelay exposes Spotify search, library, playlist, discovery, and playback operations through the Model Context Protocol (MCP). You run the server, authorize your own Spotify account, and choose which client can reach it.
-
-## Two independent authentication layers
-
-1. **AI client → MCP server:** bearer API key or the built-in MCP OAuth authorization-code flow with PKCE.
-2. **MCP server → Spotify:** Spotify OAuth authorization-code flow. The server stores encrypted Spotify tokens and refreshes them when needed.
+## From a request to a safe operation
 
 ```mermaid
 flowchart LR
-  AI[AI client] --> MCPAuth[MCP OAuth or bearer key]
-  MCPAuth --> Server[MCP server]
-  Server --> SpotifyAuth[Spotify OAuth]
-  SpotifyAuth --> Spotify[Spotify Web API]
+  A[MCP client] --> B[Transport and OAuth]
+  B --> C[Tool contract]
+  C --> D[Domain services and playlist engine]
+  D --> E[(SQLite state)]
+  D --> F[Spotify API]
 ```
 
-## Highlights
+JamRelay is not Spotify's official Daily Mix or recommendation product. It is a self-hosted automation layer that turns high-level requests into bounded Spotify operations.
 
-- 39 read and write MCP tools based on the current implementation.
-- Encrypted, atomic token persistence with local `./data` defaults and `/data` defaults in the production Docker image.
-- OAuth state validation, PKCE, exact redirect URI allowlisting, and hashed MCP tokens.
-- Local Node.js, Docker, Compose, reverse proxy, Cloudflare Tunnel, VPS, and NAS-friendly deployment guidance.
-- English canonical documentation with Polish, German, French, and Spanish best-effort translations.
-- Generated MCP tool and environment references to avoid duplicating fast-changing technical data across locales.
+## Choose your path
 
-## Language selector
+- [Quick start](/getting-started) — connect Spotify and invoke a safe read tool.
+- [Playlist automation](/playlist-automation) — analysis, layout, cleanup and composition.
+- [Safety model](/playlist-safety) — snapshots, verification and undo guarantees.
+- [Database-first resolution](/database-first-resolution) — how local canonical state reduces Search usage.
+- [Generated tool reference](/tools-reference) — exact runtime schemas and annotations.
 
-[English](/) · [Polski](/pl/) · [Deutsch](/de/) · [Français](/fr/) · [Español](/es/)
+## What JamRelay knows
 
-Start with the [quick start](/getting-started), then read [security](/security) before exposing the service to the internet. See the [translation policy](/translation-policy) for locale maintenance rules.
+It can use Spotify responses, local canonical track state, persisted jobs, snapshots and playback/history events that JamRelay actually observed or synchronized. It does not invent dislikes, complete listening history or recommendation preferences. See [personalization limits](/playlist-personalization).

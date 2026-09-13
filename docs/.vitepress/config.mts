@@ -13,7 +13,8 @@ const faviconHref = `${pagesBase}favicon.ico`;
 
 export default defineConfig({
   title: 'JamRelay',
-  description: 'Self-hosted MCP bridge between AI assistants and Spotify.',
+  description:
+    'Self-hosted music automation through MCP, Spotify, durable state and safe playlist operations.',
   lang: 'en',
   base: pagesBase,
   head: [['link', { rel: 'icon', href: faviconHref }]],
@@ -26,10 +27,11 @@ export default defineConfig({
   },
   themeConfig: {
     nav: [
-      { text: 'Guide', link: '/getting-started' },
-      { text: 'Configuration', link: '/configuration' },
-      { text: 'MCP tools', link: '/tools' },
-      { text: 'Security', link: '/security' },
+      { text: 'Get started', link: '/getting-started' },
+      { text: 'Features', link: '/playlist-automation' },
+      { text: 'Clients', link: '/clients/' },
+      { text: 'Deploy', link: '/installation' },
+      { text: 'Reference', link: '/tools-reference' },
       {
         text: 'Languages',
         items: [

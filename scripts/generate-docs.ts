@@ -46,6 +46,49 @@ const schemaKeys = (schema: unknown): string[] => {
   return [];
 };
 
+const schemaInfo = (schema: any): { type: string; required: boolean; details: string } => {
+  const def = schema?._zod?.def ?? schema?.def;
+  if (!def) return { type: 'unknown', required: true, details: '' };
+  const type = String(def.type ?? 'unknown');
+  if (type === 'optional') {
+    const inner = schemaInfo(def.innerType);
+    return { ...inner, required: false };
+  }
+  if (type === 'default') {
+    const inner = schemaInfo(def.innerType);
+    let value = 'default';
+    try {
+      value = `default: ${JSON.stringify(def.defaultValue())}`;
+    } catch {
+      /* introspection only */
+    }
+    return {
+      ...inner,
+      required: false,
+      details: [inner.details, value].filter(Boolean).join('; '),
+    };
+  }
+  if (type === 'enum')
+    return {
+      type: 'enum',
+      required: true,
+      details: `values: ${Object.values(def.entries ?? {}).join(', ')}`,
+    };
+  if (type === 'array')
+    return { type: `array<${schemaInfo(def.element).type}>`, required: true, details: '' };
+  if (type === 'string' || type === 'number') {
+    const checks = (def.checks ?? [])
+      .map((check: any) => check?.def?.value ?? check?.value)
+      .filter((x: unknown) => x !== undefined);
+    return {
+      type,
+      required: true,
+      details: checks.length ? `constraints: ${checks.join(', ')}` : '',
+    };
+  }
+  return { type, required: true, details: '' };
+};
+
 const toolLines = [
   '---',
   'title: MCP tool reference',
@@ -71,8 +114,16 @@ for (const tool of [...captured.values()].sort((a, b) => a.name.localeCompare(b.
   toolLines.push('');
   if (tool.description) toolLines.push(tool.description, '');
   toolLines.push('**Arguments:**');
-  if (args.length) for (const arg of args) toolLines.push(`- \`${arg}\``);
-  else toolLines.push('- None');
+  if (args.length) {
+    toolLines.push('| Argument | Type | Required | Details |', '|---|---|---:|---|');
+    const shape = (tool.inputSchema as any)?.shape ?? (tool.inputSchema as any)?._zod?.def?.shape;
+    for (const arg of args) {
+      const info = schemaInfo(shape?.[arg]);
+      toolLines.push(
+        `| \`${arg}\` | ${info.type} | ${info.required ? 'yes' : 'no'} | ${info.details || '—'} |`,
+      );
+    }
+  } else toolLines.push('- None');
   toolLines.push('');
 }
 

@@ -19,6 +19,19 @@ import {
 import { isDatabaseInitialized } from '../db/database.js';
 import { SpotifyApiError } from '../spotify/errors.js';
 import { getRateLimit, getRateLimitStatus, getRecentApiErrors } from '../db/state.js';
+import { normalizePlaylistItems, fingerprint } from '../playlists/normalize.js';
+import { healthReport, semanticDuplicateGroups } from '../playlists/analyzer.js';
+import { seededShuffle, violations } from '../playlists/shuffle.js';
+import { makePlan } from '../playlists/planner.js';
+import {
+  saveSnapshot,
+  loadSnapshot,
+  latestOperation,
+  saveOperation,
+} from '../playlists/snapshots.js';
+import type { NormalizedPlaylistTrack } from '../playlists/types.js';
+import { registerPlaylistAutomationTools } from '../playlists/automation.js';
+import { registerPlaylistPersonalizationTools } from '../playlists/personalization.js';
 const id = z.string().min(1);
 const text = (x: unknown) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(x) }],
@@ -83,6 +96,491 @@ export function registerAdvanced(
     for (const part of chunks(uris.slice(100)))
       await c.json('/playlists/' + playlistId + '/items', { uris: part });
   };
+  const playlistState = async (playlistId: string) => {
+    const meta: any = await get('/playlists/' + playlistId);
+    const raw = await allPlaylistItems(playlistId),
+      normalized = normalizePlaylistItems(raw);
+    return { meta, raw, ...normalized };
+  };
+  const stateSnapshot = (
+    playlistId: string,
+    state: { meta: any; tracks: NormalizedPlaylistTrack[] },
+    reason: string,
+  ) =>
+    saveSnapshot({
+      playlistId,
+      spotifySnapshotId: state.meta?.snapshot_id,
+      metadata: {
+        id: state.meta?.id,
+        name: state.meta?.name,
+        description: state.meta?.description,
+        public: state.meta?.public,
+        collaborative: state.meta?.collaborative,
+      },
+      uris: state.tracks.flatMap((t) => (t.uri ? [t.uri] : [])),
+      reason,
+    });
+  const replaceUris = async (playlistId: string, uris: string[]) => {
+    await c.json('/playlists/' + playlistId + '/items', { uris: uris.slice(0, 100) }, 'PUT');
+    for (const part of chunks(uris.slice(100)))
+      await c.json('/playlists/' + playlistId + '/items', { uris: part });
+  };
+  const operationPlan = (
+    playlistId: string,
+    operation: string,
+    before: NormalizedPlaylistTrack[],
+    after: NormalizedPlaylistTrack[],
+    warnings: string[] = [],
+    metrics: Record<string, unknown> = {},
+  ) =>
+    makePlan({
+      playlistId,
+      operation,
+      before,
+      after,
+      warnings,
+      metrics,
+      removals: before
+        .filter((x) => !after.some((y) => y.uri === x.uri))
+        .map((x) => ({ uri: x.uri!, position: x.position })),
+    });
+  const planOutput = (plan: any) => text({ ...plan, resultingTrackCount: plan.expectedTrackCount });
+  const executePlan = async (
+    playlistId: string,
+    operation: string,
+    state: any,
+    after: NormalizedPlaylistTrack[],
+    plan: any,
+  ) => {
+    const safety = stateSnapshot(playlistId, state, operation.toUpperCase());
+    try {
+      await replaceUris(playlistId, after.map((x) => x.uri!).filter(Boolean));
+      const verify: any = await playlistState(playlistId);
+      const ok =
+        verify.tracks.length === after.length &&
+        fingerprint(verify.tracks.map((x: NormalizedPlaylistTrack) => x.uri)) ===
+          fingerprint(after.map((x) => x.uri));
+      if (!ok) throw new Error('playlist_integrity_mismatch');
+      const afterSnapshot = stateSnapshot(playlistId, verify, operation + '_after');
+      saveOperation({
+        id: plan.id,
+        playlistId,
+        operation,
+        beforeSnapshotId: safety.id,
+        afterSnapshotId: afterSnapshot.id,
+        plan,
+        status: 'completed',
+      });
+      return {
+        plan,
+        safety_snapshot_id: safety.id,
+        after_snapshot_id: afterSnapshot.id,
+        verification: { ok, count: verify.tracks.length },
+      };
+    } catch (error) {
+      saveOperation({
+        id: plan.id,
+        playlistId,
+        operation,
+        beforeSnapshotId: safety.id,
+        plan,
+        status: 'partial_failure',
+      });
+      return {
+        plan,
+        safety_snapshot_id: safety.id,
+        partial_failure: { completed: false, error: String(error), rollback_available: true },
+      };
+    }
+  };
+  const mutationSchema = { playlist_id: id, dry_run: z.boolean().default(true) };
+  s.registerTool(
+    'playlist_health_report',
+    {
+      title: 'Playlist health report',
+      description: 'Read-only deterministic playlist health analysis; never mutates Spotify.',
+      inputSchema: { playlist_id: id },
+    },
+    async (a: any) => {
+      const x = await playlistState(pid(a));
+      return text({
+        ...healthReport(x.tracks, x.unavailable),
+        suspectedSemanticDuplicateGroups: semanticDuplicateGroups(x.tracks),
+      });
+    },
+  );
+  s.registerTool(
+    'snapshot_playlist',
+    {
+      title: 'Snapshot playlist',
+      description: 'Persist an ordered playlist snapshot; requires the state database.',
+      inputSchema: { playlist_id: id, reason: z.string().max(200).optional() },
+    },
+    async (a: any) => {
+      const x = await playlistState(pid(a)),
+        snap = stateSnapshot(pid(a), x, a.reason ?? 'manual');
+      return text({
+        snapshot_id: snap.id,
+        playlist_id: snap.playlistId,
+        spotify_snapshot_id: snap.spotifySnapshotId,
+        track_count: snap.trackCount,
+        created_at: snap.createdAt,
+      });
+    },
+  );
+  s.registerTool(
+    'semantic_deduplicate_playlist',
+    {
+      title: 'Semantic deduplicate playlist',
+      description:
+        'Conservative deterministic deduplication. dry_run defaults true; execution snapshots and verifies.',
+      inputSchema: {
+        ...mutationSchema,
+        prefer_original: z.boolean().default(true),
+        remove_remasters: z.boolean().default(false),
+        remove_live: z.boolean().default(false),
+        remove_remixes: z.boolean().default(false),
+        remove_sped_up: z.boolean().default(true),
+        remove_slowed: z.boolean().default(true),
+        duration_tolerance_ms: z.number().int().min(0).max(10000).default(2500),
+      },
+    },
+    async (a: any) => {
+      const x = await playlistState(pid(a)),
+        groups = semanticDuplicateGroups(x.tracks, a),
+        remove = new Set(groups.flatMap((g) => g.removable.map((t) => t.uri))),
+        after = x.tracks.filter((t) => !remove.has(t.uri)),
+        plan = operationPlan(pid(a), 'semantic_deduplicate', x.tracks, after, [], {
+          groups: groups.length,
+        });
+      return a.dry_run
+        ? text({ ...plan, duplicate_groups: groups })
+        : text({
+            ...(await executePlan(pid(a), 'semantic_deduplicate', x, after, plan)),
+            duplicate_groups: groups,
+          });
+    },
+  );
+  const layout = async (
+    name: string,
+    a: any,
+    strategy: (tracks: NormalizedPlaylistTrack[]) => NormalizedPlaylistTrack[],
+  ) => {
+    const x = await playlistState(pid(a)),
+      after = strategy(x.tracks),
+      plan = operationPlan(pid(a), name, x.tracks, after, [], {
+        beforeViolations: violations(x.tracks, a.min_artist_gap ?? 1, a.min_album_gap ?? 0),
+        afterViolations: violations(after, a.min_artist_gap ?? 1, a.min_album_gap ?? 0),
+      });
+    return a.dry_run ? planOutput(plan) : text(await executePlan(pid(a), name, x, after, plan));
+  };
+  s.registerTool(
+    'smart_shuffle_playlist',
+    {
+      title: 'Smart shuffle playlist',
+      description: 'Deterministic seeded spacing layout; dry_run defaults true.',
+      inputSchema: {
+        ...mutationSchema,
+        min_artist_gap: z.number().int().min(0).max(100).default(1),
+        min_album_gap: z.number().int().min(0).max(100).optional(),
+        seed: z.number().int().optional(),
+        preserve_first_n: z.number().int().min(0).max(100).default(0),
+        preserve_last_n: z.number().int().min(0).max(100).default(0),
+      },
+    },
+    async (a: any) => layout('smart_shuffle', a, (t) => seededShuffle(t, a)),
+  );
+  s.registerTool(
+    'balance_artists',
+    {
+      title: 'Balance artists',
+      description: 'Reorder without removing tracks; dry_run defaults true.',
+      inputSchema: {
+        ...mutationSchema,
+        min_artist_gap: z.number().int().min(0).max(100).default(1),
+        strategy: z.enum(['even', 'preserve_rough_order']).default('even'),
+      },
+    },
+    async (a: any) =>
+      layout('balance_artists', a, (t) =>
+        seededShuffle(t, { minArtistGap: a.min_artist_gap, seed: 1 }),
+      ),
+  );
+  s.registerTool(
+    'restore_playlist_snapshot',
+    {
+      title: 'Restore playlist snapshot',
+      description:
+        'Restore exact ordered content from a durable snapshot; creates a PRE-RESTORE safety snapshot.',
+      inputSchema: { snapshot_id: id, dry_run: z.boolean().default(false) },
+    },
+    async (a: any) => {
+      const snap = loadSnapshot(a.snapshot_id),
+        x = await playlistState(snap.playlistId),
+        after = snap.uris.map(
+          (uri, position) =>
+            ({ uri, position, originalIndex: position, id: uri.split(':').pop() }) as any,
+        ),
+        plan = operationPlan(snap.playlistId, 'restore_snapshot', x.tracks, after);
+      return a.dry_run
+        ? planOutput(plan)
+        : text(await executePlan(snap.playlistId, 'restore_snapshot', x, after, plan));
+    },
+  );
+  s.registerTool(
+    'undo_last_playlist_change',
+    {
+      title: 'Undo last playlist change',
+      description:
+        'Restore the latest completed JamRelay-managed reversible operation only; dry_run defaults true.',
+      inputSchema: { ...mutationSchema },
+    },
+    async (a: any) => {
+      const op = latestOperation(pid(a));
+      if (!op)
+        throw Object.assign(new Error('No reversible JamRelay playlist operation exists.'), {
+          code: 'no_reversible_operation',
+        });
+      return text(
+        await (async () => {
+          const snap = loadSnapshot(op.before_snapshot_id),
+            x = await playlistState(pid(a)),
+            after = snap.uris.map(
+              (uri, position) =>
+                ({ uri, position, originalIndex: position, id: uri.split(':').pop() }) as any,
+            ),
+            plan = operationPlan(pid(a), 'undo', x.tracks, after);
+          return a.dry_run ? plan : executePlan(pid(a), 'undo', x, after, plan);
+        })(),
+      );
+    },
+  );
+  s.registerTool(
+    'playlist_diff',
+    {
+      title: 'Playlist diff',
+      description: 'Read-only linear diff between a playlist and a durable snapshot.',
+      inputSchema: { playlist_id: id, snapshot_id: id },
+    },
+    async (a: any) => {
+      const snap = loadSnapshot(a.snapshot_id),
+        x = await playlistState(pid(a)),
+        before = snap.uris,
+        after = x.tracks.map((t) => t.uri!),
+        beforeSet = new Set(before),
+        afterSet = new Set(after);
+      return text({
+        before_count: before.length,
+        after_count: after.length,
+        added_tracks: after.filter((u) => !beforeSet.has(u)),
+        removed_tracks: before.filter((u) => !afterSet.has(u)),
+        moved_tracks: after
+          .map((uri, position) => ({ uri, from: before.indexOf(uri), to: position }))
+          .filter((m) => m.from >= 0 && m.from !== m.to),
+        unchanged_count: after.filter((u) => beforeSet.has(u)).length,
+        summary: 'URI-based diff; duplicate occurrences are preserved by position.',
+      });
+    },
+  );
+  s.registerTool(
+    'dry_run_playlist_operation',
+    {
+      title: 'Dry run playlist operation',
+      description:
+        'Read-only planner for supported smart playlist operations; performs zero Spotify writes.',
+      inputSchema: {
+        playlist_id: id,
+        operation: z.enum([
+          'semantic_deduplicate',
+          'smart_shuffle',
+          'balance_artists',
+          'limit_artist_share',
+          'smart_insert',
+          'optimize',
+        ]),
+        max_artist_share: z.number().min(0).max(1).optional(),
+        min_artist_gap: z.number().int().min(0).max(100).default(1),
+        min_album_gap: z.number().int().min(0).max(100).optional(),
+        seed: z.number().int().optional(),
+      },
+    },
+    async (a: any) => {
+      const x = await playlistState(pid(a));
+      let after = x.tracks;
+      if (a.operation === 'semantic_deduplicate') {
+        const rm = new Set(
+          semanticDuplicateGroups(after).flatMap((g) => g.removable.map((t) => t.uri)),
+        );
+        after = after.filter((t) => !rm.has(t.uri));
+      } else if (
+        a.operation === 'smart_shuffle' ||
+        a.operation === 'balance_artists' ||
+        a.operation === 'optimize'
+      )
+        after = seededShuffle(after, {
+          seed: a.seed,
+          minArtistGap: a.min_artist_gap,
+          minAlbumGap: a.min_album_gap,
+        });
+      return planOutput(operationPlan(pid(a), a.operation, x.tracks, after));
+    },
+  );
+  s.registerTool(
+    'verify_playlist_integrity',
+    {
+      title: 'Verify playlist integrity',
+      description:
+        'Read-only verification of playlist readability, count, content and optional snapshot state.',
+      inputSchema: {
+        playlist_id: id,
+        expected_snapshot_id: id.optional(),
+        operation_plan_id: id.optional(),
+      },
+    },
+    async (a: any) => {
+      const x = await playlistState(pid(a)),
+        checks: any[] = [
+          { name: 'readable', ok: true },
+          {
+            name: 'track_count',
+            ok: x.tracks.length === x.raw.length,
+            actual: x.tracks.length,
+            raw: x.raw.length,
+          },
+        ];
+      if (a.expected_snapshot_id) {
+        const s = loadSnapshot(a.expected_snapshot_id);
+        checks.push({
+          name: 'ordered_content',
+          ok: fingerprint(s.uris) === fingerprint(x.tracks.map((t) => t.uri!)),
+        });
+      }
+      return text({
+        ok: checks.every((c) => c.ok),
+        checks,
+        warnings: x.unavailable ? [`${x.unavailable} unavailable items`] : [],
+        mismatches: checks.filter((c) => !c.ok),
+      });
+    },
+  );
+  s.registerTool(
+    'limit_artist_share',
+    {
+      title: 'Limit artist share',
+      description: 'Plan or execute deterministic artist-share removals; dry_run defaults true.',
+      inputSchema: {
+        ...mutationSchema,
+        max_share: z.number().min(0).max(1).optional(),
+        max_tracks_per_artist: z.number().int().min(1).max(10000).optional(),
+        selection_strategy: z
+          .enum(['keep_earliest', 'spread_across_playlist', 'prefer_unique_albums'])
+          .default('keep_earliest'),
+      },
+    },
+    async (a: any) => {
+      if (a.max_share == null && a.max_tracks_per_artist == null)
+        throw new Error('At least one artist limit is required.');
+      const x = await playlistState(pid(a)),
+        counts = new Map<string, number>(),
+        remove = new Set<string>();
+      x.tracks.forEach((t) =>
+        counts.set(t.normalizedArtist, (counts.get(t.normalizedArtist) ?? 0) + 1),
+      );
+      const cap = (artist: string) =>
+        Math.min(
+          a.max_tracks_per_artist ?? Infinity,
+          a.max_share == null ? Infinity : Math.floor(x.tracks.length * a.max_share),
+        );
+      counts.forEach((n, artist) => {
+        let keep = cap(artist);
+        for (const t of x.tracks)
+          if (t.normalizedArtist === artist && keep-- <= 0 && t.uri) remove.add(t.uri);
+      });
+      const after = x.tracks.filter((t) => !t.uri || !remove.has(t.uri)),
+        plan = operationPlan(pid(a), 'limit_artist_share', x.tracks, after);
+      return a.dry_run
+        ? planOutput(plan)
+        : text(await executePlan(pid(a), 'limit_artist_share', x, after, plan));
+    },
+  );
+  s.registerTool(
+    'smart_insert_tracks',
+    {
+      title: 'Smart insert tracks',
+      description: 'Insert tracks at deterministic distributed positions; dry_run defaults true.',
+      inputSchema: {
+        ...mutationSchema,
+        track_ids: z.array(id).min(1).max(10000),
+        min_artist_gap: z.number().int().min(0).max(100).default(1),
+        min_album_gap: z.number().int().min(0).max(100).optional(),
+        seed: z.number().int().optional(),
+      },
+    },
+    async (a: any) => {
+      const x = await playlistState(pid(a)),
+        incoming = a.track_ids.map(
+          (v: string, i: number) =>
+            ({
+              uri: tid(v).uri,
+              id: tid(v).id,
+              position: x.tracks.length + i,
+              originalIndex: x.tracks.length + i,
+            }) as any,
+        );
+      const after = [...x.tracks];
+      incoming.forEach((t: any, i: number) =>
+        after.splice(
+          Math.min(after.length, Math.floor(((i + 1) * after.length) / (incoming.length + 1))),
+          0,
+          t,
+        ),
+      );
+      const plan = operationPlan(pid(a), 'smart_insert', x.tracks, after, [], {
+        inserted: incoming.length,
+      });
+      return a.dry_run
+        ? planOutput(plan)
+        : text(await executePlan(pid(a), 'smart_insert', x, after, plan));
+    },
+  );
+  s.registerTool(
+    'optimize_playlist',
+    {
+      title: 'Optimize playlist',
+      description:
+        'Meta-tool composing deterministic playlist primitives; dry_run defaults true and does not snapshot.',
+      inputSchema: {
+        ...mutationSchema,
+        semantic_deduplicate: z.boolean().default(true),
+        smart_shuffle: z.boolean().default(true),
+        balance_artists: z.boolean().default(false),
+        max_artist_share: z.number().min(0).max(1).optional(),
+        min_artist_gap: z.number().int().min(0).max(100).default(1),
+        min_album_gap: z.number().int().min(0).max(100).optional(),
+        seed: z.number().int().optional(),
+      },
+    },
+    async (a: any) => {
+      const x = await playlistState(pid(a));
+      let after = x.tracks;
+      if (a.semantic_deduplicate) {
+        const rm = new Set(
+          semanticDuplicateGroups(after).flatMap((g) => g.removable.map((t) => t.uri)),
+        );
+        after = after.filter((t) => !rm.has(t.uri));
+      }
+      if (a.smart_shuffle || a.balance_artists)
+        after = seededShuffle(after, {
+          seed: a.seed,
+          minArtistGap: a.min_artist_gap,
+          minAlbumGap: a.min_album_gap,
+        });
+      const plan = operationPlan(pid(a), 'optimize', x.tracks, after);
+      return a.dry_run
+        ? planOutput(plan)
+        : text(await executePlan(pid(a), 'optimize', x, after, plan));
+    },
+  );
   for (const n of ['save_tracks', 'remove_saved_tracks'] as const)
     s.registerTool(
       n,
@@ -735,4 +1233,6 @@ export function registerAdvanced(
       async (a: any) =>
         text(getRecentApiErrors(a.limit, a.provider, a.status_code, a.unresolved_only)),
     );
+  registerPlaylistAutomationTools(s, c);
+  registerPlaylistPersonalizationTools(s, c);
 }

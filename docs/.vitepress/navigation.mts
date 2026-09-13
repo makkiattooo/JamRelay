@@ -1,19 +1,9 @@
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 export type DocsLocale = 'en' | 'pl' | 'de' | 'fr' | 'es';
-
-type Page = {
-  path: string;
-  label: string;
-  labels?: Partial<Record<DocsLocale, string>>;
-};
-
-type Section = {
-  label: string;
-  labels?: Partial<Record<DocsLocale, string>>;
-  pages: Page[];
-};
-
+type Page = { path: string; label: string; labels?: Partial<Record<DocsLocale, string>> };
+type Section = { label: string; labels?: Partial<Record<DocsLocale, string>>; pages: Page[] };
 export const docsLocales: DocsLocale[] = ['en', 'pl', 'de', 'fr', 'es'];
-
 export const localeMeta: Record<
   DocsLocale,
   { label: string; lang: string; prefix: string; canonical: boolean }
@@ -24,132 +14,37 @@ export const localeMeta: Record<
   fr: { label: 'Français', lang: 'fr', prefix: '/fr', canonical: false },
   es: { label: 'Español', lang: 'es', prefix: '/es', canonical: false },
 };
-
-// One navigation manifest for every locale. Add a page here once.
-// Localized labels are optional; English is the fallback.
 export const sections: Section[] = [
   {
-    label: 'Getting started',
-    labels: { pl: 'Start', de: 'Einstieg', fr: 'Démarrage', es: 'Primeros pasos' },
+    label: 'Get started',
     pages: [
-      {
-        path: '',
-        label: 'Overview',
-        labels: {
-          pl: 'Przegląd',
-          de: 'Übersicht',
-          fr: 'Vue d’ensemble',
-          es: 'Descripción general',
-        },
-      },
-      {
-        path: 'getting-started',
-        label: 'Quick start',
-        labels: {
-          pl: 'Szybki start',
-          de: 'Schnellstart',
-          fr: 'Démarrage rapide',
-          es: 'Inicio rápido',
-        },
-      },
+      { path: '', label: 'Overview' },
+      { path: 'getting-started', label: 'Quick start' },
+      { path: 'installation', label: 'Requirements and installation' },
     ],
   },
   {
-    label: 'Operate',
-    labels: { pl: 'Obsługa', de: 'Betrieb', fr: 'Exploitation', es: 'Operación' },
+    label: 'Core concepts',
     pages: [
-      {
-        path: 'installation',
-        label: 'Installation and deployment',
-        labels: {
-          pl: 'Instalacja i wdrożenie',
-          de: 'Installation und Deployment',
-          fr: 'Installation et déploiement',
-          es: 'Instalación y despliegue',
-        },
-      },
-      {
-        path: 'configuration',
-        label: 'Configuration',
-        labels: {
-          pl: 'Konfiguracja',
-          de: 'Konfiguration',
-          fr: 'Configuration',
-          es: 'Configuración',
-        },
-      },
-      {
-        path: 'oauth',
-        label: 'OAuth',
-        labels: { pl: 'OAuth', de: 'OAuth', fr: 'OAuth', es: 'OAuth' },
-      },
-      {
-        path: 'operations',
-        label: 'Operations runbook',
-        labels: { pl: 'Operacje', de: 'Betriebsleitfaden', fr: 'Runbook', es: 'Runbook operativo' },
-      },
-      {
-        path: 'security',
-        label: 'Security',
-        labels: { pl: 'Bezpieczeństwo', de: 'Sicherheit', fr: 'Sécurité', es: 'Seguridad' },
-      },
-      {
-        path: 'troubleshooting',
-        label: 'Troubleshooting',
-        labels: {
-          pl: 'Rozwiązywanie problemów',
-          de: 'Fehlerbehebung',
-          fr: 'Dépannage',
-          es: 'Solución de problemas',
-        },
-      },
+      { path: 'architecture', label: 'How JamRelay works' },
+      { path: 'database-first-resolution', label: 'Database-first track resolution' },
+      { path: 'playlist-safety', label: 'Playlist safety, snapshots and undo' },
+      { path: 'state-database', label: 'State and persistence' },
+      { path: 'operations', label: 'Jobs and rate limits' },
     ],
   },
   {
-    label: 'Deployment options',
-    labels: {
-      pl: 'Opcje wdrożenia',
-      de: 'Deployment-Optionen',
-      fr: 'Options de déploiement',
-      es: 'Opciones de despliegue',
-    },
+    label: 'Playlist automation',
     pages: [
-      {
-        path: 'deployment/free-hosting',
-        label: 'Free hosting',
-        labels: {
-          pl: 'Darmowy hosting',
-          de: 'Kostenloses Hosting',
-          fr: 'Hébergement gratuit',
-          es: 'Hosting gratuito',
-        },
-      },
-      {
-        path: 'deployment/budget-hosting',
-        label: 'Free and low-cost setup',
-        labels: {
-          pl: 'Darmowe i tanie wdrożenie',
-          de: 'Kostenlos und günstig',
-          fr: 'Gratuit et économique',
-          es: 'Gratis y económico',
-        },
-      },
+      { path: 'playlist-automation', label: 'Automation overview' },
+      { path: 'playlist-rules', label: 'Rules and recipes' },
+      { path: 'playlist-personalization', label: 'Personalization and local history' },
     ],
   },
   {
     label: 'Connect clients',
-    labels: { pl: 'Klienci AI', de: 'AI-Clients', fr: 'Clients IA', es: 'Clientes de IA' },
     pages: [
-      {
-        path: 'clients/',
-        label: 'Overview',
-        labels: {
-          pl: 'Przegląd',
-          de: 'Übersicht',
-          fr: 'Vue d’ensemble',
-          es: 'Descripción general',
-        },
-      },
+      { path: 'clients/', label: 'Client overview' },
       { path: 'clients/chatgpt', label: 'ChatGPT' },
       { path: 'clients/claude', label: 'Claude' },
       { path: 'clients/gemini', label: 'Gemini CLI' },
@@ -157,136 +52,49 @@ export const sections: Section[] = [
       { path: 'clients/vscode-copilot', label: 'VS Code / Copilot' },
       { path: 'clients/windsurf', label: 'Windsurf' },
       { path: 'clients/mcp-inspector', label: 'MCP Inspector' },
-      {
-        path: 'clients/oauth-compatibility',
-        label: 'OAuth and multi-client',
-        labels: {
-          pl: 'OAuth i multi-client',
-          de: 'OAuth und Multi-Client',
-          fr: 'OAuth et multi-client',
-          es: 'OAuth y multi-cliente',
-        },
-      },
-      {
-        path: 'clients/compatibility',
-        label: 'Compatibility matrix',
-        labels: {
-          pl: 'Kompatybilność',
-          de: 'Kompatibilität',
-          fr: 'Compatibilité',
-          es: 'Compatibilidad',
-        },
-      },
-      {
-        path: 'mcp-client',
-        label: 'Generic MCP client',
-        labels: {
-          pl: 'Generic MCP client',
-          de: 'Generischer MCP-Client',
-          fr: 'Client MCP générique',
-          es: 'Cliente MCP genérico',
-        },
-      },
+      { path: 'clients/oauth-compatibility', label: 'OAuth compatibility' },
+      { path: 'clients/compatibility', label: 'Compatibility matrix' },
+      { path: 'mcp-client', label: 'Generic MCP client' },
     ],
   },
   {
-    label: 'Reference',
-    labels: { pl: 'Referencja', de: 'Referenz', fr: 'Référence', es: 'Referencia' },
+    label: 'Operate and deploy',
     pages: [
-      {
-        path: 'architecture',
-        label: 'Architecture',
-        labels: { pl: 'Architektura', de: 'Architektur', fr: 'Architecture', es: 'Arquitectura' },
-      },
-      {
-        path: 'state-database',
-        label: 'State Database',
-        labels: {
-          pl: 'Baza stanu',
-          de: 'Zustandsdatenbank',
-          fr: 'Base d’état',
-          es: 'Base de estado',
-        },
-      },
-      {
-        path: 'endpoints',
-        label: 'HTTP endpoints',
-        labels: {
-          pl: 'Endpointy HTTP',
-          de: 'HTTP-Endpunkte',
-          fr: 'Endpoints HTTP',
-          es: 'Endpoints HTTP',
-        },
-      },
-      {
-        path: 'tools',
-        label: 'MCP tools',
-        labels: { pl: 'Narzędzia MCP', de: 'MCP-Tools', fr: 'Outils MCP', es: 'Herramientas MCP' },
-      },
-      {
-        path: 'tools-reference',
-        label: 'Generated tool reference',
-        labels: {
-          pl: 'Generowana referencja narzędzi',
-          de: 'Generierte Tool-Referenz',
-          fr: 'Référence générée des outils',
-          es: 'Referencia generada de herramientas',
-        },
-      },
-      {
-        path: 'environment-reference',
-        label: 'Generated environment reference',
-        labels: {
-          pl: 'Generowana referencja zmiennych',
-          de: 'Generierte Umgebungsreferenz',
-          fr: 'Référence générée des variables',
-          es: 'Referencia generada de variables',
-        },
-      },
-      {
-        path: 'errors',
-        label: 'Errors and status codes',
-        labels: { pl: 'Błędy', de: 'Fehler', fr: 'Erreurs', es: 'Errores' },
-      },
-      {
-        path: 'development',
-        label: 'Development',
-        labels: { pl: 'Development', de: 'Entwicklung', fr: 'Développement', es: 'Desarrollo' },
-      },
-      {
-        path: 'translation-policy',
-        label: 'Translation policy',
-        labels: {
-          pl: 'Polityka tłumaczeń',
-          de: 'Übersetzungsrichtlinie',
-          fr: 'Politique de traduction',
-          es: 'Política de traducción',
-        },
-      },
+      { path: 'configuration', label: 'Configuration' },
+      { path: 'oauth', label: 'Authentication and OAuth' },
+      { path: 'deployment/free-hosting', label: 'Deployment options' },
+      { path: 'security', label: 'Security' },
+      { path: 'troubleshooting', label: 'Troubleshooting' },
+    ],
+  },
+  {
+    label: 'Reference and development',
+    pages: [
+      { path: 'tools', label: 'Using JamRelay tools' },
+      { path: 'tools-reference', label: 'Generated tool reference' },
+      { path: 'environment-reference', label: 'Generated environment reference' },
+      { path: 'endpoints', label: 'HTTP endpoints' },
+      { path: 'errors', label: 'Errors and status codes' },
+      { path: 'development', label: 'Development' },
+      { path: 'translation-policy', label: 'Translation policy' },
     ],
   },
 ];
-
-const text = (
-  locale: DocsLocale,
-  value: { label: string; labels?: Partial<Record<DocsLocale, string>> },
-) => value.labels?.[locale] ?? value.label;
-
-export const docsLink = (locale: DocsLocale, path: string) => {
-  const prefix = localeMeta[locale].prefix;
-  if (!path) return prefix ? `${prefix}/` : '/';
-  return `${prefix}/${path}`.replace(/\/+/g, '/');
-};
-
+const text = (locale: DocsLocale, page: Page | Section) => page.labels?.[locale] ?? page.label;
+export const docsLink = (locale: DocsLocale, path: string) =>
+  `${localeMeta[locale].prefix}/${path}`.replace(/\/+/g, '/').replace(/\/$/, path ? '' : '/');
+const pageExists = (locale: DocsLocale, path: string) =>
+  existsSync(
+    resolve(process.cwd(), 'docs', locale === 'en' ? '' : locale, `${path || 'index'}.md`),
+  );
 export const buildSidebar = (locale: DocsLocale) =>
   sections.map((section) => ({
     text: text(locale, section),
     items: section.pages.map((page) => ({
       text: text(locale, page),
-      link: docsLink(locale, page.path),
+      link: pageExists(locale, page.path) ? docsLink(locale, page.path) : docsLink('en', page.path),
     })),
   }));
-
 export const buildSidebars = () =>
   Object.fromEntries(
     docsLocales.map((locale) => [

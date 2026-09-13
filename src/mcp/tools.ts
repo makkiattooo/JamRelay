@@ -13,6 +13,8 @@ import { toolContext } from './context.js';
 import type { Logger } from 'pino';
 import { indexCanonicalTrack } from '../db/state.js';
 import { isDatabaseInitialized } from '../db/database.js';
+import { PLAYLIST_AUTOMATION_TOOL_NAMES } from '../playlists/automation.js';
+import { PLAYLIST_PERSONALIZATION_TOOL_NAMES } from '../playlists/personalization.js';
 const id = z.string().min(1),
   limit = z.number().int().min(1).max(50).default(20);
 const track = (x: any) =>
@@ -147,6 +149,23 @@ export const REQUIRED_TOOL_NAMES: readonly string[] = new Proxy(
     },
   },
 );
+/** Smart Playlist Engine tools are additive; REQUIRED_TOOL_NAMES remains the legacy compatibility registry. */
+export const SMART_PLAYLIST_TOOL_NAMES = [
+  'playlist_health_report',
+  'snapshot_playlist',
+  'restore_playlist_snapshot',
+  'undo_last_playlist_change',
+  'playlist_diff',
+  'dry_run_playlist_operation',
+  'verify_playlist_integrity',
+  'semantic_deduplicate_playlist',
+  'smart_shuffle_playlist',
+  'balance_artists',
+  'limit_artist_share',
+  'smart_insert_tracks',
+  'optimize_playlist',
+] as const;
+export { PLAYLIST_AUTOMATION_TOOL_NAMES, PLAYLIST_PERSONALIZATION_TOOL_NAMES };
 export function registerTools(
   s: McpServer,
   c: SpotifyClient,
@@ -178,6 +197,33 @@ export function registerTools(
     'resume_job',
     'commit_job',
     'cancel_job',
+    'snapshot_playlist',
+    'restore_playlist_snapshot',
+    'undo_last_playlist_change',
+    'semantic_deduplicate_playlist',
+    'smart_shuffle_playlist',
+    'balance_artists',
+    'limit_artist_share',
+    'smart_insert_tracks',
+    'optimize_playlist',
+    ...PLAYLIST_AUTOMATION_TOOL_NAMES.filter(
+      (name) => !['playlist_rules_engine', 'estimate_operation_cost'].includes(name),
+    ),
+    ...PLAYLIST_PERSONALIZATION_TOOL_NAMES.filter(
+      (name) =>
+        ![
+          'session_history',
+          'rank_playlist_tracks',
+          'compare_playlists',
+          'build_session_queue',
+          'smart_next',
+          'skip_pattern_report',
+          'rediscover_old_tracks',
+          'deep_cuts_mode',
+          'find_missing_favorites',
+          'complete_artist_collection',
+        ].includes(name),
+    ),
   ]);
   s = {
     registerTool: (name: any, config: any, callback: any) => {
@@ -279,6 +325,20 @@ export function registerTools(
               'replace_playlist_tracks',
               'deduplicate_playlist',
               'remove_saved_tracks',
+              'restore_playlist_snapshot',
+              'undo_last_playlist_change',
+              'semantic_deduplicate_playlist',
+              'smart_shuffle_playlist',
+              'balance_artists',
+              'limit_artist_share',
+              'smart_insert_tracks',
+              'optimize_playlist',
+              ...PLAYLIST_AUTOMATION_TOOL_NAMES.filter(
+                (name) =>
+                  !['playlist_rules_engine', 'estimate_operation_cost', 'playlist_recipe'].includes(
+                    name,
+                  ),
+              ),
             ].includes(name),
             idempotentHint: [
               'get_track',

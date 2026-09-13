@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { McpServer, createMcpHandler } from '@modelcontextprotocol/server';
-import { registerTools, REQUIRED_TOOL_NAMES } from '../src/mcp/tools.js';
+import {
+  registerTools,
+  REQUIRED_TOOL_NAMES,
+  SMART_PLAYLIST_TOOL_NAMES,
+  PLAYLIST_AUTOMATION_TOOL_NAMES,
+  PLAYLIST_PERSONALIZATION_TOOL_NAMES,
+} from '../src/mcp/tools.js';
 import { createApp } from '../src/index.js';
 function wire(raw: string) {
   if (raw.trimStart().startsWith('event:')) {
@@ -69,9 +75,16 @@ it('exposes exactly the required tools through tools/list', async () => {
   );
   const listed = await rpc(handler, { jsonrpc: '2.0', id: 10, method: 'tools/list', params: {} });
   const names = listed.result.tools.map((x: any) => x.name);
-  expect(names).toHaveLength(40);
-  expect(new Set(names).size).toBe(40);
-  expect(names.sort()).toEqual([...REQUIRED_TOOL_NAMES].sort());
+  expect(names).toHaveLength(94);
+  expect(new Set(names).size).toBe(94);
+  expect(names.sort()).toEqual(
+    [
+      ...REQUIRED_TOOL_NAMES,
+      ...SMART_PLAYLIST_TOOL_NAMES,
+      ...PLAYLIST_AUTOMATION_TOOL_NAMES,
+      ...PLAYLIST_PERSONALIZATION_TOOL_NAMES,
+    ].sort(),
+  );
   const add = listed.result.tools.find((x: any) => x.name === 'add_tracks_to_playlist');
   const search = listed.result.tools.find((x: any) => x.name === 'search_tracks');
   expect(add.annotations.readOnlyHint).toBe(false);
@@ -151,7 +164,7 @@ it('serves the real Express app with bearer auth and MCP v2 discovery/calls', as
     });
     expect(response.status).toBe(200);
     const listed: any = wire(await response.text());
-    expect(listed.result.tools).toHaveLength(40);
+    expect(listed.result.tools).toHaveLength(94);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
