@@ -2,6 +2,7 @@ import { SpotifyAuth } from './auth.js';
 import { SpotifyApiError, normalizeSpotifyError } from './errors.js';
 import type { Logger } from 'pino';
 import { toolContext } from '../mcp/context.js';
+import { clearRateLimit, getRateLimit, recordApiError, recordRateLimit } from '../db/state.js';
 const knownNoContentMutations = new Set([
   'PUT /me/player/play',
   'PUT /me/player/pause',
@@ -25,6 +26,20 @@ export class SpotifyClient {
     let forcedRefreshPerformed = false;
     let forceRefresh = false;
     const method = (init.method ?? 'GET').toUpperCase();
+    const endpoint = path.split('?')[0] || '/';
+    const scope = endpoint === '/search' ? 'search' : endpoint;
+    const blocked = getRateLimit('spotify', scope);
+    if (blocked && blocked.blockedUntil !== null) {
+      const remaining = Math.max(1, Math.ceil((blocked.blockedUntil - Date.now()) / 1000));
+      throw new SpotifyApiError(
+        429,
+        'RATE_LIMIT_EXCEEDED',
+        `Spotify ${scope} is rate limited until ${new Date(blocked.blockedUntil).toISOString()}.`,
+        remaining,
+        false,
+        scope,
+      );
+    }
     for (;;) {
       const token = await this.auth.accessToken(forceRefresh);
       forceRefresh = false;
@@ -61,7 +76,7 @@ export class SpotifyClient {
           {
             event: 'spotify_request',
             request_id: toolContext.get()?.requestId,
-            path: requestPath,
+            path: requestPath.split('?')[0],
             status: response.status,
             latency_ms: Date.now() - started,
             retry: retryCount,
@@ -91,6 +106,7 @@ export class SpotifyClient {
         }
       }
       if (response.ok) {
+        clearRateLimit('spotify', scope);
         if (response.status === 204 || !trimmed) return null;
         if (invalidJson) {
           this.logger?.warn(
@@ -101,7 +117,6 @@ export class SpotifyClient {
               status: response.status,
               content_type: response.headers.get('content-type'),
               content_length: response.headers.get('content-length'),
-              response_body: trimmed.slice(0, 500),
             },
             'Spotify returned non-JSON success response',
           );
@@ -119,15 +134,31 @@ export class SpotifyClient {
           event: 'spotify_error_response',
           request_id: toolContext.get()?.requestId,
           method: init.method ?? 'GET',
-          path,
+          path: endpoint,
           status: response.status,
-          error_body: trimmed.slice(0, 500),
+          reason: String(response.status),
         },
         'Spotify returned an error response',
       );
       const error = normalizeSpotifyError(response.status, body, retryAfter, trimmed);
+      recordApiError({
+        provider: 'spotify',
+        endpoint,
+        method,
+        statusCode: response.status,
+        reason: error.code,
+        message: error.message,
+        retryAfterSeconds: retryAfter,
+        requestId: toolContext.get()?.requestId,
+        operation: toolContext.get()?.operation,
+      });
+      if (response.status === 429) {
+        const seconds = Math.ceil(retryAfter ?? 60);
+        recordRateLimit('spotify', scope, seconds, error.code);
+        throw new SpotifyApiError(429, 'RATE_LIMIT_EXCEEDED', error.message, seconds, false, scope);
+      }
       const safe = method === 'GET';
-      if (retry && safe && retryCount < 2 && [429, 502, 503, 504].includes(response.status)) {
+      if (retry && safe && retryCount < 2 && [502, 503, 504].includes(response.status)) {
         retryCount++;
         const delay = error.retryAfter ?? Math.pow(2, retryCount - 1);
         const remaining = toolContext.get()?.deadlineAt

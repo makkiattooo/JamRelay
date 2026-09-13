@@ -12,7 +12,13 @@ import { registerTools } from './mcp/tools.js';
 import { McpOAuthStore, registerMcpOAuthRoutes } from './mcp/oauth.js';
 import { apiErrorHandler, requestId, sendApiError, ApiError } from './http/errors.js';
 import { toolContext } from './mcp/context.js';
-import { closeDatabase, getDatabaseStatus, initializeDatabase } from './db/database.js';
+import { recoverInterruptedJobs } from './db/jobs.js';
+import {
+  closeDatabase,
+  getDatabaseStatus,
+  initializeDatabase,
+  isDatabaseInitialized,
+} from './db/database.js';
 export type AppDependencies = { auth: SpotifyAuth; client: SpotifyClient; logger: Logger };
 export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
   const logger =
@@ -100,7 +106,7 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
   const mcpHandler = createMcpHandler(
     () => {
       const server = new McpServer({ name: 'tunelink', version: '1.0.0' });
-      registerTools(server, client, logger);
+      registerTools(server, client, logger, isDatabaseInitialized());
       return server;
     },
     { legacy: 'stateless' },
@@ -153,6 +159,7 @@ export async function startServer(cfg = getConfig()) {
     dbPath: cfg.TUNELINK_DB_PATH,
     logger,
   });
+  recoverInterruptedJobs();
   const app = createApp(cfg, { logger });
   const server = app.listen(cfg.PORT, cfg.HOST, () =>
     logger.info({ event: 'startup', host: cfg.HOST, port: cfg.PORT }, 'Spotify MCP server started'),

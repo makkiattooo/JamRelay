@@ -117,7 +117,12 @@ export const REQUIRED_TOOL_NAMES = [
   'bulk_add_tracks',
   'create_playlist_from_tracks',
 ] as const;
-export function registerTools(s: McpServer, c: SpotifyClient, logger?: Logger) {
+export function registerTools(
+  s: McpServer,
+  c: SpotifyClient,
+  logger?: Logger,
+  includeStateTools = false,
+) {
   const original = s.registerTool.bind(s);
   const mutations = new Set([
     'create_playlist',
@@ -888,5 +893,5 @@ export function registerTools(s: McpServer, c: SpotifyClient, logger?: Logger) {
     async (a: any) =>
       out(await c.json('/me/player', { device_ids: [a.device_id], play: a.play }, 'PUT')),
   );
-  registerAdvanced(s, c);
+  registerAdvanced(s, c, includeStateTools);
 }

@@ -7,7 +7,7 @@ description: Generated reference for the MCP tools registered by the server.
 
 > **Generated file.** Do not edit this page by hand. Run `npm run docs:generate` after changing MCP tool registrations.
 
-Generated from the runtime tool registry. Current tool count: **39**.
+Generated from the runtime tool registry. Current tool count: **45**.
 
 ## `add_tracks_by_search`
 
@@ -54,6 +54,18 @@ Add mixed ID/URI/search track inputs in ordered chunks; supports strict, dry_run
 - `dry_run`
 - `skip_existing`
 
+## `cancel_job`
+
+**Title:** Cancel job
+
+**Type:** Read
+
+Cancel a durable job without deleting its history.
+
+**Arguments:**
+
+- `job_id`
+
 ## `check_saved_tracks`
 
 **Title:** Check saved tracks
@@ -65,6 +77,33 @@ Return an exact input-to-saved mapping using current /me/library/contains.
 **Arguments:**
 
 - `track_ids`
+
+## `commit_job`
+
+**Title:** Commit job
+
+**Type:** Read
+
+Mark a successfully prepared durable job as completed.
+
+**Arguments:**
+
+- `job_id`
+
+## `create_bulk_job`
+
+**Title:** Create bulk job
+
+**Type:** Read
+
+Persist a bulk track operation for later processing.
+
+**Arguments:**
+
+- `type`
+- `payload`
+- `items`
+- `max_attempts`
 
 ## `create_playlist`
 
@@ -185,6 +224,20 @@ List Spotify Connect devices.
 
 - None
 
+## `get_job_status`
+
+**Title:** Get job status
+
+**Type:** Read
+
+Inspect a durable bulk job with bounded item pagination.
+
+**Arguments:**
+
+- `job_id`
+- `offset`
+- `limit`
+
 ## `get_my_playlists`
 
 **Title:** Get my playlists
@@ -275,6 +328,18 @@ Read saved tracks with pagination.
 
 - `limit`
 - `offset`
+
+## `get_state_diagnostics`
+
+**Title:** Get State DB diagnostics
+
+**Type:** Read
+
+Return authenticated, bounded State DB health counters.
+
+**Arguments:**
+
+- None
 
 ## `get_top_artists`
 
@@ -410,6 +475,18 @@ Replace then append ordered chunks, max 100 per request; rolls back after later 
 
 - `playlist_id`
 - `track_ids`
+
+## `resume_job`
+
+**Title:** Resume job
+
+**Type:** Read
+
+Make a durable job eligible for processing.
+
+**Arguments:**
+
+- `job_id`
 
 ## `save_tracks`
 

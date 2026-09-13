@@ -33,7 +33,7 @@ const fakeServer = {
   },
 };
 
-registerTools(fakeServer as never, {} as never);
+registerTools(fakeServer as never, {} as never, undefined, true);
 
 const schemaKeys = (schema: unknown): string[] => {
   if (!schema || typeof schema !== 'object') return [];

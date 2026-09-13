@@ -44,7 +44,18 @@ export function toApiError(error: unknown): ApiError {
   if (error instanceof ApiError) return error;
   if (error instanceof SpotifyApiError) {
     if (error.status === 429)
-      return new ApiError(429, 'RATE_LIMIT_EXCEEDED', 'Too many requests.', null, error.retryAfter);
+      return new ApiError(
+        429,
+        'RATE_LIMIT_EXCEEDED',
+        error.message,
+        {
+          spotify_status: error.status,
+          scope: error.scope,
+          persisted: true,
+          blocked_until: error.retryAfter ? Date.now() + error.retryAfter * 1000 : undefined,
+        },
+        error.retryAfter,
+      );
     if (error.status === 401)
       return new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required.');
     if (error.status === 403) return new ApiError(403, 'ACCESS_DENIED', 'Access denied.');

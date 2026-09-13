@@ -68,7 +68,11 @@ graph TD
   rate_limit_state[rate_limit_state: provider + scope]
 ```
 
-The intended future error path is `Spotify HTTP client → normalized API error → api_errors → rate_limit_state → durable job scheduling`. The tables are prepared for this design; that middleware and worker behavior is not implemented in this foundation release.
+The runtime error path is `Spotify HTTP client → normalized API error → api_errors → rate_limit_state → resolver/job result`. Error fingerprints are SHA-256 hashes of normalized provider, method, endpoint path, status, and provider reason; volatile request IDs and retry values are excluded. Repeated errors update `last_seen_at`, `occurrences`, and the newest useful retry metadata instead of inserting duplicate rows.
+
+Spotify rate limits are persisted per provider and scope. `/search` uses scope `search`; playlist and player endpoints use their normalized endpoint scope, so a search quota block does not unnecessarily disable playlist writes. A 429 is recorded, converted to `blocked_until` using `ceil(Retry-After)`, and returned immediately. Future requests preflight this state before authentication/network I/O, including after an application restart; no request sleeps for the Spotify cooldown.
+
+Track resolution is database-first: normalized title/artist/album aliases are checked before Spotify Search. A confident search match upserts canonical track metadata and the input alias; cache hits increment `hit_count` and update `last_used_at`. Ambiguous and unmatched results never create aliases, and alias collisions fail conservatively. Bulk resolution coalesces duplicate normalized queries and creates a durable `waiting` job when a persisted rate limit prevents completion. `get_job_status`, `resume_job`, `commit_job`, `cancel_job`, and `get_state_diagnostics` are authenticated MCP tools; item inspection is paginated and bounded.
 
 ## Migration lifecycle
 

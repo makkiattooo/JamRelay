@@ -269,6 +269,10 @@ export function getDatabase(): DatabaseSync {
   return database;
 }
 
+export function isDatabaseInitialized(): boolean {
+  return database !== null;
+}
+
 export function getExpectedSchemaVersion(
   directory = migrationsDirectory ?? defaultMigrationsDir(),
 ): string {

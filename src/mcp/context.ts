@@ -1,6 +1,11 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-export type ToolContext = { requestId: string; signal: AbortSignal; deadlineAt: number };
+export type ToolContext = {
+  requestId: string;
+  signal: AbortSignal;
+  deadlineAt: number;
+  operation?: string;
+};
 const storage = new AsyncLocalStorage<ToolContext>();
 
 export const toolContext = {

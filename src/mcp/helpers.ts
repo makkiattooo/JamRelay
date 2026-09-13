@@ -4,6 +4,10 @@ import { parseSpotifyIdentifier } from '../spotify/identifiers.js';
 import { chunks } from '../utils/chunks.js';
 import { normalizeText, resolveCandidates } from '../spotify/normalize.js';
 import { writeChunks } from '../spotify/write-operation.js';
+import { TrackResolver } from '../spotify/resolver.js';
+import { cancelJob, createJob, getJob, listStateDiagnostics, setJobStatus } from '../db/jobs.js';
+import { isDatabaseInitialized } from '../db/database.js';
+import { SpotifyApiError } from '../spotify/errors.js';
 const id = z.string().min(1);
 const text = (x: unknown) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(x) }],
@@ -24,7 +28,12 @@ function compact(x: any) {
     external_url: x.external_urls?.spotify,
   };
 }
-export function registerAdvanced(s: any, c: SpotifyClient) {
+export function registerAdvanced(
+  s: any,
+  c: SpotifyClient,
+  includeStateTools = isDatabaseInitialized(),
+) {
+  const resolver = new TrackResolver(c);
   const get = (p: string) => c.request<any>(p);
   const pid = (a: any) => parseSpotifyIdentifier(a.playlist_id, 'playlist').id;
   const allPlaylistItems = async (idValue: string) => {
@@ -119,19 +128,7 @@ export function registerAdvanced(s: any, c: SpotifyClient) {
       inputSchema: input,
     },
     async (a: any) => {
-      const p: any = await get(
-        '/search?' +
-          new URLSearchParams({ q: a.title + ' ' + a.artist, type: 'track', limit: '10' }),
-      );
-      return text(
-        resolveCandidates(
-          (p?.tracks?.items ?? []).map(compact),
-          a.title,
-          a.artist,
-          a.album,
-          a.year,
-        ),
-      );
+      return text(await resolver.resolve(a));
     },
   );
   s.registerTool(
@@ -163,6 +160,7 @@ export function registerAdvanced(s: any, c: SpotifyClient) {
     });
   async function resolve(list: any[]) {
     const result: any[] = [];
+    const inFlight = new Map<string, Promise<any>>();
     for (const x of list) {
       if (x.id || x.uri) {
         try {
@@ -171,17 +169,29 @@ export function registerAdvanced(s: any, c: SpotifyClient) {
           result.push({ status: 'unmatched', source: x });
         }
       } else {
-        const p: any = await get(
-          '/search?' +
-            new URLSearchParams({ q: x.title + ' ' + x.artist, type: 'track', limit: '10' }),
-        );
-        const r = resolveCandidates(
-          (p?.tracks?.items ?? []).map(compact),
-          x.title,
-          x.artist,
-          x.album,
-        );
-        result.push({ ...r, uri: r.status === 'matched' ? r.match!.uri : undefined, source: x });
+        const key = [
+          normalizeText(x.title),
+          normalizeText(x.artist),
+          normalizeText(x.album ?? ''),
+        ].join('\u0000');
+        let pending = inFlight.get(key);
+        if (!pending) {
+          pending = resolver.resolve(x);
+          inFlight.set(key, pending);
+        }
+        let r: any;
+        try {
+          r = await pending;
+        } catch (error) {
+          if (error instanceof SpotifyApiError && error.status === 429)
+            r = { status: 'waiting', source: 'spotify_search' };
+          else throw error;
+        }
+        result.push({
+          ...r,
+          uri: r.status === 'matched' ? (r.uri ?? r.match?.uri) : undefined,
+          source: x,
+        });
       }
     }
     return result;
@@ -191,10 +201,25 @@ export function registerAdvanced(s: any, c: SpotifyClient) {
     unmatched: report.filter((x) => x.status === 'unmatched').length,
     ambiguous: report.filter((x) => x.status === 'ambiguous').length,
     skipped_existing: report.filter((x) => x.status === 'matched' && existing.has(x.uri)).length,
+    waiting: report.filter((x) => x.status === 'waiting').length,
   });
+  const waitingJob = (type: string, payload: unknown, items: unknown[]) => {
+    if (!isDatabaseInitialized()) return undefined;
+    const jobId = createJob(type, payload, items);
+    setJobStatus(jobId, 'waiting');
+    return jobId;
+  };
   async function addResolved(a: any, list: any[], dry: boolean) {
     const report = await resolve(list);
     const bad = report.filter((x) => x.status !== 'matched');
+    if (report.some((x) => x.status === 'waiting'))
+      return {
+        ...counts(report, new Set()),
+        job_id: waitingJob('add_tracks_by_search', a, list),
+        job_status: 'waiting',
+        added: 0,
+        blocked: true,
+      };
     let existing = new Set<string>();
     if (a.skip_existing)
       existing = new Set(
@@ -253,6 +278,14 @@ export function registerAdvanced(s: any, c: SpotifyClient) {
       const filtered = report.filter((x) => x.status === 'matched' && !existing.has(x.uri));
       const summary = counts(report, existing),
         blocked = a.strict && report.some((x) => x.status !== 'matched');
+      if (report.some((x) => x.status === 'waiting'))
+        return text({
+          ...summary,
+          job_id: waitingJob('bulk_add_tracks', a, a.tracks),
+          job_status: 'waiting',
+          added: 0,
+          blocked: true,
+        });
       if (blocked || a.dry_run)
         return text({ report, ...summary, added: 0, dry_run: a.dry_run, blocked });
       const result = await writeChunks(
@@ -393,6 +426,14 @@ export function registerAdvanced(s: any, c: SpotifyClient) {
     },
     async (a: any) => {
       const report = await resolve(a.tracks);
+      if (report.some((x) => x.status === 'waiting'))
+        return text({
+          created: false,
+          job_id: waitingJob('create_playlist_from_tracks', a, a.tracks),
+          job_status: 'waiting',
+          report,
+          reason: 'rate_limited',
+        });
       if (a.strict && report.some((x) => x.status !== 'matched'))
         return text({ created: false, report, reason: 'resolution_failed' });
       const us = report.filter((x) => x.status === 'matched').map((x) => x.uri);
@@ -414,4 +455,86 @@ export function registerAdvanced(s: any, c: SpotifyClient) {
       });
     },
   );
+  if (includeStateTools)
+    s.registerTool(
+      'create_bulk_job',
+      {
+        title: 'Create bulk job',
+        description: 'Persist a bulk track operation for later processing.',
+        inputSchema: {
+          type: z.string().min(1).max(100),
+          payload: z.record(z.string(), z.unknown()).default({}),
+          items: z.array(z.record(z.string(), z.unknown())).min(1).max(10000),
+          max_attempts: z.number().int().min(1).max(20).default(5),
+        },
+      },
+      async (a: any) =>
+        text({
+          job_id: createJob(a.type, a.payload, a.items, a.max_attempts),
+          job_status: 'pending',
+        }),
+    );
+  if (includeStateTools)
+    s.registerTool(
+      'get_job_status',
+      {
+        title: 'Get job status',
+        description: 'Inspect a durable bulk job with bounded item pagination.',
+        inputSchema: {
+          job_id: z.number().int().positive(),
+          offset: z.number().int().min(0).default(0),
+          limit: z.number().int().min(1).max(100).default(25),
+        },
+      },
+      async (a: any) => text(getJob(a.job_id, a.offset, a.limit) ?? { error: 'job_not_found' }),
+    );
+  if (includeStateTools)
+    s.registerTool(
+      'resume_job',
+      {
+        title: 'Resume job',
+        description: 'Make a durable job eligible for processing.',
+        inputSchema: { job_id: z.number().int().positive() },
+      },
+      async (a: any) => {
+        setJobStatus(a.job_id, 'pending', Date.now());
+        return text({ job_id: a.job_id, job_status: 'pending' });
+      },
+    );
+  if (includeStateTools)
+    s.registerTool(
+      'commit_job',
+      {
+        title: 'Commit job',
+        description: 'Mark a successfully prepared durable job as completed.',
+        inputSchema: { job_id: z.number().int().positive() },
+      },
+      async (a: any) => {
+        setJobStatus(a.job_id, 'completed');
+        return text({ job_id: a.job_id, job_status: 'completed' });
+      },
+    );
+  if (includeStateTools)
+    s.registerTool(
+      'cancel_job',
+      {
+        title: 'Cancel job',
+        description: 'Cancel a durable job without deleting its history.',
+        inputSchema: { job_id: z.number().int().positive() },
+      },
+      async (a: any) => {
+        cancelJob(a.job_id);
+        return text({ job_id: a.job_id, job_status: 'cancelled' });
+      },
+    );
+  if (includeStateTools)
+    s.registerTool(
+      'get_state_diagnostics',
+      {
+        title: 'Get State DB diagnostics',
+        description: 'Return authenticated, bounded State DB health counters.',
+        inputSchema: {},
+      },
+      async () => text(listStateDiagnostics()),
+    );
 }

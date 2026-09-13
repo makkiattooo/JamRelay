@@ -5,6 +5,7 @@ export class SpotifyApiError extends Error {
     message: string,
     public retryAfter?: number,
     public reauthorizationRequired = false,
+    public scope?: string,
   ) {
     super(message);
     this.name = 'SpotifyApiError';
