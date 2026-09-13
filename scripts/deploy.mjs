@@ -379,7 +379,7 @@ compose() {
 }
 
 
-wait_local_health() {
+wait_new_release_health() {
   attempts=0
 
   while [ "$attempts" -lt 120 ]; do
@@ -409,6 +409,44 @@ wait_local_health() {
          printf '%s' "$body" |
            grep -Fq '"schemaVersion":"'$expected_schema_version'"'; then
 
+        return 0
+      fi
+    fi
+
+    sleep 1
+  done
+
+  return 1
+}
+
+
+wait_rollback_health() {
+  attempts=0
+
+  while [ "$attempts" -lt 120 ]; do
+    attempts=$((attempts + 1))
+
+    docker_health="$(
+      sudo docker inspect \
+        -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
+        "$app_container" \
+        2>/dev/null || true
+    )"
+
+    if [ "$docker_health" = "healthy" ]; then
+      body="$(
+        curl \
+          -fsS \
+          --connect-timeout 3 \
+          --max-time 5 \
+          "$local_health_url" \
+          2>/dev/null || true
+      )"
+
+      if printf '%s' "$body" |
+           grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' &&
+         printf '%s' "$body" |
+           grep -Eq '"spotifyConnected"[[:space:]]*:[[:space:]]*true'; then
         return 0
       fi
     fi
@@ -497,7 +535,7 @@ rollback_app() {
         return 1
       }
 
-    if ! wait_local_health; then
+    if ! wait_rollback_health; then
       echo "ERROR: rolled back app did not become healthy." >&2
       sudo docker logs \\
         --tail=100 \\
@@ -850,7 +888,7 @@ compose up \\
   app
 
 
-if ! wait_local_health; then
+if ! wait_new_release_health; then
   echo "New tunelink_app failed health check." >&2
 
   sudo docker logs \\

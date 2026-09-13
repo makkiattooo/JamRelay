@@ -55,6 +55,7 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
         status: database.ready ? 'ok' : 'error',
         schemaVersion: database.currentVersion,
         expectedVersion: database.expectedVersion,
+        schemaState: database.schemaState,
       },
     });
   });

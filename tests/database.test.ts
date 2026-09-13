@@ -96,7 +96,10 @@ describe('TuneLink State DB', () => {
       await rm(first.root, { recursive: true, force: true });
     }
 
-    const second = await fixtureDirectory(['0001_marker.sql', content]);
+    const second = await fixtureDirectory(
+      ['0001_marker.sql', content],
+      ['0002_known.sql', 'CREATE TABLE known_marker (id INTEGER);\n'],
+    );
     try {
       initializeDatabase({ dataDir: second.root, migrationsDir: second.directory });
       closeDatabase();
@@ -128,6 +131,7 @@ describe('TuneLink State DB', () => {
         ready: true,
         currentVersion: '0003_third.sql',
         expectedVersion: '0003_third.sql',
+        schemaState: 'current',
       });
       expect(db.prepare('SELECT value FROM migration_order').all()).toEqual([
         { value: 2 },
@@ -136,6 +140,76 @@ describe('TuneLink State DB', () => {
     } finally {
       closeDatabase();
       await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('allows an older build to start with a verified future schema', async () => {
+    const base = await readFile(repositoryMigration, 'utf8');
+    const newer = await fixtureDirectory(
+      ['0001_state_db.sql', base],
+      ['0002_future.sql', 'CREATE TABLE future_marker (id INTEGER);\n'],
+    );
+    const older = await fixtureDirectory(['0001_state_db.sql', base]);
+    try {
+      initializeDatabase({ dataDir: newer.root, migrationsDir: newer.directory });
+      closeDatabase();
+      const db = initializeDatabase({ dataDir: newer.root, migrationsDir: older.directory });
+      expect(getDatabaseStatus()).toEqual({
+        ready: true,
+        currentVersion: '0002_future.sql',
+        expectedVersion: '0001_state_db.sql',
+        schemaState: 'ahead',
+      });
+      expect(
+        db.prepare("SELECT name FROM sqlite_master WHERE name = 'future_marker'").get(),
+      ).toEqual({ name: 'future_marker' });
+    } finally {
+      closeDatabase();
+      await rm(newer.root, { recursive: true, force: true });
+      await rm(older.root, { recursive: true, force: true });
+    }
+  });
+
+  it('still verifies known checksums when unknown future migrations exist', async () => {
+    const base = await readFile(repositoryMigration, 'utf8');
+    const newer = await fixtureDirectory(
+      ['0001_state_db.sql', base],
+      ['0002_future.sql', 'CREATE TABLE future_marker (id INTEGER);\n'],
+    );
+    const older = await fixtureDirectory(['0001_state_db.sql', base + '-- modified\n']);
+    try {
+      initializeDatabase({ dataDir: newer.root, migrationsDir: newer.directory });
+      closeDatabase();
+      expect(() =>
+        initializeDatabase({ dataDir: newer.root, migrationsDir: older.directory }),
+      ).toThrow(/has been modified/);
+    } finally {
+      closeDatabase();
+      await rm(newer.root, { recursive: true, force: true });
+      await rm(older.root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a future schema when a known migration was skipped', async () => {
+    const base = await readFile(repositoryMigration, 'utf8');
+    const newer = await fixtureDirectory(
+      ['0001_state_db.sql', base],
+      ['0003_future.sql', 'CREATE TABLE future_marker (id INTEGER);\n'],
+    );
+    const current = await fixtureDirectory(
+      ['0001_state_db.sql', base],
+      ['0002_known.sql', 'CREATE TABLE known_marker (id INTEGER);\n'],
+    );
+    try {
+      initializeDatabase({ dataDir: newer.root, migrationsDir: newer.directory });
+      closeDatabase();
+      expect(() =>
+        initializeDatabase({ dataDir: newer.root, migrationsDir: current.directory }),
+      ).toThrow(/was not applied before future schema state/);
+    } finally {
+      closeDatabase();
+      await rm(newer.root, { recursive: true, force: true });
+      await rm(current.root, { recursive: true, force: true });
     }
   });
 
@@ -192,8 +266,14 @@ describe('TuneLink State DB', () => {
     legacyDb.close();
     try {
       const db = initializeDatabase({ dataDir: fixture.root, migrationsDir: fixture.directory });
-      expect(db.prepare('SELECT version, checksum FROM schema_migrations').all()).toEqual([
-        { version: '0001_marker.sql', checksum: checksumMigration(content) },
+      expect(
+        db.prepare('SELECT version, checksum, provenance FROM schema_migrations').all(),
+      ).toEqual([
+        {
+          version: '0001_marker.sql',
+          checksum: checksumMigration(content),
+          provenance: 'legacy_backfilled',
+        },
       ]);
       expect(getDatabaseStatus().ready).toBe(true);
     } finally {

@@ -44,7 +44,7 @@ export default defineConfig({
     search: { provider: 'local' },
     footer: {
       message: 'Unofficial community project. Not affiliated with Spotify or AI platform vendors.',
-      copyright: 'MIT License',
+      copyright: 'AGPL-3.0-only',
     },
   },
 });

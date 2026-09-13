@@ -90,11 +90,22 @@ The registry has the following shape:
 schema_migrations (
   version TEXT PRIMARY KEY,
   checksum TEXT NOT NULL,
+  provenance TEXT NOT NULL,
   applied_at INTEGER NOT NULL
 )
 ```
 
-`currentVersion` is the newest applied migration and `expectedVersion` is the newest migration shipped in the current build. A healthy process reports both through `/health` and they must match. Missing migrations are applied automatically during startup, once, in order. The deploy script independently derives the expected version from the repository and compares it with the running health response; it does not read or mutate SQLite directly.
+New rows use `provenance=verified`. A checksum-less legacy registry is upgraded additively with `provenance=legacy_backfilled`; this records that the checksum was computed from the current repository file and is not historical proof of the bytes that originally ran. Unknown legacy versions fail closed.
+
+`currentVersion` is the newest applied migration and `expectedVersion` is the newest migration shipped in the current build. The database reports `schemaState` as `current`, `ahead`, or `behind`. A healthy current release is `current`; an older rollback image may safely be `ahead` when all migrations known to that image are present and verified. Missing migrations are applied automatically during startup, once, in order, only when the database is not already ahead. The deploy script independently derives the expected version from the repository and compares it with the new running health response; it does not read or mutate SQLite directly.
+
+### Rollback compatibility example
+
+Release N ships `0001`. Release N+1 ships `0001` and `0002`, and applies `0002`. If a later deployment check fails, the application image can roll back to Release N while the DB remains at `0002`. Release N is allowed to start because its known `0001` checksum still matches and `0002` has a newer numeric prefix than its highest known migration. The expand/deploy/contract policy guarantees that the old application remains compatible with the additive schema. Release N cannot cryptographically verify unknown `0002`, because that file is not in its image; it verifies every migration it does know.
+
+If the DB contains a future migration, the older build must already have every migration it knows applied; it never applies a known migration retroactively underneath the future state. A missing local migration with a prefix at or below the build's latest prefix remains fatal. Malformed applied version metadata and known checksum mismatches remain fatal.
+
+Deployment uses two health checks. A new release must report the repository's expected `schemaVersion`. Rollback health only requires the stable pre-DB baseline (`status=ok` and `spotifyConnected=true`); it does not require the previous image to expose `database` fields or to report the new release's schema version. The rollback image's own startup verification decides whether its known migrations are compatible with the forward database.
 
 ### Creating a migration
 
@@ -133,6 +144,8 @@ TuneLink detects an applied migration whose checksum changed, an applied migrati
 No automated backup command is implemented. Do not copy only `tunelink.db` while the app may be writing its WAL; use an application-aware SQLite backup procedure or stop the app before making a filesystem-level backup that includes the database and its `-wal`/`-shm` files. Recovery requires restoring matching `/data` contents and environment configuration, then starting the app.
 
 The database must not contain Spotify access or refresh tokens, the Cloudflare tunnel token, client secrets, arbitrary `.env` values, raw authorization headers, full HTTP bodies, or full analytics request history. API error records are designed for normalized diagnostics and hashes rather than secret payloads.
+
+Migration files use LF line endings through `.gitattributes` (`*.sql text eol=lf`) so Windows and Linux checkouts hash the same SQL bytes.
 
 ## Troubleshooting
 

@@ -1,7 +1,7 @@
 ---
 title: Référence des endpoints HTTP
 translationReviewed: 2026-09-12
-sourceHash: c04c036c40cf
+sourceHash: 8bb20c99fabe
 ---
 
 # Référence des endpoints HTTP

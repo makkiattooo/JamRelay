@@ -4,6 +4,7 @@
   "private": true,
   "description": "Self-hosted MCP server for connecting AI assistants with Spotify.",
   "type": "module",
+  "license": "AGPL-3.0-only",
   "engines": {
     "node": ">=22.13.0"
   },

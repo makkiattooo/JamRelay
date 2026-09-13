@@ -15,10 +15,15 @@ export type DatabaseStatus = {
   ready: boolean;
   currentVersion: string | null;
   expectedVersion: string | null;
+  schemaState: 'current' | 'ahead' | 'behind' | 'unknown';
 };
 
-type MigrationFile = { version: string; checksum: string; path: string; numericPrefix: string };
-type AppliedMigration = { version: string; checksum: string | null };
+type MigrationFile = { version: string; checksum: string; path: string; numericPrefix: number };
+type AppliedMigration = {
+  version: string;
+  checksum: string | null;
+  provenance?: string | null;
+};
 
 const migrationPattern = /^(\d{4})_([a-z0-9][a-z0-9_-]*)\.sql$/;
 const defaultDataDir = () =>
@@ -26,6 +31,12 @@ const defaultDataDir = () =>
 const defaultDbPath = (dataDir: string) =>
   process.env.TUNELINK_DB_PATH?.trim() || path.join(dataDir, 'tunelink.db');
 const defaultMigrationsDir = () => path.resolve(process.cwd(), 'db', 'migrations');
+
+function parseMigrationVersion(version: string): number {
+  const match = migrationPattern.exec(version);
+  if (!match) throw new Error(`Malformed applied migration version: ${version}`);
+  return Number(match[1]);
+}
 
 let database: DatabaseSync | null = null;
 let databasePath: string | null = null;
@@ -62,7 +73,7 @@ function readMigrationFiles(directory: string): MigrationFile[] {
       version: entry.name,
       checksum: checksumMigration(fs.readFileSync(migrationPath, 'utf8')),
       path: migrationPath,
-      numericPrefix: match[1],
+      numericPrefix: Number(match[1]),
     };
   });
   return migrations.sort((a, b) => a.version.localeCompare(b.version, 'en'));
@@ -77,6 +88,7 @@ function ensureMigrationTable(db: DatabaseSync, migrations: MigrationFile[]): vo
       CREATE TABLE schema_migrations (
         version TEXT PRIMARY KEY,
         checksum TEXT NOT NULL,
+        provenance TEXT NOT NULL DEFAULT 'verified',
         applied_at INTEGER NOT NULL
       );
     `);
@@ -89,22 +101,33 @@ function ensureMigrationTable(db: DatabaseSync, migrations: MigrationFile[]): vo
   const names = new Set(columns.map((column) => column.name));
   if (!names.has('version') || !names.has('applied_at'))
     throw new Error('schema_migrations is missing required columns');
-  if (names.has('checksum')) return;
+  if (names.has('checksum') && names.has('provenance')) return;
 
   db.exec('BEGIN IMMEDIATE');
   try {
-    db.exec('ALTER TABLE schema_migrations ADD COLUMN checksum TEXT');
-    const rows = db.prepare('SELECT version FROM schema_migrations').all() as Array<{
-      version: string;
-    }>;
-    const byVersion = new Map(
-      migrations.map((migration) => [migration.version, migration.checksum]),
-    );
-    const update = db.prepare('UPDATE schema_migrations SET checksum = ? WHERE version = ?');
-    for (const row of rows) {
-      const checksum = byVersion.get(row.version);
-      if (!checksum) throw new Error(`Applied migration file is missing: ${row.version}`);
-      update.run(checksum, row.version);
+    const checksumless = !names.has('checksum');
+    if (checksumless) db.exec('ALTER TABLE schema_migrations ADD COLUMN checksum TEXT');
+    if (!names.has('provenance')) {
+      const defaultProvenance = checksumless ? 'legacy_backfilled' : 'verified';
+      db.exec(
+        `ALTER TABLE schema_migrations ADD COLUMN provenance TEXT NOT NULL DEFAULT '${defaultProvenance}'`,
+      );
+    }
+    if (checksumless) {
+      const rows = db.prepare('SELECT version FROM schema_migrations').all() as Array<{
+        version: string;
+      }>;
+      const byVersion = new Map(
+        migrations.map((migration) => [migration.version, migration.checksum]),
+      );
+      const update = db.prepare(
+        'UPDATE schema_migrations SET checksum = ?, provenance = ? WHERE version = ?',
+      );
+      for (const row of rows) {
+        const checksum = byVersion.get(row.version);
+        if (!checksum) throw new Error(`Applied migration file is missing: ${row.version}`);
+        update.run(checksum, 'legacy_backfilled', row.version);
+      }
     }
     db.exec('COMMIT');
   } catch (error) {
@@ -119,7 +142,7 @@ function ensureMigrationTable(db: DatabaseSync, migrations: MigrationFile[]): vo
 
 function readAppliedMigrations(db: DatabaseSync): AppliedMigration[] {
   return db
-    .prepare('SELECT version, checksum FROM schema_migrations ORDER BY version')
+    .prepare('SELECT version, checksum, provenance FROM schema_migrations ORDER BY version')
     .all() as AppliedMigration[];
 }
 
@@ -129,13 +152,37 @@ function verifyAppliedMigrations(
 ): Set<string> {
   const available = new Map(migrations.map((migration) => [migration.version, migration]));
   const appliedVersions = new Set<string>();
+  const latestLocalPrefix = migrations.at(-1)?.numericPrefix ?? 0;
+  const appliedPrefixes = applied.map((row) => parseMigrationVersion(row.version));
+  const latestAppliedPrefix = Math.max(0, ...appliedPrefixes);
+  const hasFutureMigration = latestAppliedPrefix > latestLocalPrefix;
   for (const row of applied) {
     const migration = available.get(row.version);
-    if (!migration) throw new Error(`Applied migration file is missing: ${row.version}`);
-    if (!row.checksum) throw new Error(`Applied migration ${row.version} has no checksum`);
-    if (row.checksum !== migration.checksum)
-      throw new Error(`Applied migration ${row.version} has been modified`);
+    const prefix = parseMigrationVersion(row.version);
+    if (!row.checksum || !/^[a-f0-9]{64}$/.test(row.checksum))
+      throw new Error(`Applied migration ${row.version} has invalid checksum metadata`);
+    if (migration) {
+      if (row.checksum !== migration.checksum)
+        throw new Error(`Applied migration ${row.version} has been modified`);
+    } else if (prefix <= latestLocalPrefix) {
+      throw new Error(`Applied migration file is missing: ${row.version}`);
+    }
     appliedVersions.add(row.version);
+  }
+  if (hasFutureMigration) {
+    for (const migration of migrations) {
+      if (!appliedVersions.has(migration.version))
+        throw new Error(
+          `Known migration ${migration.version} was not applied before future schema state`,
+        );
+    }
+  } else if (latestAppliedPrefix > 0) {
+    for (const migration of migrations) {
+      if (migration.numericPrefix <= latestAppliedPrefix && !appliedVersions.has(migration.version))
+        throw new Error(
+          `Known migration ${migration.version} is missing before current schema state`,
+        );
+    }
   }
   return appliedVersions;
 }
@@ -148,7 +195,7 @@ function migrateDatabase(
   ensureMigrationTable(db, migrations);
   const appliedVersions = verifyAppliedMigrations(readAppliedMigrations(db), migrations);
   const insertMigration = db.prepare(
-    'INSERT INTO schema_migrations (version, checksum, applied_at) VALUES (?, ?, ?)',
+    'INSERT INTO schema_migrations (version, checksum, provenance, applied_at) VALUES (?, ?, ?, ?)',
   );
   let appliedCount = 0;
   for (const migration of migrations) {
@@ -161,7 +208,7 @@ function migrateDatabase(
     db.exec('BEGIN IMMEDIATE');
     try {
       db.exec(sql);
-      insertMigration.run(migration.version, migration.checksum, Date.now());
+      insertMigration.run(migration.version, migration.checksum, 'verified', Date.now());
       db.exec('COMMIT');
       appliedCount += 1;
       logger?.info(
@@ -222,17 +269,28 @@ export function getExpectedSchemaVersion(
 
 export function getCurrentSchemaVersion(): string | null {
   if (!database) return null;
-  const rows = readAppliedMigrations(database);
+  const rows = readAppliedMigrations(database).sort(
+    (a, b) => parseMigrationVersion(a.version) - parseMigrationVersion(b.version),
+  );
   return rows.at(-1)?.version ?? null;
 }
 
 export function getDatabaseStatus(): DatabaseStatus {
   const expectedVersion = getExpectedSchemaVersion();
   const currentVersion = getCurrentSchemaVersion();
+  const currentPrefix = currentVersion ? parseMigrationVersion(currentVersion) : 0;
+  const expectedPrefix = parseMigrationVersion(expectedVersion);
+  const schemaState =
+    currentPrefix === expectedPrefix
+      ? 'current'
+      : currentPrefix > expectedPrefix
+        ? 'ahead'
+        : 'behind';
   return {
-    ready: database !== null && currentVersion === expectedVersion,
+    ready: database !== null && schemaState !== 'behind',
     currentVersion,
     expectedVersion,
+    schemaState,
   };
 }
 

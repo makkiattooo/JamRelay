@@ -99,4 +99,6 @@ See [SECURITY.md](SECURITY.md). Keep `.env`, OAuth token stores and `/data` out 
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+TuneLink is licensed under the GNU Affero General Public License v3.0 only (`AGPL-3.0-only`).
+
+See [LICENSE](LICENSE) for the complete license text and [LICENSING.md](LICENSING.md) for licensing history and additional information.

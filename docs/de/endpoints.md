@@ -1,7 +1,7 @@
 ---
 title: HTTP-Endpunktreferenz
 translationReviewed: 2026-09-12
-sourceHash: c04c036c40cf
+sourceHash: 8bb20c99fabe
 ---
 
 # HTTP-Endpunktreferenz
