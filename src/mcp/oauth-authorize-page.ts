@@ -1,6 +1,8 @@
 type AuthorizePageData = {
   clientName: string;
   fields: Record<string, string>;
+  connections?: Array<{ id: string; provider: string; name: string }>;
+  permissions?: string[];
 };
 
 type ErrorPageData = {
@@ -64,7 +66,12 @@ const logo =
 
 const brandName = 'JamRelay Connect';
 
-export const renderAuthorizePage = ({ clientName, fields }: AuthorizePageData) => {
+export const renderAuthorizePage = ({
+  clientName,
+  fields,
+  connections = [],
+  permissions = [],
+}: AuthorizePageData) => {
   const hiddenFields = Object.entries(fields)
     .map(
       ([name, value]) =>
@@ -86,6 +93,8 @@ export const renderAuthorizePage = ({ clientName, fields }: AuthorizePageData) =
     </section>
     <form method="post" action="/oauth/authorize">
       ${hiddenFields}
+      ${connections.length ? `<section class="permissions"><p class="permissions-title">Provider connections</p><ul>${connections.map((x) => `<li><label><input type="checkbox" name="connection_ids" value="${escapeHtml(x.id)}" checked> ${escapeHtml(x.provider)} / ${escapeHtml(x.name)}</label></li>`).join('')}</ul></section>` : ''}
+      ${permissions.length ? `<section class="permissions"><p class="permissions-title">Allowed operation groups</p><ul>${permissions.map((x) => `<li><label><input type="checkbox" name="permissions" value="${escapeHtml(x)}" checked> ${escapeHtml(x)}</label></li>`).join('')}</ul></section>` : ''}
       <label for="owner-secret">Owner secret</label>
       <input id="owner-secret" name="owner_secret" type="password" required autocomplete="current-password">
       <div class="actions">

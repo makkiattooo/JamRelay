@@ -4,7 +4,7 @@ import { SpotifyClient } from '../spotify/client.js';
 import { SpotifyApiError } from '../spotify/errors.js';
 import { parseSpotifyIdentifier } from '../spotify/identifiers.js';
 import { chunks } from '../utils/chunks.js';
-import { normalizeText, resolveCandidates } from '../spotify/normalize.js';
+import { normalizeText, resolveCandidates } from '../music/normalize.js';
 import { paginate } from '../spotify/pagination.js';
 import { writeChunks } from '../spotify/write-operation.js';
 import { toApiError } from '../http/errors.js';
@@ -12,9 +12,31 @@ import { registerAdvanced } from './helpers.js';
 import { toolContext } from './context.js';
 import type { Logger } from 'pino';
 import { indexCanonicalTrack } from '../db/state.js';
+import { getRateLimit } from '../db/state.js';
 import { isDatabaseInitialized } from '../db/database.js';
 import { PLAYLIST_AUTOMATION_TOOL_NAMES } from '../playlists/automation.js';
 import { PLAYLIST_PERSONALIZATION_TOOL_NAMES } from '../playlists/personalization.js';
+import { ProviderRegistry } from '../providers/registry.js';
+import {
+  ProviderReadServices,
+  type ReadResult,
+  type ReadRoutingOptions,
+} from '../providers/read-services.js';
+import { SpotifyProviderAdapter } from '../spotify/provider-adapter.js';
+import { PlaylistGateway, type PlaylistWriteTarget } from '../providers/playlist-gateway.js';
+import {
+  exportPlaylist,
+  parsePlaylistImport,
+  type PlaylistDocument,
+  type PlaylistFormat,
+} from '../playlists/import-export.js';
+import { planPlaylistTransfer } from '../playlists/transfer-planner.js';
+import {
+  executePlaylistTransfer,
+  syncPlaylistTransfer,
+  type TransferPlan,
+  type TransferSyncPolicy,
+} from '../playlists/transfer-execution.js';
 const id = z.string().min(1),
   limit = z.number().int().min(1).max(50).default(20);
 const track = (x: any) =>
@@ -22,13 +44,13 @@ const track = (x: any) =>
     ? {
         ...(indexCanonicalTrack(x), {}),
         id: x.id,
-        uri: x.uri,
+        uri: x.uri ?? x.metadata?.providerUri,
         name: x.name,
         artists: (x.artists ?? []).map((a: any) => ({ id: a.id, name: a.name })),
         album: x.album ? { id: x.album.id, name: x.album.name } : undefined,
-        duration_ms: x.duration_ms,
-        explicit: x.explicit,
-        external_url: x.external_urls?.spotify,
+        duration_ms: x.duration_ms ?? x.metadata?.durationMs,
+        explicit: x.explicit ?? x.metadata?.explicit,
+        external_url: x.external_url ?? x.metadata?.providerUrl ?? x.external_urls?.spotify,
       }
     : null;
 const episode = (x: any) =>
@@ -46,29 +68,43 @@ const episode = (x: any) =>
       }
     : null;
 const playbackItem = (x: any) =>
-  x?.type === 'track' ? track(x) : x?.type === 'episode' ? episode(x) : null;
+  x?.type === 'track' || (x?.metadata && x.metadata.mediaType !== 'episode')
+    ? track(x)
+    : x?.type === 'episode' || x?.metadata?.mediaType === 'episode'
+      ? {
+          id: x.id,
+          uri: x.uri ?? x.metadata?.providerUri,
+          name: x.name,
+          description: x.description ?? x.metadata?.description,
+          duration_ms: x.duration_ms ?? x.metadata?.durationMs,
+          release_date: x.release_date ?? x.metadata?.releaseDate,
+          explicit: x.explicit ?? x.metadata?.explicit,
+          show: x.show ?? x.metadata?.show,
+          external_url: x.external_url ?? x.metadata?.providerUrl,
+        }
+      : null;
 const artist = (x: any) =>
   x
     ? {
         id: x.id,
-        uri: x.uri,
+        uri: x.uri ?? x.metadata?.providerUri,
         name: x.name,
-        genres: x.genres,
-        popularity: x.popularity,
-        followers: x.followers?.total,
-        external_url: x.external_urls?.spotify,
+        genres: x.genres ?? x.metadata?.genres,
+        popularity: x.popularity ?? x.metadata?.popularity,
+        followers: x.followers?.total ?? x.metadata?.followers,
+        external_url: x.external_url ?? x.metadata?.providerUrl ?? x.external_urls?.spotify,
       }
     : null;
 const album = (x: any) =>
   x
     ? {
         id: x.id,
-        uri: x.uri,
+        uri: x.uri ?? x.metadata?.providerUri,
         name: x.name,
         artists: (x.artists ?? []).map((a: any) => ({ id: a.id, name: a.name })),
-        release_date: x.release_date,
-        total_tracks: x.total_tracks,
-        external_url: x.external_urls?.spotify,
+        release_date: x.release_date ?? x.metadata?.releaseDate,
+        total_tracks: x.total_tracks ?? x.metadata?.totalTracks,
+        external_url: x.external_url ?? x.metadata?.providerUrl ?? x.external_urls?.spotify,
       }
     : null;
 const compactPage = (p: any, kind: 'track' | 'artist' | 'album') => ({
@@ -165,14 +201,286 @@ export const SMART_PLAYLIST_TOOL_NAMES = [
   'smart_insert_tracks',
   'optimize_playlist',
 ] as const;
+export const TOOLSET_PROFILES = {
+  core: [
+    ...BASE_REQUIRED_TOOL_NAMES,
+    'get_connections',
+    'get_capabilities',
+    'preview_playlist_import',
+    'import_playlist',
+    'export_playlist',
+  ],
+  playback: [
+    'get_currently_playing',
+    'get_playback_state',
+    'get_devices',
+    'play',
+    'pause',
+    'next_track',
+    'previous_track',
+    'seek',
+    'set_volume',
+  ],
+  playlists: [
+    'get_my_playlists',
+    'get_playlist',
+    'get_playlist_tracks',
+    'create_playlist',
+    'add_tracks_to_playlist',
+    'remove_tracks_from_playlist',
+    'reorder_playlist_tracks',
+    'replace_playlist_tracks',
+    'update_playlist_details',
+  ],
+  playlist_power: [
+    ...SMART_PLAYLIST_TOOL_NAMES,
+    ...PLAYLIST_AUTOMATION_TOOL_NAMES,
+    ...PLAYLIST_PERSONALIZATION_TOOL_NAMES,
+    'chapterize_playlist',
+    'get_playlist_chapters',
+    'play_playlist_chapter',
+    'resume_playlist_chapter',
+  ],
+  discovery: [
+    'search_tracks',
+    'search_artists',
+    'search_albums',
+    'get_track',
+    'get_artist',
+    'get_artist_top_tracks',
+    'get_top_tracks',
+    'get_top_artists',
+    'get_recently_played',
+    'get_saved_tracks',
+    'check_saved_tracks',
+    'find_track_exact',
+    'remember_track',
+  ],
+  personalization: [...PLAYLIST_PERSONALIZATION_TOOL_NAMES],
+  transfer: [
+    'transfer_playback',
+    'plan_playlist_transfer',
+    'execute_playlist_transfer',
+    'sync_playlist_transfer',
+  ],
+  diagnostics: [
+    'get_state_diagnostics',
+    'get_rate_limit_status',
+    'get_recent_api_errors',
+    'get_job_status',
+    'list_jobs',
+  ],
+  dangerous: [
+    'create_playlist',
+    'add_tracks_to_playlist',
+    'remove_tracks_from_playlist',
+    'reorder_playlist_tracks',
+    'replace_playlist_tracks',
+    'update_playlist_details',
+    'save_tracks',
+    'remove_saved_tracks',
+    'play',
+    'pause',
+    'next_track',
+    'previous_track',
+    'seek',
+    'set_volume',
+    'transfer_playback',
+    'execute_playlist_transfer',
+    'sync_playlist_transfer',
+    'execute_playlist_transfer',
+    'sync_playlist_transfer',
+    'add_tracks_by_search',
+    'deduplicate_playlist',
+    'bulk_add_tracks',
+    'create_playlist_from_tracks',
+    'create_bulk_job',
+    'resume_job',
+    'commit_job',
+    'cancel_job',
+    'restore_playlist_snapshot',
+    'undo_last_playlist_change',
+    ...PLAYLIST_AUTOMATION_TOOL_NAMES,
+    ...PLAYLIST_PERSONALIZATION_TOOL_NAMES,
+  ],
+  all: ['*'],
+} as const;
+export type ToolsetProfile = keyof typeof TOOLSET_PROFILES;
+export function toolsetIncludes(profile: ToolsetProfile, name: string): boolean {
+  const names = TOOLSET_PROFILES[profile] as readonly string[];
+  return names.includes('*') || names.includes(name);
+}
 export { PLAYLIST_AUTOMATION_TOOL_NAMES, PLAYLIST_PERSONALIZATION_TOOL_NAMES };
 export function registerTools(
   s: McpServer,
   c: SpotifyClient,
   logger?: Logger,
   includeStateTools = false,
+  registry?: ProviderRegistry,
+  toolset: ToolsetProfile = 'all',
 ) {
+  const readRegistry = registry ?? new ProviderRegistry();
+  if (!registry) readRegistry.register(new SpotifyProviderAdapter(undefined as any, c));
+  const reads = new ProviderReadServices(readRegistry);
+  const playlists = new PlaylistGateway(readRegistry);
+  const routing = (a: any): ReadRoutingOptions & Record<string, unknown> => ({
+    connection_id: a.connection_id,
+    provider: a.provider,
+    preferred_connection_id: a.preferred_connection_id,
+    read_fallback: a.read_fallback,
+  });
+  const readSchema = {
+    connection_id: z.string().min(1).optional(),
+    provider: z.string().min(1).optional(),
+    preferred_connection_id: z.string().min(1).optional(),
+    read_fallback: z.boolean().optional(),
+  };
+  const writeSchema = {
+    connection_id: z.string().min(1).optional(),
+    provider: z.string().min(1).optional(),
+    preferred_connection_id: z.string().min(1).optional(),
+  };
+  const writeTarget = (a: any): PlaylistWriteTarget => ({
+    connection_id: a.connection_id,
+    provider: a.provider,
+    preferred_connection_id: a.preferred_connection_id,
+  });
+  const withProvenance = (value: any, result: ReadResult<any>) => ({
+    ...value,
+    provider: result.provenance.provider,
+    connection_id: result.provenance.connection_id,
+    ...(result.provenance.fallback ? { read_fallback: true } : {}),
+  });
   const original = s.registerTool.bind(s);
+  const permissionForTool = (name: string) => {
+    if (['get_connections', 'get_capabilities'].includes(name)) return 'diagnostics.read';
+    if (
+      [
+        'search_tracks',
+        'search_artists',
+        'search_albums',
+        'get_track',
+        'get_artist',
+        'get_playlist_stats',
+      ].includes(name)
+    )
+      return 'catalog.read';
+    if (
+      [
+        'get_my_playlists',
+        'get_playlist',
+        'get_playlist_tracks',
+        'get_playlist_chapters',
+        'chapterize_playlist',
+      ].includes(name)
+    )
+      return 'playlist.read';
+    if (
+      [
+        'get_top_tracks',
+        'get_top_artists',
+        'get_recently_played',
+        'get_saved_tracks',
+        'check_saved_tracks',
+        'find_track_exact',
+        'remember_track',
+      ].includes(name)
+    )
+      return 'library.read';
+    if (['get_currently_playing', 'get_playback_state', 'get_devices'].includes(name))
+      return 'playback.read';
+    if (['save_tracks', 'remove_saved_tracks'].includes(name)) return 'library.write';
+    if (
+      [
+        'play',
+        'pause',
+        'next_track',
+        'previous_track',
+        'seek',
+        'set_volume',
+        'transfer_playback',
+        'play_playlist_chapter',
+        'resume_playlist_chapter',
+      ].includes(name)
+    )
+      return 'playback.control';
+    if (
+      PLAYLIST_PERSONALIZATION_TOOL_NAMES.includes(
+        name as (typeof PLAYLIST_PERSONALIZATION_TOOL_NAMES)[number],
+      )
+    )
+      return 'personalization.read';
+    if (
+      [
+        'get_state_diagnostics',
+        'get_rate_limit_status',
+        'get_recent_api_errors',
+        'get_job_status',
+        'list_jobs',
+      ].includes(name)
+    )
+      return 'diagnostics.read';
+    if (
+      [
+        'create_playlist',
+        'add_tracks_to_playlist',
+        'update_playlist_details',
+        'reorder_playlist_tracks',
+      ].includes(name)
+    )
+      return 'playlist.write';
+    if (
+      [
+        'remove_tracks_from_playlist',
+        'replace_playlist_tracks',
+        'deduplicate_playlist',
+        'restore_playlist_snapshot',
+        'undo_last_playlist_change',
+      ].includes(name)
+    )
+      return 'playlist.destructive';
+    if (name === 'plan_playlist_transfer') return 'transfer.plan';
+    if (['execute_playlist_transfer', 'sync_playlist_transfer'].includes(name))
+      return 'transfer.execute';
+    return undefined;
+  };
+  const enforceAccess = (name: string, args: any) => {
+    const access = toolContext.get()?.mcpAccess;
+    if (!access) return;
+    const permission = permissionForTool(name);
+    if (permission && !access.permissions?.includes(permission))
+      throw new Error('PERMISSION_NOT_GRANTED');
+    if (name === 'get_connections') return;
+    const allowed = access.connectionIds ?? [];
+    if (!allowed.length) throw new Error('CONNECTION_NOT_GRANTED');
+    const requested =
+      args?.connection_id ?? args?.source_connection_id ?? args?.destination_connection_id;
+    if (requested && !allowed.includes(requested)) throw new Error('CONNECTION_NOT_GRANTED');
+    const writePermission = [
+      'library.write',
+      'playlist.write',
+      'playlist.destructive',
+      'playback.control',
+      'transfer.execute',
+    ].includes(permission ?? '');
+    if (args && !requested && writePermission && allowed.length > 1) {
+      const preferred = readRegistry.getPreferred().write;
+      if (!preferred || !allowed.includes(preferred)) throw new Error('CONNECTION_NOT_GRANTED');
+      args.connection_id = preferred;
+      args.read_fallback = false;
+    } else if (args && !requested) {
+      args.connection_id = allowed[0];
+      args.read_fallback = false;
+    }
+  };
+  const validateTarget = (a: any) => {
+    if (
+      a?.provider &&
+      a?.connection_id &&
+      !readRegistry.connectionMatchesProvider(a.connection_id, a.provider)
+    )
+      throw new Error('provider_connection_conflict');
+  };
   const mutations = new Set([
     'create_playlist',
     'add_tracks_to_playlist',
@@ -189,6 +497,8 @@ export function registerTools(
     'seek',
     'set_volume',
     'transfer_playback',
+    'play_playlist_chapter',
+    'resume_playlist_chapter',
     'add_tracks_by_search',
     'deduplicate_playlist',
     'bulk_add_tracks',
@@ -228,11 +538,27 @@ export function registerTools(
   s = {
     registerTool: (name: any, config: any, callback: any) => {
       const wrapped = async (...args: any[]) => {
+        validateTarget(args[0]);
         const parentContext = toolContext.get();
         const requestId = parentContext?.requestId ?? `req_${globalThis.crypto.randomUUID()}`;
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 15000);
         const started = Date.now();
+        try {
+          enforceAccess(name, args[0]);
+        } catch (error) {
+          const normalized = toApiError(error);
+          clearTimeout(timer);
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify({ error: normalized.code, message: normalized.message }),
+              },
+            ],
+            isError: true,
+          };
+        }
         logger?.info(
           { event: 'tool.start', request_id: requestId, tool: name },
           'MCP tool started',
@@ -244,6 +570,7 @@ export function registerTools(
               signal: controller.signal,
               deadlineAt: parentContext?.deadlineAt ?? Date.now() + 15000,
               operation: name,
+              mcpAccess: parentContext?.mcpAccess,
             },
             async () =>
               await Promise.race([
@@ -313,6 +640,7 @@ export function registerTools(
           clearTimeout(timer);
         }
       };
+      if (!toolsetIncludes(toolset, name)) return undefined;
       return original(
         name,
         {
@@ -321,6 +649,8 @@ export function registerTools(
             ...config.annotations,
             readOnlyHint: !mutations.has(name),
             destructiveHint: [
+              'execute_playlist_transfer',
+              'sync_playlist_transfer',
               'remove_tracks_from_playlist',
               'replace_playlist_tracks',
               'deduplicate_playlist',
@@ -354,6 +684,218 @@ export function registerTools(
       );
     },
   } as unknown as McpServer;
+  s.registerTool(
+    'get_connections',
+    {
+      title: 'Get provider connections',
+      description: 'List compact provider connection summaries without credentials.',
+      inputSchema: {},
+    },
+    async () =>
+      out(
+        (toolContext.get()?.mcpAccess
+          ? readRegistry
+              .listConnections()
+              .filter((connection) =>
+                toolContext.get()?.mcpAccess?.connectionIds?.includes(connection.connectionId),
+              )
+          : readRegistry.listConnections()
+        ).map((connection, index, connections) => {
+          const preferred = readRegistry.getPreferred?.() ?? {};
+          return {
+            connection_id: connection.connectionId,
+            provider: connection.provider,
+            status: connection.connected === false ? 'disconnected' : 'connected',
+            capabilities: connection.capabilities,
+            default: connection.connectionId === (preferred.read ?? connections[0]?.connectionId),
+            preferred_read: connection.connectionId === preferred.read,
+            preferred_write: connection.connectionId === preferred.write,
+          };
+        }),
+      ),
+  );
+  s.registerTool(
+    'plan_playlist_transfer',
+    {
+      title: 'Plan playlist transfer',
+      description:
+        'Create an explainable cross-provider transfer plan. Dry-run only; performs zero destination writes.',
+      inputSchema: {
+        source_connection_id: id,
+        source_playlist_id: id,
+        destination_connection_id: id,
+        destination_provider: id.optional(),
+        start_position: z.number().int().min(0).default(0),
+        max_tracks: z.number().int().min(1).max(10000).default(10000),
+      },
+    },
+    async (a: any) => {
+      const source = readRegistry.getConnection(a.source_connection_id);
+      const destination = readRegistry.getConnection(a.destination_connection_id);
+      if (!source) throw new Error('source_connection_unavailable');
+      if (!destination) throw new Error('destination_connection_unavailable');
+      if (a.destination_provider && a.destination_provider !== destination.summary.provider)
+        throw new Error('provider_connection_conflict');
+      if (!source.playlistRead) throw new Error('source_playlist_read_unsupported');
+      const sourceTracks: any[] = [];
+      for (let offset = a.start_position; offset < a.start_position + a.max_tracks;) {
+        const page: any = await reads.getPlaylistTracks(a.source_playlist_id, {
+          connection_id: a.source_connection_id,
+          provider: source.summary.provider,
+          limit: Math.min(50, a.start_position + a.max_tracks - offset),
+          offset,
+          read_fallback: false,
+        });
+        const items = page.data?.items ?? [];
+        if (!items.length) break;
+        sourceTracks.push(...items);
+        offset += items.length;
+        if (!page.data?.next) break;
+      }
+      return out(
+        await planPlaylistTransfer({
+          sourceTracks,
+          sourceProvider: source.summary.provider,
+          sourceConnectionId: a.source_connection_id,
+          sourcePlaylistId: a.source_playlist_id,
+          sourceOffset: a.start_position,
+          destinationProvider: destination.summary.provider,
+          destinationConnectionId: a.destination_connection_id,
+          destinationPlaylistWriteSupported:
+            destination.summary.capabilities.playlistWrite === true,
+          destinationCatalogSupported: destination.summary.capabilities.catalog === true,
+          searchTracks: async (query, options) =>
+            (await reads.searchTracks(query, { ...options, read_fallback: false })).data,
+          rateLimit: (provider, scope, connectionId) =>
+            Boolean(getRateLimit(provider, scope, connectionId)),
+        }),
+      );
+    },
+  );
+  s.registerTool(
+    'execute_playlist_transfer',
+    {
+      title: 'Execute playlist transfer',
+      description:
+        'Execute a previously validated transfer plan against the explicitly selected destination. Requires confirmation and verifies the resulting playlist.',
+      inputSchema: {
+        transfer_plan: z.any(),
+        destination_playlist_id: id,
+        confirm: z.literal(true),
+        resumed: z.boolean().optional(),
+      },
+    },
+    async (a: {
+      transfer_plan: TransferPlan;
+      destination_playlist_id: string;
+      confirm: true;
+      resumed?: boolean;
+    }) =>
+      out(
+        await executePlaylistTransfer({
+          plan: a.transfer_plan,
+          destinationPlaylistId: a.destination_playlist_id,
+          registry: readRegistry,
+          gateway: playlists,
+          resumed: a.resumed,
+        }),
+      ),
+  );
+  s.registerTool(
+    'sync_playlist_transfer',
+    {
+      title: 'Synchronize transferred playlist',
+      description:
+        'Apply an explicitly confirmed provider-neutral sync policy. Destructive cross-provider conflicts fail closed.',
+      inputSchema: {
+        transfer_plan: z.any(),
+        destination_playlist_id: id,
+        policy: z.enum(['mirror', 'append_missing', 'remove_extra', 'two_way_union']),
+        confirm: z.literal(true),
+      },
+    },
+    async (a: {
+      transfer_plan: TransferPlan;
+      destination_playlist_id: string;
+      policy: TransferSyncPolicy;
+      confirm: true;
+    }) =>
+      out(
+        await syncPlaylistTransfer({
+          plan: a.transfer_plan,
+          destinationPlaylistId: a.destination_playlist_id,
+          policy: a.policy,
+          registry: readRegistry,
+          gateway: playlists,
+          confirm: a.confirm,
+        }),
+      ),
+  );
+  const importFormat = z.enum(['json', 'csv', 'm3u8', 'txt']);
+  for (const name of ['preview_playlist_import', 'import_playlist'] as const)
+    s.registerTool(
+      name,
+      {
+        title: name === 'preview_playlist_import' ? 'Preview playlist import' : 'Import playlist',
+        description:
+          'Parse and validate provider-neutral playlist data. This operation never writes to a provider.',
+        inputSchema: { format: importFormat, content: z.string().min(1) },
+      },
+      async (a: { format: PlaylistFormat; content: string }) =>
+        out({ ...parsePlaylistImport(a.content, a.format), write_performed: false }),
+    );
+  s.registerTool(
+    'export_playlist',
+    {
+      title: 'Export playlist',
+      description:
+        'Export provider-neutral canonical playlist data without credentials or provider calls.',
+      inputSchema: {
+        format: importFormat,
+        playlist: z.object({
+          version: z.literal(1),
+          format: z.literal('jamrelay-playlist'),
+          tracks: z.array(z.any()),
+          name: z.string().optional(),
+          description: z.string().optional(),
+        }),
+      },
+    },
+    async (a: { format: PlaylistFormat; playlist: PlaylistDocument }) =>
+      out({
+        format: a.format,
+        content: exportPlaylist(a.playlist, a.format),
+        write_performed: false,
+      }),
+  );
+  s.registerTool(
+    'get_capabilities',
+    {
+      title: 'Get provider capabilities',
+      description: 'Describe supported provider operations and explain unavailable capabilities.',
+      inputSchema: {
+        provider: z.string().min(1).optional(),
+        connection_id: z.string().min(1).optional(),
+      },
+    },
+    async (a: any) => {
+      validateTarget(a);
+      const connections = readRegistry
+        .listConnections()
+        .filter((connection) => !a.provider || connection.provider === a.provider)
+        .filter((connection) => !a.connection_id || connection.connectionId === a.connection_id);
+      return out(
+        connections.map((connection) => ({
+          connection_id: connection.connectionId,
+          provider: connection.provider,
+          capabilities: connection.capabilities,
+          unsupported_operations: Object.entries(connection.capabilities)
+            .filter(([, supported]) => !supported)
+            .map(([capability]) => capability),
+        })),
+      );
+    },
+  );
   const get = async (path: string) => c.request<any>(path);
   const playlistSnapshot = async (playlistId: string) => {
     const p: any = await get('/playlists/' + playlistId);
@@ -377,27 +919,14 @@ export function registerTools(
     for (const part of chunks(uris.slice(100)))
       await c.json('/playlists/' + playlistId + '/items', { uris: part });
   };
-  const search = async (type: 'track' | 'artist' | 'album', a: any) => {
-    const all: any[] = [];
-    for (let offset = 0; all.length < a.limit; offset += 10) {
-      const p = await get(
-        '/search?' +
-          new URLSearchParams({
-            q: a.query,
-            type,
-            limit: String(Math.min(10, a.limit - all.length)),
-            offset: String(offset),
-          }),
-      );
-      const k = type + 's';
-      const items: any[] = p?.[k]?.items ?? [];
-      all.push(...items);
-      if (items.length < 10 || !p?.[k]?.next) break;
-    }
-    return out({ items: all.slice(0, a.limit) });
+  const search = (type: 'track' | 'artist' | 'album', a: any) => {
+    const options = { ...routing(a), limit: a.limit, offset: 0 };
+    return type === 'track'
+      ? reads.searchTracks(a.query, options)
+      : type === 'artist'
+        ? reads.searchArtists(a.query, options)
+        : reads.searchAlbums(a.query, options);
   };
-  const searchResult = (type: 'track' | 'artist' | 'album', x: any) =>
-    type === 'track' ? track(x) : type === 'artist' ? artist(x) : album(x);
   for (const [n, t] of [
     ['search_tracks', 'track'],
     ['search_artists', 'artist'],
@@ -407,29 +936,42 @@ export function registerTools(
       n,
       {
         title: n,
-        description: 'Search Spotify catalog with current pagination.',
-        inputSchema: { query: z.string().min(1), limit },
+        description: 'Search the selected provider catalog with current pagination.',
+        inputSchema: { query: z.string().min(1), limit, ...readSchema },
       },
       async (a: any) => {
-        const r: any = await search(t, a);
-        const parsed = JSON.parse(r.content[0].text);
-        return out({ ...parsed, items: parsed.items.map((x: any) => searchResult(t, x)) });
+        const r = await search(t, a);
+        return out(
+          withProvenance(
+            {
+              items: r.data.map((x: any) =>
+                t === 'track' ? track(x) : t === 'artist' ? artist(x) : album(x),
+              ),
+            },
+            r,
+          ),
+        );
       },
     );
-  for (const [n, p, t] of [
-    ['get_track', '/tracks/', 'track'],
-    ['get_artist', '/artists/', 'artist'],
+  for (const [n, t] of [
+    ['get_track', 'track'],
+    ['get_artist', 'artist'],
   ])
     s.registerTool(
       n,
       {
         title: n,
-        description: 'Get a Spotify ' + t + ' by ID, URI, or URL.',
-        inputSchema: { [t + '_id']: id },
+        description: 'Get a provider ' + t + ' by ID, URI, or URL.',
+        inputSchema: { [t + '_id']: id, ...readSchema },
       },
       async (a: any) => {
-        const x = await get(p + parseSpotifyIdentifier(a[t + '_id'], t as any).id);
-        return out(t === 'track' ? track(x) : artist(x));
+        const r =
+          t === 'track'
+            ? await reads.getTrack(a[t + '_id'], routing(a))
+            : await reads.getArtist(a[t + '_id'], routing(a));
+        return out(
+          r.data ? withProvenance(t === 'track' ? track(r.data) : artist(r.data), r) : null,
+        );
       },
     );
   s.registerTool(
@@ -461,37 +1003,56 @@ export function registerTools(
         limit,
         offset: z.number().int().min(0).default(0),
         all: z.boolean().default(false),
+        ...readSchema,
       },
     },
     async (a: any) => {
       const compact = (p: any) => ({
         id: p.id,
-        uri: p.uri,
+        uri: p.uri ?? p.metadata?.providerUri,
         name: p.name,
         description: p.description,
         public: p.public,
         collaborative: p.collaborative,
-        owner: p.owner?.display_name,
-        snapshot_id: p.snapshot_id,
-        total_items: p.items?.total,
-        external_url: p.external_urls?.spotify,
+        owner: p.owner?.display_name ?? p.metadata?.owner,
+        snapshot_id: p.snapshot_id ?? p.metadata?.providerSnapshotId,
+        total_items: p.items?.total ?? p.trackCount,
+        external_url: p.external_url ?? p.metadata?.providerUrl ?? p.external_urls?.spotify,
       });
       if (!a.all) {
-        const p: any = await get(
-          '/me/playlists?limit=' + Math.min(50, a.limit) + '&offset=' + a.offset,
+        const r = await reads.listPlaylists({ ...routing(a), limit: a.limit, offset: a.offset });
+        return out(
+          withProvenance(
+            {
+              items: (r.data as any).items.map(compact),
+              total: (r.data as any).total,
+              limit: (r.data as any).limit,
+              offset: (r.data as any).offset,
+              next: (r.data as any).next,
+            },
+            r,
+          ),
         );
-        return out({ ...p, items: (p.items ?? []).map(compact) });
       }
-      const items = await paginate(
-        async (o) => {
-          const p: any = await get('/me/playlists?limit=50&offset=' + o);
-          return { items: p.items ?? [], next: p.next, total: p.total };
+      let provenance: ReadResult<any> | undefined;
+      const pages = await paginate(
+        async (offset) => {
+          const page = await reads.listPlaylists({ ...routing(a), limit: 50, offset });
+          provenance = page;
+          return {
+            items: (page.data as any).items ?? [],
+            next: (page.data as any).next,
+            total: (page.data as any).total,
+          };
         },
         10000,
         10000,
         a.offset,
       );
-      return out({ items: items.map(compact), total: items.length, offset: a.offset });
+      const r = provenance!;
+      return out(
+        withProvenance({ items: pages.map(compact), total: pages.length, offset: a.offset }, r),
+      );
     },
   );
   const pid = (a: any) => parseSpotifyIdentifier(a.playlist_id, 'playlist').id;
@@ -500,22 +1061,28 @@ export function registerTools(
     {
       title: 'Get playlist',
       description: 'Get playlist metadata.',
-      inputSchema: { playlist_id: id },
+      inputSchema: { playlist_id: id, ...readSchema },
     },
     async (a: any) => {
-      const p = await get('/playlists/' + pid(a));
-      return out({
-        id: p.id,
-        uri: p.uri,
-        name: p.name,
-        description: p.description,
-        owner: p.owner?.display_name,
-        public: p.public,
-        collaborative: p.collaborative,
-        snapshot_id: p.snapshot_id,
-        total_items: p.items?.total,
-        external_url: p.external_urls?.spotify,
-      });
+      const r = await reads.getPlaylist(a.playlist_id, routing(a));
+      const p: any = r.data;
+      return out(
+        withProvenance(
+          {
+            id: p.id,
+            uri: p.uri,
+            name: p.name,
+            description: p.description,
+            owner: p.owner?.display_name,
+            public: p.public,
+            collaborative: p.collaborative,
+            snapshot_id: p.snapshot_id,
+            total_items: p.items?.total,
+            external_url: p.external_url ?? p.metadata?.providerUrl ?? p.external_urls?.spotify,
+          },
+          r,
+        ),
+      );
     },
   );
   s.registerTool(
@@ -527,30 +1094,45 @@ export function registerTools(
         playlist_id: id,
         limit: z.number().int().min(1).max(50).default(20),
         offset: z.number().int().min(0).default(0),
+        ...readSchema,
       },
     },
     async (a: any) => {
-      const p: any = await get(
-        '/playlists/' + pid(a) + '/items?limit=' + a.limit + '&offset=' + a.offset,
-      );
-      return out({
-        ...p,
-        items: (p?.items ?? []).map((x: any) => ({
-          added_at: x.added_at,
-          item_type: x.item?.type ?? 'unknown',
-          item:
-            x.item?.type === 'track'
-              ? track(x.item)
-              : x.item
-                ? {
-                    id: x.item.id,
-                    uri: x.item.uri,
-                    name: x.item.name,
-                    external_url: x.item.external_urls?.spotify,
-                  }
-                : null,
-        })),
+      const r = await reads.getPlaylistTracks(a.playlist_id, {
+        ...routing(a),
+        limit: a.limit,
+        offset: a.offset,
       });
+      const p: any = r.data;
+      return out(
+        withProvenance(
+          {
+            total: p.total,
+            limit: p.limit,
+            offset: p.offset,
+            next: p.next,
+            items: (p?.items ?? []).map((x: any) => ({
+              added_at: x.added_at ?? x.addedAt,
+              item_type: x.item?.type ?? 'unknown',
+              item:
+                x.item?.type === 'track'
+                  ? track(x.item)
+                  : x.item
+                    ? {
+                        id: x.item.id,
+                        uri: x.item.uri,
+                        name: x.item.name,
+                        external_url:
+                          x.item.external_url ??
+                          x.item.metadata?.providerUrl ??
+                          x.item.external_urls?.spotify,
+                      }
+                    : null,
+            })),
+          },
+          r,
+        ),
+      );
     },
   );
   s.registerTool(
@@ -563,18 +1145,22 @@ export function registerTools(
         description: z.string().max(300).optional(),
         public: z.boolean().default(false),
         collaborative: z.boolean().default(false),
+        ...writeSchema,
       },
     },
     async (a: any) => {
       if (a.collaborative && a.public)
         throw new Error('A Spotify playlist cannot be both public and collaborative');
       return out(
-        await c.json('/me/playlists', {
-          name: a.name,
-          description: a.description ?? '',
-          public: a.public,
-          collaborative: a.collaborative,
-        }),
+        await playlists.create(
+          {
+            name: a.name,
+            description: a.description ?? '',
+            public: a.public,
+            collaborative: a.collaborative,
+          },
+          writeTarget(a),
+        ),
       );
     },
   );
@@ -584,14 +1170,9 @@ export function registerTools(
     {
       title: 'Add tracks',
       description: 'Add tracks sequentially in chunks of at most 100 using /items.',
-      inputSchema: { playlist_id: id, track_ids: z.array(id).min(1).max(10000) },
+      inputSchema: { playlist_id: id, track_ids: z.array(id).min(1).max(10000), ...writeSchema },
     },
-    async (a: any) =>
-      out(
-        await writeChunks('add_tracks_to_playlist', pid(a), uris(a), async (part) =>
-          c.json('/playlists/' + pid(a) + '/items', { uris: part }),
-        ),
-      ),
+    async (a: any) => out(await playlists.add(a.playlist_id, a.track_ids, writeTarget(a))),
   );
   s.registerTool(
     'remove_tracks_from_playlist',
@@ -599,29 +1180,11 @@ export function registerTools(
       title: 'Remove playlist items',
       description:
         'Remove requested URI occurrences using DELETE /items and return the final snapshot.',
-      inputSchema: { playlist_id: id, track_ids: z.array(id).min(1).max(10000) },
+      inputSchema: { playlist_id: id, track_ids: z.array(id).min(1).max(10000), ...writeSchema },
     },
     async (a: any) => {
-      let snapshot_id = (await playlistSnapshot(pid(a))).snapshot_id;
-      const result = await writeChunks<string>(
-        'remove_tracks_from_playlist',
-        pid(a),
-        uris(a),
-        async (part) => {
-          const r: any = await c.request('/playlists/' + pid(a) + '/items', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ items: part.map((uri) => ({ uri })), snapshot_id }),
-          });
-          if (r?.snapshot_id) snapshot_id = r.snapshot_id;
-          return r;
-        },
-      );
-      return out({
-        ...result,
-        last_snapshot_id: result.last_snapshot_id ?? snapshot_id,
-        removed_requested: a.track_ids.length,
-      });
+      const result: any = await playlists.remove(a.playlist_id, a.track_ids, {}, writeTarget(a));
+      return out({ ...result, removed_requested: a.track_ids.length });
     },
   );
   s.registerTool(
@@ -635,19 +1198,20 @@ export function registerTools(
         insert_before: z.number().int().min(0),
         range_length: z.number().int().min(1).default(1),
         snapshot_id: z.string().optional(),
+        ...writeSchema,
       },
     },
     async (a: any) =>
       out(
-        await c.json(
-          '/playlists/' + pid(a) + '/items',
+        await playlists.reorder(
+          a.playlist_id,
           {
             range_start: a.range_start,
             insert_before: a.insert_before,
             range_length: a.range_length,
             snapshot_id: a.snapshot_id,
           },
-          'PUT',
+          writeTarget(a),
         ),
       ),
   );
@@ -657,26 +1221,10 @@ export function registerTools(
       title: 'Replace playlist items',
       description:
         'Replace then append ordered chunks, max 100 per request; rolls back after later chunk failure.',
-      inputSchema: { playlist_id: id, track_ids: z.array(id).max(10000) },
+      inputSchema: { playlist_id: id, track_ids: z.array(id).max(10000), ...writeSchema },
     },
     async (a: any) => {
-      const idValue = pid(a),
-        original = await playlistSnapshot(idValue),
-        u = uris(a);
-      return out(
-        await writeChunks(
-          'replace_playlist_tracks',
-          idValue,
-          u,
-          async (part, index) =>
-            c.json(
-              '/playlists/' + idValue + '/items',
-              { uris: part },
-              index === 0 ? 'PUT' : 'POST',
-            ),
-          { writeEmpty: true, rollback: () => restoreSnapshot(idValue, original.items) },
-        ),
-      );
+      return out(await playlists.replace(a.playlist_id, a.track_ids, writeTarget(a)));
     },
   );
   s.registerTool(
@@ -690,34 +1238,48 @@ export function registerTools(
         description: z.string().max(300).optional(),
         public: z.boolean().optional(),
         collaborative: z.boolean().optional(),
+        ...writeSchema,
       },
     },
     async (a: any) => {
       if (a.collaborative === true && a.public !== false) {
-        const current: any = await get('/playlists/' + pid(a));
+        const current: any = await reads.getPlaylist(a.playlist_id, routing(a)).then((x) => x.data);
         if (current?.public !== false)
           throw new Error('A collaborative Spotify playlist must be private');
       }
       const b = { ...a };
       delete b.playlist_id;
-      return out(await c.json('/playlists/' + pid(a), b, 'PUT'));
+      delete b.connection_id;
+      delete b.provider;
+      delete b.preferred_connection_id;
+      return out(await playlists.update(a.playlist_id, b, writeTarget(a)));
     },
   );
   const top = async (type: 'tracks' | 'artists', a: any) => {
-    const p: any = await get(
-      '/me/top/' +
-        type +
-        '?time_range=' +
-        a.time_range +
-        '&limit=' +
-        a.limit +
-        '&offset=' +
-        a.offset,
+    const r =
+      type === 'tracks'
+        ? await reads.getTopTracks({
+            ...routing(a),
+            time_range: a.time_range,
+            limit: a.limit,
+            offset: a.offset,
+          })
+        : await reads.getTopArtists({
+            ...routing(a),
+            time_range: a.time_range,
+            limit: a.limit,
+            offset: a.offset,
+          });
+    const p: any = r.data;
+    return out(
+      withProvenance(
+        {
+          ...p,
+          items: (p?.items ?? []).map((x: any) => (type === 'tracks' ? track(x) : artist(x))),
+        },
+        r,
+      ),
     );
-    return out({
-      ...p,
-      items: (p?.items ?? []).map((x: any) => (type === 'tracks' ? track(x) : artist(x))),
-    });
   };
   for (const [n, t] of [
     ['get_top_tracks', 'tracks'],
@@ -732,6 +1294,7 @@ export function registerTools(
           time_range: z.enum(['short_term', 'medium_term', 'long_term']).default('medium_term'),
           limit: z.number().int().min(1).max(50).default(20),
           offset: z.number().int().min(0).default(0),
+          ...readSchema,
         },
       },
       (a) => top(t, a),
@@ -742,20 +1305,22 @@ export function registerTools(
       title: 'Get currently playing',
       description:
         'Get the currently playing track or episode; 204 is returned as inactive playback.',
-      inputSchema: {},
+      inputSchema: { ...readSchema },
     },
-    async () => {
-      const x: any = await get('/me/player/currently-playing');
+    async (a: any) => {
+      const r = await reads.getCurrentlyPlaying(routing(a));
+      const x: any = r.data;
       return out(
-        x
-          ? {
-              playing: Boolean(x.is_playing),
-              progress_ms: x.progress_ms,
-              item: playbackItem(x.item),
-              item_type: x.currently_playing_type,
-              context: x.context ? { type: x.context.type, uri: x.context.uri } : undefined,
-            }
-          : { playing: false, item: null },
+        withProvenance(
+          {
+            playing: x.playing,
+            progress_ms: x.progressMs,
+            item: playbackItem(x.item),
+            item_type: x.itemType,
+            context: x.context,
+          },
+          r,
+        ),
       );
     },
   );
@@ -764,28 +1329,32 @@ export function registerTools(
     {
       title: 'Get playback state',
       description: 'Get playback state and normalize either a track or episode item.',
-      inputSchema: {},
+      inputSchema: { ...readSchema },
     },
-    async () => {
-      const x: any = await get('/me/player');
+    async (a: any) => {
+      const r = await reads.getPlaybackState(routing(a));
+      const x: any = r.data;
       return out(
         x
-          ? {
-              is_playing: x.is_playing,
-              device: x.device
-                ? {
-                    id: x.device.id,
-                    name: x.device.name,
-                    type: x.device.type,
-                    volume_percent: x.device.volume_percent,
-                  }
-                : null,
-              repeat_state: x.repeat_state,
-              shuffle_state: x.shuffle_state,
-              progress_ms: x.progress_ms,
-              item: playbackItem(x.item),
-              context: x.context ? { type: x.context.type, uri: x.context.uri } : undefined,
-            }
+          ? withProvenance(
+              {
+                is_playing: x.is_playing ?? x.isPlaying,
+                device: x.device
+                  ? {
+                      id: x.device.id,
+                      name: x.device.name,
+                      type: x.device.type,
+                      volume_percent: x.device.volume_percent ?? x.device.volumePercent,
+                    }
+                  : null,
+                repeat_state: x.repeat_state ?? x.repeatState,
+                shuffle_state: x.shuffle_state ?? x.shuffleState,
+                progress_ms: x.progress_ms,
+                item: playbackItem(x.item),
+                context: x.context ? { type: x.context.type, uri: x.context.uri } : undefined,
+              },
+              r,
+            )
           : null,
       );
     },
@@ -818,6 +1387,7 @@ export function registerTools(
         limit: z.number().int().min(1).max(50).default(20),
         before: z.number().int().positive().optional(),
         after: z.number().int().positive().optional(),
+        ...readSchema,
       },
     },
     async (a: any) => {
@@ -825,14 +1395,25 @@ export function registerTools(
       const q = new URLSearchParams({ limit: String(a.limit) });
       if (a.before) q.set('before', String(a.before));
       if (a.after) q.set('after', String(a.after));
-      const p: any = await get('/me/player/recently-played?' + q);
-      return out({
-        ...p,
-        items: (p?.items ?? []).map((x: any) => ({
-          played_at: x.played_at,
-          track: track(x.track),
-        })),
+      const r = await reads.getRecentlyPlayed({
+        ...routing(a),
+        limit: a.limit,
+        before: a.before,
+        after: a.after,
       });
+      const p: any = r.data;
+      return out(
+        withProvenance(
+          {
+            ...p,
+            items: (p?.items ?? []).map((x: any) => ({
+              played_at: x.played_at ?? x.playedAt,
+              track: track(x.track),
+            })),
+          },
+          r,
+        ),
+      );
     },
   );
   s.registerTool(
@@ -843,14 +1424,24 @@ export function registerTools(
       inputSchema: {
         limit: z.number().int().min(1).max(50).default(20),
         offset: z.number().int().min(0).default(0),
+        ...readSchema,
       },
     },
     async (a: any) => {
-      const p: any = await get('/me/tracks?limit=' + a.limit + '&offset=' + a.offset);
-      return out({
-        ...p,
-        items: (p?.items ?? []).map((x: any) => ({ added_at: x.added_at, track: track(x.track) })),
-      });
+      const r = await reads.getSavedTracks({ ...routing(a), limit: a.limit, offset: a.offset });
+      const p: any = r.data;
+      return out(
+        withProvenance(
+          {
+            ...p,
+            items: (p?.items ?? []).map((x: any) => ({
+              added_at: x.added_at ?? x.addedAt,
+              track: track(x.track),
+            })),
+          },
+          r,
+        ),
+      );
     },
   );
   const verifyPlayerMutation = async (
@@ -988,5 +1579,5 @@ export function registerTools(
     async (a: any) =>
       out(await c.json('/me/player', { device_ids: [a.device_id], play: a.play }, 'PUT')),
   );
-  registerAdvanced(s, c, includeStateTools);
+  registerAdvanced(s, c, includeStateTools, reads, playlists);
 }

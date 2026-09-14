@@ -28,7 +28,7 @@ async function rpc(handler: any, body: unknown) {
   );
   return wire(await response.text());
 }
-describe('legacy MCP compatibility handler', () => {
+describe('MCP handler', () => {
   it('initializes, lists tools, and invokes a mocked tool', async () => {
     const handler = createMcpHandler(
       () => {
@@ -75,14 +75,26 @@ it('exposes exactly the required tools through tools/list', async () => {
   );
   const listed = await rpc(handler, { jsonrpc: '2.0', id: 10, method: 'tools/list', params: {} });
   const names = listed.result.tools.map((x: any) => x.name);
-  expect(names).toHaveLength(94);
-  expect(new Set(names).size).toBe(94);
+  expect(names).toHaveLength(106);
+  expect(new Set(names).size).toBe(106);
   expect(names.sort()).toEqual(
     [
       ...REQUIRED_TOOL_NAMES,
       ...SMART_PLAYLIST_TOOL_NAMES,
       ...PLAYLIST_AUTOMATION_TOOL_NAMES,
       ...PLAYLIST_PERSONALIZATION_TOOL_NAMES,
+      'get_connections',
+      'get_capabilities',
+      'preview_playlist_import',
+      'import_playlist',
+      'export_playlist',
+      'plan_playlist_transfer',
+      'execute_playlist_transfer',
+      'sync_playlist_transfer',
+      'chapterize_playlist',
+      'get_playlist_chapters',
+      'play_playlist_chapter',
+      'resume_playlist_chapter',
     ].sort(),
   );
   const add = listed.result.tools.find((x: any) => x.name === 'add_tracks_to_playlist');
@@ -164,7 +176,7 @@ it('serves the real Express app with bearer auth and MCP v2 discovery/calls', as
     });
     expect(response.status).toBe(200);
     const listed: any = wire(await response.text());
-    expect(listed.result.tools).toHaveLength(94);
+    expect(listed.result.tools).toHaveLength(106);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }

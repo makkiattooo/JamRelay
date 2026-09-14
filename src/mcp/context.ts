@@ -5,6 +5,11 @@ export type ToolContext = {
   signal: AbortSignal;
   deadlineAt: number;
   operation?: string;
+  mcpAccess?: {
+    clientId: string;
+    connectionIds?: string[];
+    permissions?: string[];
+  };
 };
 const storage = new AsyncLocalStorage<ToolContext>();
 

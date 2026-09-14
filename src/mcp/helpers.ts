@@ -2,8 +2,8 @@ import * as z from 'zod/v4';
 import { SpotifyClient } from '../spotify/client.js';
 import { parseSpotifyIdentifier } from '../spotify/identifiers.js';
 import { chunks } from '../utils/chunks.js';
-import { normalizeText, resolveCandidates } from '../spotify/normalize.js';
-import { writeChunks } from '../spotify/write-operation.js';
+import { normalizeText, resolveCandidates } from '../music/normalize.js';
+import { writeChunks, writePlaylistOrder } from '../spotify/write-operation.js';
 import { TrackResolver } from '../spotify/resolver.js';
 import {
   cancelJob,
@@ -30,8 +30,14 @@ import {
   saveOperation,
 } from '../playlists/snapshots.js';
 import type { NormalizedPlaylistTrack } from '../playlists/types.js';
+import { PlaylistChapterEngine } from '../playlists/chapter-engine.js';
 import { registerPlaylistAutomationTools } from '../playlists/automation.js';
 import { registerPlaylistPersonalizationTools } from '../playlists/personalization.js';
+import type { ProviderReadServices } from '../providers/read-services.js';
+import type { PlaylistGateway } from '../providers/playlist-gateway.js';
+import { PlaylistGateway as PlaylistGatewayImpl } from '../providers/playlist-gateway.js';
+import { ProviderRegistry } from '../providers/registry.js';
+import { SpotifyProviderAdapter } from '../spotify/provider-adapter.js';
 const id = z.string().min(1);
 const text = (x: unknown) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(x) }],
@@ -56,6 +62,8 @@ export function registerAdvanced(
   s: any,
   c: SpotifyClient,
   includeStateTools = isDatabaseInitialized(),
+  reads?: ProviderReadServices,
+  playlists?: PlaylistGateway,
 ) {
   const resolver = new TrackResolver(c);
   const get = (p: string) => c.request<any>(p);
@@ -102,6 +110,10 @@ export function registerAdvanced(
       normalized = normalizePlaylistItems(raw);
     return { meta, raw, ...normalized };
   };
+  const chapterEngine = new PlaylistChapterEngine(c, async (playlistId) => {
+    const state = await playlistState(playlistId);
+    return { meta: state.meta, raw: state.raw };
+  });
   const stateSnapshot = (
     playlistId: string,
     state: { meta: any; tracks: NormalizedPlaylistTrack[] },
@@ -109,7 +121,10 @@ export function registerAdvanced(
   ) =>
     saveSnapshot({
       playlistId,
-      spotifySnapshotId: state.meta?.snapshot_id,
+      providerId: 'spotify',
+      connectionId: 'spotify-default',
+      providerPlaylistId: playlistId,
+      providerRevision: state.meta?.snapshot_id,
       metadata: {
         id: state.meta?.id,
         name: state.meta?.name,
@@ -121,9 +136,13 @@ export function registerAdvanced(
       reason,
     });
   const replaceUris = async (playlistId: string, uris: string[]) => {
-    await c.json('/playlists/' + playlistId + '/items', { uris: uris.slice(0, 100) }, 'PUT');
-    for (const part of chunks(uris.slice(100)))
-      await c.json('/playlists/' + playlistId + '/items', { uris: part });
+    const result = await writePlaylistOrder({
+      playlistId,
+      orderedTrackUris: uris,
+      replace: (part) => c.json('/playlists/' + playlistId + '/items', { uris: part }, 'PUT'),
+      append: (part) => c.json('/playlists/' + playlistId + '/items', { uris: part }),
+    });
+    if (!result.ok) throw new Error(result.error ?? 'playlist_write_failed');
   };
   const operationPlan = (
     playlistId: string,
@@ -152,6 +171,8 @@ export function registerAdvanced(
     after: NormalizedPlaylistTrack[],
     plan: any,
   ) => {
+    const apiBefore = c.getApiCallMetrics();
+    const startedAt = Date.now();
     const safety = stateSnapshot(playlistId, state, operation.toUpperCase());
     try {
       await replaceUris(playlistId, after.map((x) => x.uri!).filter(Boolean));
@@ -170,14 +191,28 @@ export function registerAdvanced(
         afterSnapshotId: afterSnapshot.id,
         plan,
         status: 'completed',
+        providerId: safety.providerId,
+        connectionId: safety.connectionId,
       });
       return {
         plan,
         safety_snapshot_id: safety.id,
         after_snapshot_id: afterSnapshot.id,
         verification: { ok, count: verify.tracks.length },
+        spotify_api_calls: c.getApiCallDelta(apiBefore),
+        duration_ms: Date.now() - startedAt,
       };
     } catch (error) {
+      let rollbackAttempted = false;
+      let rollbackSucceeded = false;
+      let rollbackError: string | undefined;
+      try {
+        rollbackAttempted = true;
+        await restoreSnapshot(playlistId, state.raw);
+        rollbackSucceeded = true;
+      } catch (rollbackFailure) {
+        rollbackError = String(rollbackFailure);
+      }
       saveOperation({
         id: plan.id,
         playlistId,
@@ -185,11 +220,21 @@ export function registerAdvanced(
         beforeSnapshotId: safety.id,
         plan,
         status: 'partial_failure',
+        providerId: safety.providerId,
+        connectionId: safety.connectionId,
       });
       return {
         plan,
         safety_snapshot_id: safety.id,
-        partial_failure: { completed: false, error: String(error), rollback_available: true },
+        partial_failure: {
+          completed: false,
+          error: String(error),
+          rollback_attempted: rollbackAttempted,
+          rollback_succeeded: rollbackSucceeded,
+          rollback_error: rollbackError,
+        },
+        spotify_api_calls: c.getApiCallDelta(apiBefore),
+        duration_ms: Date.now() - startedAt,
       };
     }
   };
@@ -198,7 +243,7 @@ export function registerAdvanced(
     'playlist_health_report',
     {
       title: 'Playlist health report',
-      description: 'Read-only deterministic playlist health analysis; never mutates Spotify.',
+      description: 'Read-only deterministic playlist health analysis; never mutates a provider.',
       inputSchema: { playlist_id: id },
     },
     async (a: any) => {
@@ -222,7 +267,10 @@ export function registerAdvanced(
       return text({
         snapshot_id: snap.id,
         playlist_id: snap.playlistId,
+        provider_revision: snap.providerRevision,
         spotify_snapshot_id: snap.spotifySnapshotId,
+        provider_id: snap.providerId,
+        connection_id: snap.connectionId,
         track_count: snap.trackCount,
         created_at: snap.createdAt,
       });
@@ -312,11 +360,23 @@ export function registerAdvanced(
       title: 'Restore playlist snapshot',
       description:
         'Restore exact ordered content from a durable snapshot; creates a PRE-RESTORE safety snapshot.',
-      inputSchema: { snapshot_id: id, dry_run: z.boolean().default(false) },
+      inputSchema: {
+        snapshot_id: id,
+        dry_run: z.boolean().default(false),
+        connection_id: id.optional(),
+        provider: id.optional(),
+      },
     },
     async (a: any) => {
-      const snap = loadSnapshot(a.snapshot_id),
-        x = await playlistState(snap.playlistId),
+      const snap = loadSnapshot(a.snapshot_id);
+      if (
+        (a.connection_id && a.connection_id !== snap.connectionId) ||
+        (a.provider && a.provider !== snap.providerId)
+      )
+        throw Object.assign(new Error('Cross-provider snapshot restore is not permitted.'), {
+          code: 'snapshot_target_mismatch',
+        });
+      const x = await playlistState(snap.playlistId),
         after = snap.uris.map(
           (uri, position) =>
             ({ uri, position, originalIndex: position, id: uri.split(':').pop() }) as any,
@@ -333,18 +393,25 @@ export function registerAdvanced(
       title: 'Undo last playlist change',
       description:
         'Restore the latest completed JamRelay-managed reversible operation only; dry_run defaults true.',
-      inputSchema: { ...mutationSchema },
+      inputSchema: { ...mutationSchema, connection_id: id.optional(), provider: id.optional() },
     },
     async (a: any) => {
-      const op = latestOperation(pid(a));
+      const op = latestOperation(pid(a), a.connection_id, a.provider);
       if (!op)
         throw Object.assign(new Error('No reversible JamRelay playlist operation exists.'), {
           code: 'no_reversible_operation',
         });
       return text(
         await (async () => {
-          const snap = loadSnapshot(op.before_snapshot_id),
-            x = await playlistState(pid(a)),
+          const snap = loadSnapshot(op.before_snapshot_id);
+          if (
+            (a.connection_id && a.connection_id !== snap.connectionId) ||
+            (a.provider && a.provider !== snap.providerId)
+          )
+            throw Object.assign(new Error('Cross-provider snapshot restore is not permitted.'), {
+              code: 'snapshot_target_mismatch',
+            });
+          const x = await playlistState(pid(a)),
             after = snap.uris.map(
               (uri, position) =>
                 ({ uri, position, originalIndex: position, id: uri.split(':').pop() }) as any,
@@ -611,11 +678,35 @@ export function registerAdvanced(
     {
       title: 'Check saved tracks',
       description: 'Return an exact input-to-saved mapping using current /me/library/contains.',
-      inputSchema: { track_ids: z.array(id).min(1).max(40) },
+      inputSchema: {
+        track_ids: z.array(id).min(1).max(40),
+        connection_id: z.string().min(1).optional(),
+        provider: z.string().min(1).optional(),
+        preferred_connection_id: z.string().min(1).optional(),
+        read_fallback: z.boolean().optional(),
+      },
     },
     async (a: any) => {
-      const inputs = a.track_ids as string[],
-        uris = inputs.map((x) => tid(x).uri),
+      const inputs = a.track_ids as string[];
+      if (reads) {
+        const result = await reads.checkSavedTracks(inputs, {
+          connection_id: a.connection_id,
+          provider: a.provider,
+          preferred_connection_id: a.preferred_connection_id,
+          read_fallback: a.read_fallback,
+        });
+        const saved = result.data as boolean[];
+        return text(
+          inputs.map((input, index) => ({
+            input,
+            saved: Boolean(saved[index]),
+            provider: result.provenance.provider,
+            connection_id: result.provenance.connection_id,
+            ...(result.provenance.fallback ? { read_fallback: true } : {}),
+          })),
+        );
+      }
+      const uris = inputs.map((x) => tid(x).uri),
         r: any = await get('/me/library/contains?uris=' + encodeURIComponent(uris.join(',')));
       return text(
         inputs.map((input, index) => ({ input, uri: uris[index], saved: Boolean(r?.[index]) })),
@@ -650,6 +741,8 @@ export function registerAdvanced(
         title: z.string().min(1).max(200),
         artist: z.string().min(1).max(200),
         album: z.string().max(200).optional(),
+        provider: z.string().min(1).optional(),
+        connection_id: z.string().min(1).optional(),
       },
     },
     async (a: any) => text(await resolver.rememberTrack(a)),
@@ -682,8 +775,12 @@ export function registerAdvanced(
       message: 'Each track needs id/uri or title and artist',
     });
   async function resolve(list: any[]) {
+    const searchable = list.filter((x) => !x.id && !x.uri);
+    const batch = await resolver.resolveMany(searchable, {
+      concurrency: Number(process.env.SPOTIFY_READ_CONCURRENCY) || 12,
+    });
+    let searchIndex = 0;
     const result: any[] = [];
-    const inFlight = new Map<string, Promise<any>>();
     for (const x of list) {
       if (x.id || x.uri) {
         try {
@@ -692,19 +789,9 @@ export function registerAdvanced(
           result.push({ status: 'unmatched', source: x });
         }
       } else {
-        const key = [
-          normalizeText(x.title),
-          normalizeText(x.artist),
-          normalizeText(x.album ?? ''),
-        ].join('\u0000');
-        let pending = inFlight.get(key);
-        if (!pending) {
-          pending = resolver.resolve(x);
-          inFlight.set(key, pending);
-        }
         let r: any;
         try {
-          r = await pending;
+          r = batch[searchIndex++];
         } catch (error) {
           if (error instanceof SpotifyApiError && error.status === 429)
             r = { status: 'waiting', source: 'spotify_search', errorId: error.apiErrorId };
@@ -751,10 +838,12 @@ export function registerAdvanced(
   };
   async function addResolved(a: any, list: any[], dry: boolean) {
     const report = await resolve(list);
+    const resolverMetrics = resolver.getLastBatchMetrics();
     const bad = report.filter((x) => x.status !== 'matched');
     if (report.some((x) => x.status === 'waiting'))
       return {
         ...counts(report, new Set()),
+        resolver: resolverMetrics,
         job_id: waitingJob('add_tracks_by_search', a, list, report),
         job_status: 'waiting',
         added: 0,
@@ -770,6 +859,7 @@ export function registerAdvanced(
     if (dry || (a.strict && bad.length))
       return {
         report,
+        resolver: resolverMetrics,
         ...summary,
         added: 0,
         dry_run: dry,
@@ -781,7 +871,13 @@ export function registerAdvanced(
       filtered.map((x) => x.uri),
       async (part) => c.json('/playlists/' + pid(a) + '/items', { uris: part }),
     );
-    return { ...result, report, ...summary, added: result.successfully_written_count };
+    return {
+      ...result,
+      report,
+      resolver: resolverMetrics,
+      ...summary,
+      added: result.successfully_written_count,
+    };
   }
   const common = {
     playlist_id: id,
@@ -810,6 +906,7 @@ export function registerAdvanced(
     },
     async (a: any) => {
       const report = await resolve(a.tracks);
+      const resolverMetrics = resolver.getLastBatchMetrics();
       let existing = new Set<string>();
       if (a.skip_existing) {
         const items = await allPlaylistItems(pid(a));
@@ -821,20 +918,34 @@ export function registerAdvanced(
       if (report.some((x) => x.status === 'waiting'))
         return text({
           ...summary,
+          resolver: resolverMetrics,
           job_id: waitingJob('bulk_add_tracks', a, a.tracks, report),
           job_status: 'waiting',
           added: 0,
           blocked: true,
         });
       if (blocked || a.dry_run)
-        return text({ report, ...summary, added: 0, dry_run: a.dry_run, blocked });
+        return text({
+          report,
+          resolver: resolverMetrics,
+          ...summary,
+          added: 0,
+          dry_run: a.dry_run,
+          blocked,
+        });
       const result = await writeChunks(
         'bulk_add_tracks',
         pid(a),
         filtered.map((x) => x.uri),
         async (part) => c.json('/playlists/' + pid(a) + '/items', { uris: part }),
       );
-      return text({ ...result, report, ...summary, added: result.successfully_written_count });
+      return text({
+        ...result,
+        report,
+        resolver: resolverMetrics,
+        ...summary,
+        added: result.successfully_written_count,
+      });
     },
   );
   s.registerTool(
@@ -962,6 +1073,9 @@ export function registerAdvanced(
         tracks: z.array(trackInput).min(1).max(10000),
         strict: z.boolean().default(true),
         skip_duplicates: z.boolean().default(true),
+        connection_id: z.string().min(1).optional(),
+        provider: z.string().min(1).optional(),
+        preferred_connection_id: z.string().min(1).optional(),
       },
     },
     async (a: any) => {
@@ -978,19 +1092,29 @@ export function registerAdvanced(
         return text({ created: false, report, reason: 'resolution_failed' });
       const us = report.filter((x) => x.status === 'matched').map((x) => x.uri);
       const ordered = a.skip_duplicates ? [...new Set(us)] : us;
-      const p: any = await c.json('/me/playlists', {
-        name: a.name,
-        description: a.description ?? '',
-        public: a.public,
-      });
-      const result = await writeChunks('create_playlist_from_tracks', p.id, ordered, async (part) =>
-        c.json('/playlists/' + p.id + '/items', { uris: part }),
+      if (!playlists) throw new Error('Playlist gateway is required for playlist writes');
+      const p: any = await playlists.create(
+        {
+          name: a.name,
+          description: a.description ?? '',
+          public: a.public,
+        },
+        {
+          connection_id: a.connection_id,
+          provider: a.provider,
+          preferred_connection_id: a.preferred_connection_id,
+        },
       );
+      const result: any = await playlists.add(p.id, ordered, {
+        connection_id: a.connection_id,
+        provider: a.provider,
+        preferred_connection_id: a.preferred_connection_id,
+      });
       return text({
         created: true,
         playlist: p,
         report,
-        added: result.successfully_written_count,
+        added: result.successfully_written_count ?? result.added,
         ...result,
       });
     },
@@ -1137,17 +1261,36 @@ export function registerAdvanced(
           let playlistId = payload.playlist_id as string | undefined;
           let playlist: any;
           if (job.type === 'create_playlist_from_tracks') {
-            playlist = await c.json('/me/playlists', {
-              name: payload.name,
-              description: payload.description ?? '',
-              public: payload.public ?? false,
-            });
+            playlist = playlists
+              ? await playlists.create(
+                  {
+                    name: payload.name,
+                    description: payload.description ?? '',
+                    public: payload.public ?? false,
+                  },
+                  {
+                    connection_id: payload.connection_id as string | undefined,
+                    provider: payload.provider as string | undefined,
+                    preferred_connection_id: payload.preferred_connection_id as string | undefined,
+                  },
+                )
+              : await c.json('/me/playlists', {
+                  name: payload.name,
+                  description: payload.description ?? '',
+                  public: payload.public ?? false,
+                });
             playlistId = playlist.id;
           }
           if (!playlistId) return text({ job_id: a.job_id, error: 'playlist_id_required' });
-          const result = await writeChunks(`job:${job.type}`, playlistId, uris, async (part) =>
-            c.json('/playlists/' + playlistId + '/items', { uris: part }),
-          );
+          const result: any = playlists
+            ? await playlists.add(playlistId, uris, {
+                connection_id: payload.connection_id as string | undefined,
+                provider: payload.provider as string | undefined,
+                preferred_connection_id: payload.preferred_connection_id as string | undefined,
+              })
+            : await writeChunks(`job:${job.type}`, playlistId, uris, async (part) =>
+                c.json('/playlists/' + playlistId + '/items', { uris: part }),
+              );
           if (!result.ok) {
             updateJobPayload(a.job_id, {
               ...payload,
@@ -1203,9 +1346,9 @@ export function registerAdvanced(
       {
         title: 'Get State DB diagnostics',
         description: 'Return authenticated, bounded State DB health counters.',
-        inputSchema: {},
+        inputSchema: { provider: z.string().optional(), connection_id: z.string().optional() },
       },
-      async () => text(listStateDiagnostics()),
+      async (a: any) => text(listStateDiagnostics(a.provider, a.connection_id)),
     );
   if (includeStateTools)
     s.registerTool(
@@ -1213,9 +1356,13 @@ export function registerAdvanced(
       {
         title: 'Get rate limit status',
         description: 'Inspect persisted provider rate-limit scopes.',
-        inputSchema: { provider: z.string().default('spotify'), scope: z.string().optional() },
+        inputSchema: {
+          provider: z.string().default('spotify'),
+          scope: z.string().optional(),
+          connection_id: z.string().optional(),
+        },
       },
-      async (a: any) => text(getRateLimitStatus(a.provider, a.scope)),
+      async (a: any) => text(getRateLimitStatus(a.provider, a.scope, a.connection_id ?? 'default')),
     );
   if (includeStateTools)
     s.registerTool(
@@ -1228,11 +1375,101 @@ export function registerAdvanced(
           provider: z.string().optional(),
           status_code: z.number().int().optional(),
           unresolved_only: z.boolean().default(false),
+          connection_id: z.string().optional(),
         },
       },
       async (a: any) =>
-        text(getRecentApiErrors(a.limit, a.provider, a.status_code, a.unresolved_only)),
+        text(
+          getRecentApiErrors(
+            a.limit,
+            a.provider,
+            a.status_code,
+            a.unresolved_only,
+            a.connection_id,
+          ),
+        ),
     );
+  s.registerTool(
+    'chapterize_playlist',
+    {
+      title: 'Chapterize playlist',
+      description:
+        'Analyze the existing playlist order into deterministic narrative chapters. Read-only for Spotify.',
+      inputSchema: {
+        playlist_id: id,
+        style: z.enum(['narrative', 'balanced', 'energy', 'album_like']).default('narrative'),
+        target_chapter_minutes: z.number().int().min(10).max(240).optional(),
+        min_chapter_minutes: z.number().int().min(1).max(240).optional(),
+        max_chapter_minutes: z.number().int().min(1).max(360).optional(),
+        chapter_count: z.number().int().min(1).max(50).optional(),
+        regenerate_titles: z.boolean().default(false),
+        save: z.boolean().default(true),
+      },
+    },
+    async (a: any) =>
+      text(
+        await chapterEngine.chapterize(
+          pid(a),
+          {
+            targetChapterMinutes: a.target_chapter_minutes,
+            minChapterMinutes: a.min_chapter_minutes,
+            maxChapterMinutes: a.max_chapter_minutes,
+            chapterCount: a.chapter_count,
+            regenerateTitles: a.regenerate_titles,
+            style: a.style,
+          },
+          a.save,
+        ),
+      ),
+  );
+  s.registerTool(
+    'get_playlist_chapters',
+    {
+      title: 'Get playlist chapters',
+      description:
+        'Read the latest saved chapter set and report whether the playlist order has changed.',
+      inputSchema: { playlist_id: id.optional(), chapter_set_id: id.optional() },
+    },
+    async (a: any) => text(await chapterEngine.get(a.playlist_id, a.chapter_set_id)),
+  );
+  s.registerTool(
+    'play_playlist_chapter',
+    {
+      title: 'Play playlist chapter',
+      description:
+        'Start Spotify playback at a chapter offset; playback may continue after the chapter ends.',
+      inputSchema: {
+        playlist_id: id,
+        chapter_set_id: id,
+        chapter_number: z.number().int().positive(),
+        device_id: id.optional(),
+      },
+    },
+    async (a: any) =>
+      text(await chapterEngine.play(pid(a), a.chapter_set_id, a.chapter_number, a.device_id)),
+  );
+  s.registerTool(
+    'resume_playlist_chapter',
+    {
+      title: 'Resume playlist chapter',
+      description: 'Resume a previously started chapter from its first saved position.',
+      inputSchema: {
+        playlist_id: id,
+        chapter_set_id: id,
+        chapter_number: z.number().int().positive(),
+        device_id: id.optional(),
+      },
+    },
+    async (a: any) =>
+      text(await chapterEngine.play(pid(a), a.chapter_set_id, a.chapter_number, a.device_id)),
+  );
   registerPlaylistAutomationTools(s, c);
-  registerPlaylistPersonalizationTools(s, c);
+  const personalizationGateway =
+    playlists ??
+    (() => {
+      const registry = new ProviderRegistry();
+      registry.register(new SpotifyProviderAdapter(undefined as any, c));
+      return new PlaylistGatewayImpl(registry);
+    })();
+  registerPlaylistPersonalizationTools(s, personalizationGateway);
 }

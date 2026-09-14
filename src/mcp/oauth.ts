@@ -22,6 +22,7 @@ type Code = {
 };
 
 type Access = {
+  clientId?: string;
   expiresAt: number;
   resource?: string;
 };
@@ -49,6 +50,16 @@ type State = {
   access: Record<string, Access>;
   refresh: Record<string, Refresh>;
   clients: Record<string, DynamicClient>;
+  grants: Record<
+    string,
+    {
+      clientId: string;
+      connectionIds: string[];
+      permissions: string[];
+      revokedAt?: number;
+      updatedAt: number;
+    }
+  >;
 };
 
 export type OAuthClient = {
@@ -58,10 +69,10 @@ export type OAuthClient = {
   tokenEndpointAuthMethods: TokenEndpointAuthMethod[];
   clientSecret?: string;
   clientSecretDigest?: string;
-  source: 'legacy' | 'static' | 'dynamic';
+  source: 'static' | 'dynamic';
 };
 
-const emptyState = (): State => ({ codes: {}, access: {}, refresh: {}, clients: {} });
+const emptyState = (): State => ({ codes: {}, access: {}, refresh: {}, clients: {}, grants: {} });
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const pkce = (value: string) => createHash('sha256').update(value).digest('base64url');
 const token = () => randomBytes(32).toString('base64url');
@@ -194,6 +205,7 @@ export class McpOAuthStore {
         access: parsed.access ?? {},
         refresh: parsed.refresh ?? {},
         clients: parsed.clients ?? {},
+        grants: parsed.grants ?? {},
       };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -285,6 +297,7 @@ export class McpOAuthStore {
     const access = token();
     const refresh = token();
     this.state.access[digest(access)] = {
+      clientId,
       expiresAt: Date.now() + 60 * 60_000,
       resource,
     };
@@ -295,6 +308,55 @@ export class McpOAuthStore {
     };
     await this.save();
     return { access, refresh };
+  }
+
+  async accessPolicy(value: string, resource?: string) {
+    await this.load();
+    this.pruneExpired();
+    const record = this.state.access[digest(value)];
+    if (
+      !record ||
+      record.expiresAt <= Date.now() ||
+      (resource && record.resource && record.resource !== resource)
+    )
+      return undefined;
+    const grant = record.clientId ? this.state.grants[record.clientId] : undefined;
+    if (!grant || grant.revokedAt) return undefined;
+    return {
+      clientId: record.clientId!,
+      connectionIds: grant.connectionIds,
+      permissions: grant.permissions,
+    };
+  }
+
+  async setGrant(clientId: string, connectionIds: string[], permissions: string[]) {
+    await this.load();
+    this.state.grants[clientId] = {
+      clientId,
+      connectionIds: [...new Set(connectionIds)],
+      permissions: [...new Set(permissions)],
+      updatedAt: Date.now(),
+    };
+    await this.save();
+  }
+  async getGrant(clientId: string) {
+    await this.load();
+    return this.state.grants[clientId] ?? null;
+  }
+  async listGrants() {
+    await this.load();
+    return Object.values(this.state.grants).map((grant) => ({ ...grant }));
+  }
+  async revokeGrant(clientId: string) {
+    await this.load();
+    const grant = this.state.grants[clientId];
+    if (!grant) return false;
+    grant.revokedAt = Date.now();
+    await this.save();
+    return true;
+  }
+  async updateGrant(clientId: string, connectionIds: string[], permissions: string[]) {
+    return this.setGrant(clientId, connectionIds, permissions);
   }
 
   async useRefresh(value: string, clientId: string, resource?: string) {
@@ -392,28 +454,8 @@ export class McpOAuthStore {
 
 type OAuthConfig = Pick<
   Config,
-  | 'PUBLIC_BASE_URL'
-  | 'MCP_OAUTH_CLIENT_ID'
-  | 'MCP_OAUTH_CLIENT_SECRET'
-  | 'MCP_OAUTH_REDIRECT_URI'
-  | 'MCP_OAUTH_OWNER_SECRET'
-  | 'MCP_OAUTH_CLIENTS_PATH'
-  | 'MCP_OAUTH_DCR_ENABLED'
+  'PUBLIC_BASE_URL' | 'MCP_OAUTH_OWNER_SECRET' | 'MCP_OAUTH_CLIENTS_PATH' | 'MCP_OAUTH_DCR_ENABLED'
 >;
-
-const legacyClient = (cfg: OAuthConfig): OAuthClient | undefined => {
-  if (!cfg.MCP_OAUTH_CLIENT_ID || !cfg.MCP_OAUTH_CLIENT_SECRET || !cfg.MCP_OAUTH_REDIRECT_URI) {
-    return undefined;
-  }
-  return {
-    clientId: cfg.MCP_OAUTH_CLIENT_ID,
-    clientName: 'Pre-registered MCP client',
-    clientSecret: cfg.MCP_OAUTH_CLIENT_SECRET,
-    redirectUris: [cfg.MCP_OAUTH_REDIRECT_URI],
-    tokenEndpointAuthMethods: ['client_secret_basic', 'client_secret_post'],
-    source: 'legacy',
-  };
-};
 
 const authenticateClient = (
   client: OAuthClient,
@@ -457,6 +499,7 @@ export function registerMcpOAuthRoutes(
   app: express.Express,
   cfg: OAuthConfig,
   store: McpOAuthStore,
+  connectionOptions: () => Array<{ id: string; provider: string; name: string }> = () => [],
 ) {
   const origin = cfg.PUBLIC_BASE_URL.replace(/\/$/, '');
   const resource = `${origin}/mcp`;
@@ -487,8 +530,6 @@ export function registerMcpOAuthRoutes(
     res.status(429).set('Retry-After', '15').json({ error: code });
 
   const resolveClient = async (clientId: string): Promise<OAuthClient | undefined> => {
-    const legacy = legacyClient(cfg);
-    if (legacy?.clientId === clientId) return legacy;
     const staticallyConfigured = await staticRegistry.get(clientId);
     if (staticallyConfigured) return staticallyConfigured;
     return store.getDynamicClient(clientId);
@@ -691,17 +732,36 @@ export function registerMcpOAuthRoutes(
       state,
       resource: requestedResource ?? resource,
     };
+    const permissionOptions = [
+      'catalog.read',
+      'library.read',
+      'library.write',
+      'playlist.read',
+      'playlist.write',
+      'playlist.destructive',
+      'playback.read',
+      'playback.control',
+      'personalization.read',
+      'transfer.plan',
+      'transfer.execute',
+      'diagnostics.read',
+    ];
 
-    return headers
-      .type('html')
-      .send(renderAuthorizePage({ clientName: client.clientName, fields }));
+    return headers.type('html').send(
+      renderAuthorizePage({
+        clientName: client.clientName,
+        fields,
+        permissions: permissionOptions,
+        connections: connectionOptions(),
+      }),
+    );
   });
 
   app.post('/oauth/authorize', express.urlencoded({ extended: false }), async (req, res) => {
     if (!cfg.MCP_OAUTH_OWNER_SECRET) return unavailable(req, res);
     if (!allowed(req)) return rateLimited(res, 'rate_limited');
 
-    const body = (req.body ?? {}) as Record<string, string>;
+    const body = (req.body ?? {}) as any;
     const client = await resolveClient(body.client_id ?? '');
     const requestedResource = body.resource || resource;
     const headers = res.set(oauthPageHeaders).type('html');
@@ -748,12 +808,35 @@ export function registerMcpOAuthRoutes(
         }),
       );
 
+    const availableConnections = new Set(connectionOptions().map((connection) => connection.id));
+    const availablePermissions = new Set([
+      'catalog.read',
+      'library.read',
+      'library.write',
+      'playlist.read',
+      'playlist.write',
+      'playlist.destructive',
+      'playback.read',
+      'playback.control',
+      'personalization.read',
+      'transfer.plan',
+      'transfer.execute',
+      'diagnostics.read',
+    ]);
+    const connectionIds = ([] as string[])
+      .concat(body.connection_ids ?? [])
+      .filter((value) => Boolean(value) && availableConnections.has(value));
+    const permissions = ([] as string[])
+      .concat(body.permissions ?? [])
+      .filter((value) => Boolean(value) && availablePermissions.has(value));
+    await store.setGrant(client.clientId, connectionIds, permissions);
+
     if (client.source === 'dynamic') await store.touchDynamicClient(client.clientId, true);
     const code = await store.issueCode({
       clientId: client.clientId,
       redirectUri: body.redirect_uri!,
       challenge: body.code_challenge!,
-      resource,
+      resource: requestedResource,
     });
     const redirect = new URL(body.redirect_uri!);
     redirect.searchParams.set('code', code);

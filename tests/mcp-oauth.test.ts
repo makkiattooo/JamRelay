@@ -12,16 +12,12 @@ const cfg = (path: string, clientsPath: string, overrides: Record<string, unknow
   SPOTIFY_CLIENT_SECRET: 'spotify-secret',
   SPOTIFY_REDIRECT_URI: 'https://example.com/spotify-callback',
   TOKEN_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
-  SPOTIFY_TOKEN_STORE_PATH: join(tmpdir(), `spotify-${randomBytes(6).toString('hex')}.json`),
   PORT: 0,
   HOST: '127.0.0.1',
   PUBLIC_BASE_URL: base,
   LOG_LEVEL: 'silent',
   MCP_AUTH_MODE: 'bearer',
   MCP_API_KEY: 'manual-key',
-  MCP_OAUTH_CLIENT_ID: 'chatgpt-client',
-  MCP_OAUTH_CLIENT_SECRET: 'chatgpt-secret',
-  MCP_OAUTH_REDIRECT_URI: 'https://chatgpt.com/connector/oauth/callback',
   MCP_OAUTH_OWNER_SECRET: 'owner-secret',
   MCP_OAUTH_STORE_PATH: path,
   MCP_OAUTH_CLIENTS_PATH: clientsPath,
@@ -54,7 +50,21 @@ describe('MCP OAuth', () => {
   ) {
     directory = await mkdtemp(join(tmpdir(), 'jamrelay-oauth-'));
     const clientsPath = join(directory, 'clients.json');
-    if (staticClients) await writeFile(clientsPath, JSON.stringify(staticClients));
+    await writeFile(
+      clientsPath,
+      JSON.stringify(
+        staticClients ?? {
+          clients: [
+            {
+              clientId: 'chatgpt-client',
+              clientName: 'ChatGPT',
+              clientSecret: 'chatgpt-secret',
+              redirectUris: ['https://chatgpt.com/connector/oauth/callback'],
+            },
+          ],
+        },
+      ),
+    );
     const app = createApp(cfg(join(directory, 'oauth.json'), clientsPath, overrides), {
       auth: { connected: async () => false } as any,
       client: { request: async () => null, json: async () => null } as any,
@@ -426,9 +436,6 @@ describe('MCP OAuth', () => {
   it('supports multiple statically pre-registered clients from one registry file', async () => {
     const root = await start(
       {
-        MCP_OAUTH_CLIENT_ID: undefined,
-        MCP_OAUTH_CLIENT_SECRET: undefined,
-        MCP_OAUTH_REDIRECT_URI: undefined,
         MCP_OAUTH_DCR_ENABLED: 'false',
       },
       {
