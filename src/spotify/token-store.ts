@@ -1,6 +1,10 @@
 import { promises as fs } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
+import {
+  EncryptedCredentialStore,
+  migrateLegacyCredentialStore,
+} from '../providers/credential-store.js';
 export type StoredToken = { accessToken: string; refreshToken: string; expiresAt: number };
 export class TokenStore {
   private key: Buffer;
@@ -54,4 +58,15 @@ export class TokenStore {
       if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
     }
   }
+}
+
+/** Explicit compatibility migration; it never deletes the legacy token file. */
+export function migrateLegacySpotifyTokenStore(
+  legacyStore: TokenStore,
+  genericStore: EncryptedCredentialStore,
+  connectionId = 'spotify-default',
+) {
+  return migrateLegacyCredentialStore(legacyStore, genericStore, connectionId, {
+    provider: 'spotify',
+  });
 }

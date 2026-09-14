@@ -1,8 +1,13 @@
 import { randomBytes } from 'node:crypto';
-import { TokenStore, StoredToken } from './token-store.js';
+import type { StoredToken } from './token-store.js';
 import { SPOTIFY_SCOPES } from './scopes.js';
 import { SpotifyApiError } from './errors.js';
 import { toolContext } from '../mcp/context.js';
+type TokenBackend = {
+  load(): Promise<StoredToken | null>;
+  save(token: StoredToken): Promise<void>;
+  clear(): Promise<void>;
+};
 export class SpotifyAuth {
   private states = new Map<string, number>();
   private refreshPromise?: Promise<string>;
@@ -12,7 +17,7 @@ export class SpotifyAuth {
       SPOTIFY_CLIENT_SECRET: string;
       SPOTIFY_REDIRECT_URI: string;
     },
-    private store: TokenStore,
+    private store: TokenBackend,
   ) {}
   loginUrl() {
     const now = Date.now();
