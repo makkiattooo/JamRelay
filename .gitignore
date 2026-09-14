@@ -25,3 +25,4 @@ docs/.vitepress/dist/
 
 .release-patch-backups/
 diff.diff
+docs/.vitepress/.temp/
