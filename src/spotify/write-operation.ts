@@ -85,3 +85,19 @@ export async function writeChunks<T>(
     rollback_succeeded: false,
   };
 }
+
+export async function writePlaylistOrder(options: {
+  playlistId: string;
+  orderedTrackUris: string[];
+  replace: (uris: string[]) => Promise<{ snapshot_id?: string } | null>;
+  append: (uris: string[]) => Promise<{ snapshot_id?: string } | null>;
+  rollback?: () => Promise<void>;
+}) {
+  return writeChunks(
+    'write_playlist_order',
+    options.playlistId,
+    options.orderedTrackUris,
+    (part, index) => (index === 0 ? options.replace(part) : options.append(part)),
+    { rollback: options.rollback, writeEmpty: true },
+  );
+}

@@ -43,11 +43,32 @@ function warmCanonicalTracks(value: unknown, seen = new Set<unknown>(), budget =
   for (const child of Object.values(x)) warmCanonicalTracks(child, seen, budget);
 }
 export class SpotifyClient {
+  private apiCallTotal = 0;
+  private apiCallsByEndpoint = new Map<string, number>();
   constructor(
     private auth: SpotifyAuth,
     private market = 'PL',
     private logger?: Logger,
   ) {}
+  getApiCallMetrics() {
+    return {
+      total: this.apiCallTotal,
+      by_endpoint: Object.fromEntries(this.apiCallsByEndpoint),
+    };
+  }
+  resetApiCallMetrics() {
+    this.apiCallTotal = 0;
+    this.apiCallsByEndpoint.clear();
+  }
+  getApiCallDelta(before: ReturnType<SpotifyClient['getApiCallMetrics']>) {
+    const current = this.getApiCallMetrics();
+    const byEndpoint: Record<string, number> = {};
+    for (const [endpoint, count] of Object.entries(current.by_endpoint)) {
+      const delta = count - (before.by_endpoint[endpoint] ?? 0);
+      if (delta > 0) byEndpoint[endpoint] = delta;
+    }
+    return { total: current.total - before.total, by_endpoint: byEndpoint };
+  }
   async request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T | null> {
     let retryCount = 0;
     let forcedRefreshPerformed = false;
@@ -74,7 +95,7 @@ export class SpotifyClient {
         throw new SpotifyApiError(
           401,
           'reauthorization_required',
-          'Spotify is not connected. Visit /auth/spotify/login.',
+          'Spotify is not connected. Visit /auth/providers/spotify/start.',
           undefined,
           true,
         );
@@ -94,6 +115,12 @@ export class SpotifyClient {
           path.startsWith('/search') && !path.includes('market=')
             ? path + (path.includes('?') ? '&' : '?') + 'market=' + encodeURIComponent(this.market)
             : path;
+        this.apiCallTotal++;
+        const endpointKey = `${method} ${requestPath.split('?')[0]}`;
+        this.apiCallsByEndpoint.set(
+          endpointKey,
+          (this.apiCallsByEndpoint.get(endpointKey) ?? 0) + 1,
+        );
         response = await fetch('https://api.spotify.com/v1' + requestPath, {
           ...init,
           headers,

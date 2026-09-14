@@ -1,5 +1,6 @@
 import { SpotifyClient } from './client.js';
-import { normalizeText, resolveCandidates, type TrackCandidate } from './normalize.js';
+import { normalizeText, resolveCandidates } from '../music/normalize.js';
+import type { TrackCandidate } from './normalize.js';
 import { parseSpotifyIdentifier } from './identifiers.js';
 import {
   candidateSpotifyId,
@@ -25,6 +26,8 @@ export type Resolution = {
   match?: unknown;
   confidence?: number;
   errorId?: number;
+  provider?: string;
+  connectionId?: string;
 };
 const compact = (x: any): TrackCandidate => ({
   id: x.id,
@@ -36,6 +39,16 @@ const compact = (x: any): TrackCandidate => ({
 });
 
 export class TrackResolver {
+  private lastBatchMetrics = {
+    total: 0,
+    cacheHits: 0,
+    cacheMisses: 0,
+    searches: 0,
+    matched: 0,
+    ambiguous: 0,
+    unmatched: 0,
+    durationMs: 0,
+  };
   constructor(
     private client: SpotifyClient,
     private alternate: AlternateTrackProvider = new ConfiguredAlternateTrackProvider(),
@@ -93,6 +106,8 @@ export class TrackResolver {
         id: cached.spotifyTrackId,
         uri: cached.spotifyUri,
         confidence: 1,
+        provider: 'spotify',
+        connectionId: 'spotify-default',
       };
     }
     return getRateLimit('spotify', 'search')
@@ -105,7 +120,7 @@ export class TrackResolver {
         '/search?' +
           new URLSearchParams({ q: input.title + ' ' + input.artist, type: 'track', limit: '10' }),
       );
-      const result = resolveCandidates(
+      const result = resolveCandidates<TrackCandidate>(
         (response?.tracks?.items ?? []).map(compact),
         input.title,
         input.artist,
@@ -135,6 +150,8 @@ export class TrackResolver {
         ...(status === 'matched' && result.match
           ? { id: result.match.id, uri: result.match.uri }
           : {}),
+        provider: 'spotify',
+        connectionId: 'spotify-default',
       };
     } catch (error) {
       recordResolverAttempt(
@@ -167,7 +184,7 @@ export class TrackResolver {
         const raw = await this.client.request<any>('/tracks/' + encodeURIComponent(id));
         if (!raw) continue;
         const canonical = compact(raw),
-          check = resolveCandidates(
+          check = resolveCandidates<TrackCandidate>(
             [canonical],
             input.title,
             input.artist,
@@ -180,7 +197,13 @@ export class TrackResolver {
         if ((error as any).status === 429 && (error as any).scope !== 'search') throw error;
       }
     }
-    const result = resolveCandidates(verified, input.title, input.artist, input.album, input.year),
+    const result = resolveCandidates<TrackCandidate>(
+        verified,
+        input.title,
+        input.artist,
+        input.album,
+        input.year,
+      ),
       confidence = result.match?.score;
     if (result.status === 'matched' && result.match) {
       const trackId = this.persist(
@@ -204,6 +227,8 @@ export class TrackResolver {
         id: result.match.id,
         uri: result.match.uri,
         confidence,
+        provider: 'spotify',
+        connectionId: 'spotify-default',
       };
     }
     const status = result.status === 'ambiguous' ? 'ambiguous' : 'waiting';
@@ -223,13 +248,22 @@ export class TrackResolver {
     title: string;
     artist: string;
     album?: string;
+    provider?: string;
+    connection_id?: string;
   }): Promise<Resolution> {
+    if (input.provider && input.provider !== 'spotify')
+      throw new Error('remember_track_provider_requires_provider_adapter');
     const started = Date.now(),
       query = this.normalized(input),
       parsed = parseSpotifyIdentifier(input.track_id, 'track'),
       raw = await this.client.request<any>('/tracks/' + encodeURIComponent(parsed.id)),
       canonical = compact(raw),
-      result = resolveCandidates([canonical], input.title, input.artist, input.album);
+      result = resolveCandidates<TrackCandidate>(
+        [canonical],
+        input.title,
+        input.artist,
+        input.album,
+      );
     if (result.status !== 'matched' || !result.match) {
       recordResolverAttempt(
         query,
@@ -258,19 +292,48 @@ export class TrackResolver {
       id: canonical.id,
       uri: canonical.uri,
       confidence: result.match.score,
+      provider: input.provider ?? 'spotify',
+      connectionId: input.connection_id ?? 'spotify-default',
     };
   }
-  async resolveMany(inputs: TrackQuery[]) {
-    const pending = new Map<string, Promise<Resolution>>();
-    return Promise.all(
-      inputs.map((input) => {
-        const key = trackKey(this.normalized(input));
-        const existing = pending.get(key);
-        if (existing) return existing;
-        const value = this.resolve(input);
-        pending.set(key, value);
-        return value;
-      }),
+  getLastBatchMetrics() {
+    return { ...this.lastBatchMetrics };
+  }
+  async resolveMany(inputs: TrackQuery[], options: { concurrency?: number } = {}) {
+    const started = Date.now();
+    const concurrency = Math.max(
+      1,
+      Math.min(32, (options.concurrency ?? Number(process.env.SPOTIFY_READ_CONCURRENCY)) || 12),
     );
+    const pending = new Map<string, Promise<Resolution>>();
+    const results = new Array<Resolution>(inputs.length);
+    let cursor = 0;
+    const worker = async () => {
+      for (;;) {
+        const index = cursor++;
+        if (index >= inputs.length) return;
+        const input = inputs[index];
+        const key = trackKey(this.normalized(input));
+        let value = pending.get(key);
+        if (!value) {
+          value = this.resolve(input);
+          pending.set(key, value);
+        }
+        results[index] = await value;
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(concurrency, inputs.length) }, worker));
+    const cacheHits = results.filter((x) => x.source === 'database').length;
+    this.lastBatchMetrics = {
+      total: inputs.length,
+      cacheHits,
+      cacheMisses: inputs.length - cacheHits,
+      searches: results.filter((x) => x.source === 'spotify_search').length,
+      matched: results.filter((x) => x.status === 'matched').length,
+      ambiguous: results.filter((x) => x.status === 'ambiguous').length,
+      unmatched: results.filter((x) => x.status === 'unmatched').length,
+      durationMs: Date.now() - started,
+    };
+    return results;
   }
 }
