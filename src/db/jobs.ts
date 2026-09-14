@@ -170,7 +170,7 @@ export function recoverInterruptedJobs(): number {
   }
 }
 
-export function listStateDiagnostics() {
+export function listStateDiagnostics(provider?: string, connectionId?: string) {
   const db = getDatabase();
   return {
     database: 'ready',
@@ -184,9 +184,15 @@ export function listStateDiagnostics() {
     ).count,
     activeRateLimits: db
       .prepare(
-        'SELECT provider,scope,blocked_until as blockedUntil,retry_after_seconds as retryAfterSeconds,reason FROM rate_limit_state WHERE blocked_until > ?',
+        `SELECT provider,connection_id connectionId,scope,blocked_until as blockedUntil,retry_after_seconds as retryAfterSeconds,reason FROM rate_limit_state WHERE blocked_until > ? ${provider ? 'AND provider=?' : ''} ${connectionId ? 'AND connection_id=?' : ''}`,
       )
-      .all(Date.now()),
+      .all(
+        ...([
+          Date.now(),
+          ...(provider ? [provider] : []),
+          ...(connectionId ? [connectionId] : []),
+        ] as (string | number)[]),
+      ),
     jobs: db.prepare('SELECT status,COUNT(*) as count FROM jobs GROUP BY status').all(),
   };
 }

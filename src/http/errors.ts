@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { SpotifyApiError } from '../spotify/errors.js';
+import { CapabilityUnavailableError, ProviderSelectionError } from '../providers/errors.js';
+import { ProviderApiError } from '../providers/errors.js';
 
 export type ApiErrorDetails = Record<string, unknown> | null;
 
@@ -16,6 +18,13 @@ export class ApiError extends Error {
     this.name = 'ApiError';
   }
 }
+
+export const providerNotConfigured = () =>
+  new ApiError(
+    503,
+    'PROVIDER_NOT_CONFIGURED',
+    'No music provider is configured for this deployment.',
+  );
 
 export const requestId: RequestHandler = (req, res, next) => {
   const supplied = req.header('x-request-id');
@@ -42,6 +51,60 @@ export function sendApiError(res: Response, error: ApiError) {
 
 export function toApiError(error: unknown): ApiError {
   if (error instanceof ApiError) return error;
+  if (error instanceof Error && error.message === 'PERMISSION_NOT_GRANTED')
+    return new ApiError(403, 'PERMISSION_NOT_GRANTED', 'The MCP grant lacks this permission.');
+  if (error instanceof Error && error.message === 'CONNECTION_NOT_GRANTED')
+    return new ApiError(
+      403,
+      'CONNECTION_NOT_GRANTED',
+      'The MCP grant does not include this connection.',
+    );
+  if (error instanceof CapabilityUnavailableError)
+    return new ApiError(501, 'CAPABILITY_UNAVAILABLE', error.message, {
+      capability: error.capability,
+      ...(error.provider ? { provider: error.provider } : {}),
+      ...(error.connectionId ? { connection_id: error.connectionId } : {}),
+    });
+  if (error instanceof ProviderSelectionError)
+    return new ApiError(409, 'PROVIDER_TARGET_REQUIRED', error.message, {
+      operation: error.operation,
+      candidates: error.candidates,
+    });
+  if (error instanceof ProviderApiError) {
+    const status =
+      error.status === 429
+        ? 429
+        : error.status === 401
+          ? 401
+          : error.status === 403
+            ? 403
+            : error.status === 404
+              ? 404
+              : error.status >= 500
+                ? 502
+                : 502;
+    return new ApiError(
+      status,
+      error.status === 429 ? 'RATE_LIMIT_EXCEEDED' : 'PROVIDER_UPSTREAM_ERROR',
+      error.message,
+      {
+        provider: error.provider,
+        connection_id: error.connectionId,
+        upstream_status: error.status,
+        scope: error.scope,
+        capability: error.capability,
+        ...(error.providerCode ? { provider_code: error.providerCode } : {}),
+      },
+      error.retryAfter,
+    );
+  }
+  const coded = error as { code?: string } | null;
+  if (coded?.code === 'snapshot_target_mismatch')
+    return new ApiError(
+      409,
+      'SNAPSHOT_TARGET_MISMATCH',
+      'Snapshot belongs to another provider connection.',
+    );
   if (error instanceof SpotifyApiError) {
     if (error.status === 429)
       return new ApiError(

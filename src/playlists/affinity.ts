@@ -1,14 +1,37 @@
 import type { NormalizedPlaylistTrack } from './types.js';
 import { historyStats } from './history.js';
+import { findTrackProviderMapping } from '../db/state.js';
 export function rankTracks(
   tracks: NormalizedPlaylistTrack[],
   mode: 'affinity' | 'freshness' | 'rediscovery' | 'recent_frequency' = 'affinity',
 ) {
-  const stats = historyStats(tracks.flatMap((t) => (t.id ? [t.id] : []))),
+  const refs = tracks.flatMap((t) => {
+    if (!t.id) return [];
+    const mapping = findTrackProviderMapping({
+      providerId: t.providerId ?? undefined,
+      connectionId: t.connectionId ?? undefined,
+      providerTrackId: t.id,
+    });
+    return [
+      t.id,
+      ...(t.canonicalTrackId != null ? [t.canonicalTrackId] : mapping ? [mapping.trackId] : []),
+    ];
+  });
+  const stats = historyStats(refs),
     now = Date.now();
   return tracks
     .map((track) => {
-      const s = track.id ? stats.get(track.id) : undefined,
+      const mapping = track.id
+        ? findTrackProviderMapping({
+            providerId: track.providerId ?? undefined,
+            connectionId: track.connectionId ?? undefined,
+            providerTrackId: track.id,
+          })
+        : null;
+      const s = track.id
+          ? (stats.get(track.canonicalTrackId ?? mapping?.trackId ?? track.id) ??
+            stats.get(track.id))
+          : undefined,
         plays = Number(s?.plays ?? 0),
         last = Number(s?.lastPlayed ?? 0),
         recency = last ? Math.exp(-(now - last) / (1000 * 60 * 60 * 24 * 45)) : 1;

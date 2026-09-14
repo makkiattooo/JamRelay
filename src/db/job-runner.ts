@@ -1,7 +1,4 @@
 import { toolContext } from '../mcp/context.js';
-import { SpotifyApiError } from '../spotify/errors.js';
-import { TrackResolver } from '../spotify/resolver.js';
-import { parseSpotifyIdentifier } from '../spotify/identifiers.js';
 import { getRateLimit } from './state.js';
 import {
   claimEligibleJob,
@@ -12,13 +9,21 @@ import {
   updateJobItem,
   updateJobPayload,
 } from './jobs.js';
-import type { SpotifyClient } from '../spotify/client.js';
 
+export type JobResolver = {
+  resolve(input: {
+    title: string;
+    artist: string;
+    album?: string;
+    year?: number;
+  }): Promise<unknown>;
+  hasConnection?: (connectionId: string, provider?: string) => boolean;
+};
 export class JobRunner {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private stopped = true;
   constructor(
-    private client: SpotifyClient,
+    private resolver: JobResolver,
     private logger?: {
       info?: (x: unknown, message: string) => void;
       warn?: (x: unknown, message: string) => void;
@@ -48,7 +53,30 @@ export class JobRunner {
     const job = getJob(id, 0, 1);
     if (!job || job.status === 'cancelled') return;
     const payload = job.payload as Record<string, unknown>;
-    const resolver = new TrackResolver(this.client);
+    const targetProvider = String(payload.provider ?? 'spotify');
+    const targetConnection = String(payload.connection_id ?? 'spotify-default');
+    if (
+      'hasConnection' in this.resolver &&
+      this.resolver.hasConnection &&
+      !this.resolver.hasConnection(targetConnection, targetProvider)
+    ) {
+      updateJobPayload(id, {
+        ...payload,
+        phase: 'failed',
+        manual_review: true,
+        manual_review_reason: 'original_provider_connection_unavailable',
+        provider: targetProvider,
+        connection_id: targetConnection,
+      });
+      setJobStatus(id, 'failed');
+      return;
+    }
+    if (!payload.provider || !payload.connection_id)
+      updateJobPayload(id, {
+        ...payload,
+        provider: targetProvider,
+        connection_id: targetConnection,
+      });
     const items = getJobItems(id).filter((x) => x.status === 'pending' || x.status === 'waiting');
     const limit = 25;
     updateJobPayload(id, { ...payload, phase: 'resolving' });
@@ -57,8 +85,17 @@ export class JobRunner {
       try {
         let resolution: unknown;
         if (typeof input.id === 'string' || typeof input.uri === 'string') {
-          const parsed = parseSpotifyIdentifier(String(input.id ?? input.uri), 'track');
-          resolution = { status: 'matched', source: 'direct', uri: parsed.uri, id: parsed.id };
+          const reference = String(input.id ?? input.uri);
+          resolution = {
+            status: 'matched',
+            source: 'direct',
+            provider: targetProvider,
+            connection_id: targetConnection,
+            provider_track_id: reference,
+            provider_uri: reference,
+            id: reference,
+            uri: reference,
+          };
         } else {
           resolution = await toolContext.run(
             {
@@ -68,16 +105,17 @@ export class JobRunner {
               operation: `job:${String(job.type)}`,
             },
             () =>
-              resolver.resolve({
+              this.resolver.resolve({
                 title: String(input.title),
                 artist: String(input.artist),
                 album: typeof input.album === 'string' ? input.album : undefined,
+                year: typeof input.year === 'number' ? input.year : undefined,
               }),
           );
         }
         const r = resolution as { status: string; uri?: string; id?: string };
         if (r.status === 'waiting') {
-          const state = getRateLimit('spotify', 'search');
+          const state = getRateLimit(targetProvider, 'search', targetConnection);
           setJobStatus(id, 'waiting', state?.blockedUntil ?? Date.now() + 60000);
           updateJobItem(item.id, 'waiting', { ...input, resolution });
           return;
@@ -87,12 +125,27 @@ export class JobRunner {
           resolution,
         });
       } catch (error) {
-        if (error instanceof SpotifyApiError && error.status === 429) {
-          const state = getRateLimit('spotify', error.scope ?? 'search');
+        if (
+          (error as { status?: number }).status === 429 ||
+          (error as { name?: string }).name === 'ProviderApiError'
+        ) {
+          const providerError = error as {
+            status?: number;
+            scope?: string;
+            retryAfter?: number;
+            provider?: string;
+            connectionId?: string;
+          };
+          if (providerError.status !== 429) throw error;
+          const state = getRateLimit(
+            providerError.provider ?? targetProvider,
+            providerError.scope ?? 'search',
+            providerError.connectionId ?? targetConnection,
+          );
           setJobStatus(
             id,
             'waiting',
-            state?.blockedUntil ?? Date.now() + (error.retryAfter ?? 60) * 1000,
+            state?.blockedUntil ?? Date.now() + (providerError.retryAfter ?? 60) * 1000,
           );
           updateJobItem(item.id, 'waiting', input);
           return;

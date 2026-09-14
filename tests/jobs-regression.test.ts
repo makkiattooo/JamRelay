@@ -41,7 +41,7 @@ describe('durable job regressions', () => {
   it('normal multi-batch progress does not increment attempts', async () => {
     await setup();
     const id = createJob('bulk_add_tracks', { phase: 'created' }, directItems(30));
-    const runner = new JobRunner({ request: async () => null } as any);
+    const runner = new JobRunner({ resolve: async () => ({ status: 'matched', id: 'id' }) });
     runner.start();
     await waitFor(() => getJob(id, 0, 1).payload.phase === 'ready_to_commit');
     await runner.stop();
@@ -55,7 +55,7 @@ describe('durable job regressions', () => {
       { title: 'Blocked', artist: 'Artist' },
     ]);
     const runner = new JobRunner({
-      request: async () => {
+      resolve: async () => {
         throw new SpotifyApiError(429, 'RATE_LIMIT_EXCEEDED', 'blocked', 600, false, 'search');
       },
     } as any);
@@ -77,7 +77,7 @@ describe('durable job regressions', () => {
       1,
     );
     const runner = new JobRunner({
-      request: async () => {
+      resolve: async () => {
         throw new Error('retryable');
       },
     } as any);
@@ -114,7 +114,7 @@ describe('durable job regressions', () => {
     const id = createJob('bulk_add_tracks', { phase: 'created' }, directItems(1));
     setJobStatus(id, 'cancelled');
     const runner = new JobRunner({
-      request: async () => {
+      resolve: async () => {
         throw new Error('must not call');
       },
     } as any);

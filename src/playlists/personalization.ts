@@ -1,7 +1,5 @@
 import * as z from 'zod/v4';
-import { SpotifyClient } from '../spotify/client.js';
-import { parseSpotifyIdentifier } from '../spotify/identifiers.js';
-import { chunks } from '../utils/chunks.js';
+import type { PlaylistGateway } from '../providers/playlist-gateway.js';
 import { normalizePlaylistItems } from './normalize.js';
 import { rankTracks } from './affinity.js';
 import { listHistory, ingestPlayback, stableSeed, historyStats } from './history.js';
@@ -36,15 +34,13 @@ export const PLAYLIST_PERSONALIZATION_TOOL_NAMES = [
   'archive_playlist',
   'playlist_versioning',
 ] as const;
-export function registerPlaylistPersonalizationTools(s: any, c: SpotifyClient) {
-  const get = (p: string) => c.request<any>(p),
-    pid = (v: string) => parseSpotifyIdentifier(v, 'playlist').id;
-  const state = async (v: string) => {
-    const idv = pid(v),
-      meta: any = await get('/playlists/' + idv),
+export function registerPlaylistPersonalizationTools(s: any, playlists: PlaylistGateway) {
+  const state = async (v: string, options: Record<string, unknown> = {}) => {
+    const idv = v,
+      meta: any = await playlists.get(idv, options),
       all: any[] = [];
     for (let o = 0; o < 10000;) {
-      const p: any = await get(`/playlists/${idv}/items?limit=50&offset=${o}`),
+      const p: any = await playlists.items(idv, { ...options, limit: 50, offset: o }),
         page = p?.items ?? [];
       if (!page.length) break;
       all.push(...page);
@@ -84,7 +80,7 @@ export function registerPlaylistPersonalizationTools(s: any, c: SpotifyClient) {
       },
     },
     async (a: any) => {
-      const x = await state(a.playlist_id),
+      const x = await state(a.playlist_id, a),
         ranked = rankTracks(x.tracks, a.ranking_mode);
       return text({
         tracks: ranked.map((r, i) => ({
@@ -102,7 +98,7 @@ export function registerPlaylistPersonalizationTools(s: any, c: SpotifyClient) {
     a: any,
     mode: 'affinity' | 'freshness' | 'rediscovery' | 'recent_frequency',
   ) => {
-    const x = await state(a.playlist_id),
+    const x = await state(a.playlist_id, a),
       ranked = rankTracks(x.tracks, mode),
       after = ranked.map((r) => r.track),
       warnings = ranked.every(
@@ -123,14 +119,23 @@ export function registerPlaylistPersonalizationTools(s: any, c: SpotifyClient) {
       });
     const snap = saveSnapshot({
       playlistId: x.id,
+      // Keep the legacy identifiers only when an older caller omitted routing;
+      // MCP requests are bound by the wrapper before this callback runs.
+      providerId: a.provider ?? 'spotify',
+      connectionId: a.connection_id ?? 'spotify-default',
       spotifySnapshotId: x.meta?.snapshot_id,
       metadata: x.meta,
       uris: x.tracks.map((t) => t.uri!).filter(Boolean),
       reason: mode,
     });
-    await c.json(`/playlists/${x.id}/items`, { uris: uris.slice(0, 100) }, 'PUT');
-    for (const part of chunks(uris.slice(100)))
-      await c.json(`/playlists/${x.id}/items`, { uris: part });
+    await playlists.replace(
+      x.id,
+      after.flatMap((t) => (t.id ? [t.id] : [])),
+      {
+        provider: a.provider,
+        connection_id: a.connection_id,
+      },
+    );
     return text({
       safety_snapshot_id: snap.id,
       verification: { ok: true, count: uris.length },
@@ -153,7 +158,7 @@ export function registerPlaylistPersonalizationTools(s: any, c: SpotifyClient) {
     },
     async (a: any) => {
       if (a.direction === 'lowest_first') {
-        const x = await state(a.playlist_id);
+        const x = await state(a.playlist_id, a);
         const r = rankTracks(x.tracks).reverse();
         return layout({ ...a, playlist_id: a.playlist_id, seed: a.seed }, 'affinity');
       }
@@ -178,7 +183,7 @@ export function registerPlaylistPersonalizationTools(s: any, c: SpotifyClient) {
       },
     },
     async (a: any) => {
-      const x = await state(a.playlist_id),
+      const x = await state(a.playlist_id, a),
         ranked = rankTracks(x.tracks, 'affinity'),
         after = seededShuffle(
           ranked.map((r) => r.track),
@@ -210,11 +215,18 @@ export function registerPlaylistPersonalizationTools(s: any, c: SpotifyClient) {
       },
     },
     async (a: any) => {
-      const x = await state(a.playlist_id),
+      const x = await state(a.playlist_id, a),
         since = Date.now() - (a.lookback_hours ?? a.lookback_days * 24) * 3600000,
         h = listHistory({ since, limit: 1000 }),
-        ids = new Set(h.map((e: any) => e.spotifyTrackId)),
-        affected = x.tracks.filter((t) => t.id && ids.has(t.id)),
+        ids = new Set(
+          h.flatMap((e: any) =>
+            [e.trackId, e.providerTrackId, e.spotifyTrackId].filter((v) => v != null),
+          ),
+        ),
+        affected = x.tracks.filter(
+          (t) =>
+            t.id && (ids.has(t.id) || (t.canonicalTrackId != null && ids.has(t.canonicalTrackId))),
+        ),
         after =
           a.behavior === 'remove'
             ? x.tracks.filter((t) => !affected.includes(t))
@@ -239,9 +251,9 @@ export function registerPlaylistPersonalizationTools(s: any, c: SpotifyClient) {
       inputSchema: { playlist_id_a: id, playlist_id_b: id },
     },
     async (a: any) => {
-      const [x, y] = await Promise.all([state(a.playlist_id_a), state(a.playlist_id_b)]),
-        xs = new Set(x.tracks.map((t) => t.uri)),
-        ys = new Set(y.tracks.map((t) => t.uri));
+      const [x, y] = await Promise.all([state(a.playlist_id_a, a), state(a.playlist_id_b, a)]),
+        xs = new Set(x.tracks.map((t) => t.canonicalTrackId ?? t.uri)),
+        ys = new Set(y.tracks.map((t) => t.canonicalTrackId ?? t.uri));
       return text({
         only_in_a: x.tracks.filter((t) => !ys.has(t.uri)),
         only_in_b: y.tracks.filter((t) => !xs.has(t.uri)),
@@ -274,7 +286,7 @@ export function registerPlaylistPersonalizationTools(s: any, c: SpotifyClient) {
       },
     },
     async (a: any) => {
-      const x = await state(a.playlist_id),
+      const x = await state(a.playlist_id, a),
         q = seededShuffle(x.tracks, { seed: a.seed ?? 1, minArtistGap: a.min_artist_gap });
       let out: typeof q = [];
       for (const t of q) {
@@ -308,7 +320,7 @@ export function registerPlaylistPersonalizationTools(s: any, c: SpotifyClient) {
       },
     },
     async (a: any) => {
-      const x = await state(a.playlist_id),
+      const x = await state(a.playlist_id, a),
         r = rankTracks(x.tracks, 'affinity');
       return text({
         selected_track: r[0]?.track,
@@ -321,13 +333,15 @@ export function registerPlaylistPersonalizationTools(s: any, c: SpotifyClient) {
     'archive_playlist',
     {
       title: 'Archive playlist',
-      description: 'Persist an immutable local snapshot/version; no Spotify mutation.',
+      description: 'Persist an immutable local snapshot/version; no provider mutation.',
       inputSchema: { playlist_id: id, label: z.string().max(200).optional() },
     },
     async (a: any) => {
-      const x = await state(a.playlist_id),
+      const x = await state(a.playlist_id, a),
         snap = saveSnapshot({
           playlistId: x.id,
+          providerId: a.provider ?? 'spotify',
+          connectionId: a.connection_id ?? 'spotify-default',
           spotifySnapshotId: x.meta?.snapshot_id,
           metadata: x.meta,
           uris: x.tracks.map((t) => t.uri!).filter(Boolean),
@@ -342,7 +356,7 @@ export function registerPlaylistPersonalizationTools(s: any, c: SpotifyClient) {
       {
         title: name,
         description:
-          'Read-only local-first personalization operation with explicit evidence and no automatic Spotify mutation.',
+          'Read-only local-first personalization operation with explicit evidence and no automatic provider mutation.',
         inputSchema: schema,
       },
       fn,
