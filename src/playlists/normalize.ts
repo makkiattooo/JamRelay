@@ -1,28 +1,24 @@
-import { normalizeText } from '../spotify/normalize.js';
+import { normalizeText, normalizeTitle } from '../music/normalize.js';
 import type { NormalizedPlaylistTrack } from './types.js';
 
 const marker = (title: string, re: RegExp) => re.test(title);
-const comparisonTitle = (title: string) =>
-  normalizeText(title)
-    .replace(
-      /\b(?:\d{4}\s*)?(?:deluxe|expanded|anniversary|remaster(?:ed)?|radio\s*edit|live|acoustic|instrumental|sped\s*up|slowed|remix)\b/g,
-      '',
-    )
-    .replace(/\s+/g, ' ')
-    .trim();
 export function normalizePlaylistTrack(
   item: any,
   position: number,
 ): NormalizedPlaylistTrack | null {
   const x = item?.item ?? item;
-  if (!x || x.type !== 'track' || !x.uri) return null;
+  const metadata = x?.metadata ?? {};
+  if (!x || (x.type && x.type !== 'track') || (!x.uri && !metadata.providerUri)) return null;
   const title = String(x.name ?? ''),
     artists = Array.isArray(x.artists) ? x.artists : [],
     album = x.album ?? {};
-  const n = comparisonTitle(title);
+  const n = normalizeTitle(title);
   return {
     id: x.id ?? null,
-    uri: x.uri,
+    uri: x.uri ?? metadata.providerUri ?? null,
+    canonicalTrackId: x.canonicalTrackId ?? metadata.canonicalTrackId ?? null,
+    providerId: x.providerId ?? metadata.providerId ?? null,
+    connectionId: x.connectionId ?? metadata.connectionId ?? null,
     title,
     normalizedTitle: n,
     artistIds: artists.map((a: any) => a.id).filter(Boolean),
@@ -32,7 +28,11 @@ export function normalizePlaylistTrack(
     albumId: album.id ?? null,
     albumName: String(album.name ?? ''),
     normalizedAlbum: normalizeText(String(album.name ?? '')),
-    durationMs: Number.isFinite(x.duration_ms) ? x.duration_ms : null,
+    durationMs: Number.isFinite(x.duration_ms)
+      ? x.duration_ms
+      : Number.isFinite(metadata.durationMs)
+        ? metadata.durationMs
+        : null,
     explicit: Boolean(x.explicit),
     isrc: x.external_ids?.isrc ?? null,
     position,

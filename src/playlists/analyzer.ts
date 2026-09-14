@@ -1,4 +1,4 @@
-import { normalizeText } from '../spotify/normalize.js';
+import { normalizeText } from '../music/normalize.js';
 import type { DuplicateGroup, NormalizedPlaylistTrack } from './types.js';
 
 export function semanticDuplicateGroups(

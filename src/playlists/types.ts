@@ -1,5 +1,8 @@
 export type NormalizedPlaylistTrack = {
   id: string | null;
+  canonicalTrackId?: number | null;
+  providerId?: string | null;
+  connectionId?: string | null;
   uri: string | null;
   title: string;
   normalizedTitle: string;
