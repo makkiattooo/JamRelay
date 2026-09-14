@@ -14,16 +14,24 @@ JamRelay can be connected to ChatGPT as a custom remote MCP app using a public H
 
 For ChatGPT, use a **pre-registered confidential OAuth client**. ChatGPT shows an exact callback URL during setup and allows you to enter your own client ID and client secret.
 
-An existing JamRelay deployment using the legacy variables remains supported:
+Register the ChatGPT client in the static registry file:
 
-```dotenv
-MCP_OAUTH_CLIENT_ID=chatgpt-jamrelay
-MCP_OAUTH_CLIENT_SECRET=<STRONG_RANDOM_SECRET>
-MCP_OAUTH_REDIRECT_URI=<EXACT_CALLBACK_FROM_CHATGPT>
-MCP_OAUTH_OWNER_SECRET=<OWNER_APPROVAL_SECRET>
+```json
+{
+  "clients": [
+    {
+      "clientId": "chatgpt-jamrelay",
+      "clientName": "ChatGPT",
+      "clientSecret": "<STRONG_RANDOM_SECRET>",
+      "redirectUris": ["<EXACT_CALLBACK_FROM_CHATGPT>"]
+    }
+  ]
+}
 ```
 
-You can also move the ChatGPT client into `MCP_OAUTH_CLIENTS_PATH` if you want all static clients in one registry file. DCR can remain enabled at the same time for Claude, Gemini CLI, VS Code, and other clients.
+Set `MCP_OAUTH_CLIENTS_PATH` to this file and set
+`MCP_OAUTH_OWNER_SECRET` for approval. DCR can remain enabled at the same time
+for Claude, Gemini CLI, VS Code, and other clients.
 
 ## Configure ChatGPT
 

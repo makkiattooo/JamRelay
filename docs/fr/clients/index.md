@@ -1,7 +1,7 @@
 ---
 title: Compatibilité des clients IA
 translationReviewed: 2026-09-12
-sourceHash: 92ba01eb8652
+sourceHash: 9236fcfa4cb5
 ---
 
 # Compatibilité des clients IA
@@ -18,4 +18,4 @@ Endpoint distant : `https://mcp.example.com/mcp`. JamRelay prend en charge MCP O
 | Windsurf          | ✅           | ✅    | discovery OAuth / Bearer | pas encore vérifié de bout en bout |
 | MCP Inspector     | ✅           | ✅    | OAuth ou Bearer          | outil de test                      |
 
-Une seule instance peut servir simultanément un client legacy, un registre statique multi-client, DCR, des clients publics et confidentiels. CIMD n’est pas encore annoncé.
+Une seule instance peut servir simultanément des clients statiques, DCR, des clients publics et confidentiels. CIMD n’est pas encore annoncé.

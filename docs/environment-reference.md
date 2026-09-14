@@ -22,13 +22,70 @@ description: Generated reference for variables documented in .env.example.
 ### `SPOTIFY_REDIRECT_URI`
 
 - **Sensitive:** no
-- **Example/default in `.env.example`:** `http://127.0.0.1:5267/auth/spotify/callback`
+- **Example/default in `.env.example`:** `http://127.0.0.1:5267/auth/providers/spotify/callback`
 - **Notes:** Local development:
 
 ### `SPOTIFY_MARKET`
 
 - **Sensitive:** no
 - **Example/default in `.env.example`:** `PL`
+
+### `SPOTIFY_READ_CONCURRENCY`
+
+- **Sensitive:** no
+- **Example/default in `.env.example`:** `12`
+
+### `SOUNDCLOUD_CLIENT_ID`
+
+- **Sensitive:** no
+- **Example/default in `.env.example`:** _empty_
+
+### `SOUNDCLOUD_CLIENT_SECRET`
+
+- **Sensitive:** yes
+- **Example/default in `.env.example`:** _empty_
+
+### `SOUNDCLOUD_REDIRECT_URI`
+
+- **Sensitive:** no
+- **Example/default in `.env.example`:** `http://127.0.0.1:5267/auth/providers/soundcloud/callback`
+
+### `APPLE_MUSIC_TEAM_ID`
+
+- **Sensitive:** no
+- **Example/default in `.env.example`:** _empty_
+- **Notes:** Optional Apple Music API credentials. This is not Spotify-style OAuth: the server signs developer tokens with the private .p8 key, while a user authorizes MusicKit in a client/browser and submits the Music User Token through the protected owner route documented in docs/configuration.md.
+
+### `APPLE_MUSIC_KEY_ID`
+
+- **Sensitive:** no
+- **Example/default in `.env.example`:** _empty_
+
+### `APPLE_MUSIC_PRIVATE_KEY_PATH`
+
+- **Sensitive:** no
+- **Example/default in `.env.example`:** _empty_
+
+### `APPLE_MUSIC_STOREFRONT`
+
+- **Sensitive:** no
+- **Example/default in `.env.example`:** `us`
+
+### `YOUTUBE_CLIENT_ID`
+
+- **Sensitive:** no
+- **Example/default in `.env.example`:** _empty_
+- **Notes:** Optional official YouTube Data API v3 OAuth. This models YouTube playlists of videos, not an unofficial YouTube Music API. playlistItems writes consume quota units; credentials are stored encrypted by connection ID.
+
+### `YOUTUBE_CLIENT_SECRET`
+
+- **Sensitive:** yes
+- **Example/default in `.env.example`:** _empty_
+
+### `YOUTUBE_REDIRECT_URI`
+
+- **Sensitive:** no
+- **Example/default in `.env.example`:** `http://127.0.0.1:5267/auth/providers/youtube/callback`
 
 ### `ALTERNATE_TRACK_RESOLVER_URL`
 
@@ -83,6 +140,11 @@ description: Generated reference for variables documented in .env.example.
 - **Sensitive:** no
 - **Example/default in `.env.example`:** `info`
 
+### `JAMRELAY_TOOLSET`
+
+- **Sensitive:** no
+- **Example/default in `.env.example`:** `all`
+
 ### `JAMRELAY_DATA_DIR`
 
 - **Sensitive:** no
@@ -102,11 +164,11 @@ description: Generated reference for variables documented in .env.example.
 - **Sensitive:** yes
 - **Example/default in `.env.example`:** _empty_
 
-### `SPOTIFY_TOKEN_STORE_PATH`
+### `PROVIDER_CREDENTIAL_STORE_PATH`
 
 - **Sensitive:** no
 - **Example/default in `.env.example`:** _empty_
-- **Notes:** Encrypted Spotify token store. Local default: ./data/spotify-token.json Docker default (NODE_ENV=production): /data/spotify-token.json
+- **Notes:** Encrypted multi-provider credential store, keyed by connection ID. All provider credentials use this store. Local default: ./data/provider-credentials.json Docker default (NODE_ENV=production): /data/provider-credentials.json
 
 ## MCP authentication
 
@@ -144,20 +206,4 @@ description: Generated reference for variables documented in .env.example.
 
 - **Sensitive:** no
 - **Example/default in `.env.example`:** `true`
-- **Notes:** Dynamic Client Registration (RFC 7591 compatibility). true is recommended for Claude, Gemini CLI, VS Code and other clients that automatically register localhost callbacks. Set false to allow only pre-registered clients.
-
-### `MCP_OAUTH_CLIENT_ID`
-
-- **Sensitive:** no
-- **Example/default in `.env.example`:** _empty_
-- **Notes:** Legacy single pre-registered client. Kept for backwards compatibility and useful for ChatGPT or another provider that gives you an exact callback URL. Leave all three blank if you use only DCR and/or MCP_OAUTH_CLIENTS_PATH.
-
-### `MCP_OAUTH_CLIENT_SECRET`
-
-- **Sensitive:** yes
-- **Example/default in `.env.example`:** _empty_
-
-### `MCP_OAUTH_REDIRECT_URI`
-
-- **Sensitive:** no
-- **Example/default in `.env.example`:** _empty_
+- **Notes:** Dynamic Client Registration (RFC 7591). true is recommended for Claude, Gemini CLI, VS Code and other clients that automatically register localhost callbacks. Set false to allow only pre-registered clients.

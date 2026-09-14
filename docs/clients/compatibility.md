@@ -21,4 +21,4 @@ This matrix separates **protocol compatibility** from **end-to-end verification*
 JamRelay now supports several OAuth clients simultaneously. It no longer requires changing one global redirect URI when moving between ChatGPT, Claude, Gemini, Cursor, or VS Code.
 
 > [!NOTE]
-> The MCP 2026-07-28 specification prefers **Client ID Metadata Documents (CIMD)** for new client registration and deprecates DCR long-term. JamRelay currently provides DCR for broad compatibility with deployed clients and does not advertise CIMD yet. See [OAuth and multi-client compatibility](/clients/oauth-compatibility).
+> The MCP 2026-07-28 specification prefers **Client ID Metadata Documents (CIMD)** for new client registration. JamRelay currently provides the static registry and RFC 7591 DCR and does not advertise CIMD yet. See [MCP OAuth registration](/clients/oauth-compatibility).

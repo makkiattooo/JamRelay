@@ -1,7 +1,7 @@
 ---
 title: OAuth i wielu klientów
 translationReviewed: 2026-09-12
-sourceHash: 26dfccbf5620
+sourceHash: 3409130e2dab
 ---
 
 # OAuth i wielu klientów
@@ -20,7 +20,7 @@ Klient MCP nigdy nie dostaje Spotify client secret, Spotify refresh tokena, kluc
 
 ## Jedna instancja, wiele klientów
 
-Równocześnie mogą działać: legacy pre-registered client, dowolna liczba statycznych klientów z `MCP_OAUTH_CLIENTS_PATH`, dynamic clients przez `/oauth/register`, public clients (`none`), confidential clients (`client_secret_basic` / `client_secret_post`) oraz opcjonalny `MCP_API_KEY`.
+Równocześnie mogą działać: statyczni klienci z `MCP_OAUTH_CLIENTS_PATH`, dynamic clients przez `/oauth/register`, public clients (`none`), confidential clients (`client_secret_basic` / `client_secret_post`) oraz opcjonalny `MCP_API_KEY`.
 
 ## Rejestracja MCP
 

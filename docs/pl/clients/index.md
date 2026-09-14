@@ -1,7 +1,7 @@
 ---
 title: Kompatybilność klientów AI
 translationReviewed: 2026-09-12
-sourceHash: 92ba01eb8652
+sourceHash: 9236fcfa4cb5
 ---
 
 # Kompatybilność klientów AI
@@ -19,7 +19,6 @@ Obsługuje **MCP OAuth** oraz opcjonalny statyczny **Bearer** do debugowania alb
 Jedna instancja może jednocześnie obsługiwać:
 
 ```text
-legacy single static client     ✅ zgodność wsteczna
 multi-client static registry    ✅
 Dynamic Client Registration     ✅
 public OAuth clients            ✅

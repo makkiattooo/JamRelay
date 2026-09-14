@@ -29,6 +29,7 @@ export const sections: Section[] = [
       { path: 'architecture', label: 'How JamRelay works' },
       { path: 'database-first-resolution', label: 'Database-first track resolution' },
       { path: 'playlist-safety', label: 'Playlist safety, snapshots and undo' },
+      { path: 'playlist-chapters', label: 'Playlist chapters' },
       { path: 'state-database', label: 'State and persistence' },
       { path: 'operations', label: 'Jobs and rate limits' },
     ],

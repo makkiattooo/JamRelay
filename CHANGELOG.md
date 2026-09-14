@@ -5,11 +5,19 @@ All notable changes to JamRelay are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] — multi-provider release candidate
+
+- Release-engineering validation for provider-neutral routing, Connection Hub,
+  MCP connection/permission grants, migrations, backup/rollback procedures and
+  deployment compatibility.
+- Manual provider credentials remain required before production readiness is
+  declared.
+
 ## [1.1.0] - 2026-09-13
 
 JamRelay v1.1.0 is the largest update since the initial public release.
 
-This release turns JamRelay from a relatively thin Spotify MCP server into a
+This release turns JamRelay from a relatively thin provider bridge into a
 stateful, self-hosted music automation platform with persistent local state,
 database-first track resolution, durable jobs, playlist planning and safety,
 rules and recipes, personalization, local history, stronger diagnostics,

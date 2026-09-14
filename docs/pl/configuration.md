@@ -1,7 +1,7 @@
 ---
 title: Konfiguracja
 translationReviewed: 2026-09-12
-sourceHash: 9995ae91d43c
+sourceHash: c33366e9f0bd
 ---
 
 # Konfiguracja
@@ -42,15 +42,8 @@ DCR:
 MCP_OAUTH_DCR_ENABLED=true
 ```
 
-Legacy/static ChatGPT wymaga kompletu:
-
-```dotenv
-MCP_OAUTH_CLIENT_ID=
-MCP_OAUTH_CLIENT_SECRET=
-MCP_OAUTH_REDIRECT_URI=
-```
-
-Wiele statycznych klientów: ustaw `MCP_OAUTH_CLIENTS_PATH` i użyj `examples/mcp-oauth-clients.example.json`.
+Klientów statycznych używa się przez `MCP_OAUTH_CLIENTS_PATH` i plik
+`examples/mcp-oauth-clients.example.json`.
 
 ## Generowanie sekretów
 

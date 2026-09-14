@@ -33,7 +33,7 @@ Turn high-level requests into deterministic, inspectable and reversible music op
 
 JamRelay is a **self-hosted music automation engine** that connects MCP clients to Spotify while adding a stateful automation layer on top of the raw API.
 
-A basic Spotify MCP server can search for a track, read a playlist or skip playback. JamRelay goes further: it can persist local state, resolve known tracks without repeated Spotify Search calls, analyze playlists, plan mutations, preview them, snapshot state, execute bounded changes, verify the result, resume jobs after restarts and derive local personalization signals from events it actually observed.
+JamRelay is a provider-neutral MCP music automation server. It can persist local state, resolve known tracks without repeated catalog calls, analyze playlists, plan mutations, preview them, snapshot state, execute bounded changes, verify the result, resume jobs after restarts and derive local personalization signals from events it actually observed.
 
 The goal is not to make an AI client manually coordinate hundreds of Spotify API requests.
 
@@ -130,22 +130,22 @@ Personalization is derived from evidence JamRelay actually has, with observed fa
 
 ## Core capabilities
 
-| Area | Examples |
-| --- | --- |
-| **Spotify access** | Search, tracks, artists, albums, playlists, library, playback, devices |
-| **Track resolution** | DB-first lookup, aliases, ambiguity handling, alternate resolver fallback |
-| **Playlist analysis** | Health reports, duration, concentration, duplicates, repetition |
-| **Playlist layout** | Smart shuffle, artist balancing, artist/album gaps, smart insertion |
-| **Playlist cleanup** | Exact/semantic dedupe, filters, artist limits |
-| **Playlist composition** | Merge, split, clone, sync, extract, move, replace |
-| **Safety** | Dry runs, plans, snapshots, verification, restore, undo |
-| **Automation** | Rules, recipes, bulk operations, optimization |
-| **State** | SQLite persistence, migrations, diagnostics, error history |
-| **Jobs** | Durable execution, retry state, resume, cancel, commit |
-| **History** | Locally observed listening events with provenance |
-| **Personalization** | Affinity ranking, recent-play avoidance, rediscovery, deep cuts |
-| **Sessions** | Session queues, duration targets, artist spacing, smart next |
-| **Rotations** | Daily mixes, weekly rotations, persistent schedules |
+| Area                     | Examples                                                                  |
+| ------------------------ | ------------------------------------------------------------------------- |
+| **Spotify access**       | Search, tracks, artists, albums, playlists, library, playback, devices    |
+| **Track resolution**     | DB-first lookup, aliases, ambiguity handling, alternate resolver fallback |
+| **Playlist analysis**    | Health reports, duration, concentration, duplicates, repetition           |
+| **Playlist layout**      | Smart shuffle, artist balancing, artist/album gaps, smart insertion       |
+| **Playlist cleanup**     | Exact/semantic dedupe, filters, artist limits                             |
+| **Playlist composition** | Merge, split, clone, sync, extract, move, replace                         |
+| **Safety**               | Dry runs, plans, snapshots, verification, restore, undo                   |
+| **Automation**           | Rules, recipes, bulk operations, optimization                             |
+| **State**                | SQLite persistence, migrations, diagnostics, error history                |
+| **Jobs**                 | Durable execution, retry state, resume, cancel, commit                    |
+| **History**              | Locally observed listening events with provenance                         |
+| **Personalization**      | Affinity ranking, recent-play avoidance, rediscovery, deep cuts           |
+| **Sessions**             | Session queues, duration targets, artist spacing, smart next              |
+| **Rotations**            | Daily mixes, weekly rotations, persistent schedules                       |
 
 The exact MCP surface is generated from the runtime registry.
 
@@ -343,7 +343,7 @@ npm run dev
 Authorize Spotify:
 
 ```text
-http://127.0.0.1:5267/auth/spotify/login
+http://127.0.0.1:5267/auth/providers/spotify/start
 ```
 
 Check:
@@ -375,9 +375,10 @@ JamRelay uses MCP Streamable HTTP and includes setup notes for:
 - Windsurf
 - MCP Inspector
 
-ChatGPT has been exercised end-to-end against the project deployment. Other clients may be protocol-compatible without every release being independently re-tested.
+Automated MCP protocol tests cover the server surface. Live third-party client
+verification remains a manual release-owner check for each target client.
 
-See [Connect clients](docs/clients/index.md) and [OAuth compatibility](docs/clients/oauth-compatibility.md).
+See [Connect clients](docs/clients/index.md) and [MCP OAuth registration](docs/clients/oauth-compatibility.md).
 
 ---
 
@@ -505,15 +506,17 @@ flowchart LR
     F --> I
     G --> I
     H --> I
-    E --> J[Spotify client]
+    E --> J[ProviderRegistry]
     F --> J
     G --> J
-    J --> K[Spotify Web API]
+    J --> K[Provider adapters and APIs]
 ```
 
 JamRelay's MCP tools are an interface to this architecture, not the architecture itself.
 
 See [Architecture](docs/architecture.md).
+
+The multi-provider execution, synchronization and release audit is documented in [Release audit](docs/release-audit.md).
 
 ---
 

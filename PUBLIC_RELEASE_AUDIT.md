@@ -4,7 +4,9 @@ Date: 2026-09-12
 
 ## Release status
 
-The v1.0.0 technical release gate is **ready** once this final patch passes `npm run check` on the release machine. The previous multi-client OAuth patch already passed 57/57 tests, lint, typecheck, TypeScript build and VitePress build on Windows.
+The multi-provider release candidate passes the automated release gate in the
+current checkout. Production readiness still requires the manual provider and
+deployment checks listed in `docs/deployment/release-candidate.md`.
 
 ## Verified technical scope
 
@@ -25,7 +27,10 @@ The v1.0.0 technical release gate is **ready** once this final patch passes `npm
 
 ## Client verification language
 
-ChatGPT has been exercised end-to-end against the project deployment. MCP Inspector has been used for protocol/debug verification. Claude, Gemini CLI, Cursor, VS Code/Copilot and Windsurf are documented against current vendor behavior, but should remain labelled protocol-compatible/not-yet-manually-verified until each current client build is exercised against this exact release.
+No third-party MCP client is marked as manually verified against this exact
+release candidate. The repository contains protocol integration tests; live
+ChatGPT, Claude, Gemini CLI, Cursor, VS Code/Copilot and Windsurf verification
+remain manual checks.
 
 ## Documentation maintenance model
 
@@ -52,4 +57,5 @@ npm ci
 npm run check
 ```
 
-If both commands succeed on the clean release checkout/working tree, the technical v1.0.0 gate is satisfied.
+If both commands succeed on a clean release checkout and the manual checklist
+is complete, the release owner may mark the candidate production-ready.

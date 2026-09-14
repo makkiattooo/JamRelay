@@ -1,7 +1,7 @@
 ---
 title: VS Code + GitHub Copilot
 translationReviewed: 2026-09-12
-sourceHash: fb8ca57a672d
+sourceHash: 2d8662a20b76
 ---
 
 # VS Code + GitHub Copilot

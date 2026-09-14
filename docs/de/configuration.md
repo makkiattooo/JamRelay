@@ -1,7 +1,7 @@
 ---
 title: Konfiguration
 translationReviewed: 2026-09-12
-sourceHash: 9995ae91d43c
+sourceHash: c33366e9f0bd
 ---
 
 # Konfiguration
@@ -12,7 +12,7 @@ Lokal liegen Stores standardmäßig unter `./data/`; in Docker Production unter 
 
 `MCP_AUTH_MODE=bearer` aktiviert `MCP_API_KEY`. `MCP_AUTH_MODE=none` deaktiviert nur den statischen API-Key und macht `/mcp` **nicht** öffentlich. `.env.example` verwendet deshalb standardmäßig `none`.
 
-OAuth benötigt `MCP_OAUTH_OWNER_SECRET`. DCR wird mit `MCP_OAUTH_DCR_ENABLED=true` aktiviert. Ein Legacy/Static-ChatGPT-Client benötigt `MCP_OAUTH_CLIENT_ID`, `MCP_OAUTH_CLIENT_SECRET` und `MCP_OAUTH_REDIRECT_URI` vollständig. Mehrere statische Clients kommen in `MCP_OAUTH_CLIENTS_PATH`.
+OAuth benötigt `MCP_OAUTH_OWNER_SECRET`. DCR wird mit `MCP_OAUTH_DCR_ENABLED=true` aktiviert. Statische Clients werden in `MCP_OAUTH_CLIENTS_PATH` definiert.
 
 Secrets erzeugen:
 

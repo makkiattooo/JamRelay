@@ -20,8 +20,13 @@ JamRelay includes an OAuth authorization server for remote MCP clients. Spotify 
 - public clients with `token_endpoint_auth_method=none`;
 - confidential clients with `client_secret_basic` or `client_secret_post`;
 - multiple static clients;
-- RFC 7591 Dynamic Client Registration for deployed-client compatibility;
+- RFC 7591 Dynamic Client Registration for deployed clients;
 - owner approval protected by `MCP_OAUTH_OWNER_SECRET`.
+
+After approval, the consent screen records the selected provider connections and
+operation permissions in the MCP grant. The owner can review, replace, or
+revoke grants through the Connection Hub. Tokens without a current grant are
+rejected and must be authorized again.
 
 ## Authorization screen
 
@@ -55,19 +60,6 @@ Discovery chain:
 /oauth/authorize
 /oauth/token
 ```
-
-## Existing ChatGPT setup stays valid
-
-The original single pre-registered client variables remain supported:
-
-```dotenv
-MCP_OAUTH_CLIENT_ID=chatgpt-jamrelay
-MCP_OAUTH_CLIENT_SECRET=<STRONG_RANDOM_SECRET>
-MCP_OAUTH_REDIRECT_URI=<EXACT_CALLBACK_FROM_CHATGPT>
-MCP_OAUTH_OWNER_SECRET=<OWNER_APPROVAL_SECRET>
-```
-
-That client can coexist with DCR and the multi-client registry.
 
 ## Multiple static clients
 
@@ -144,6 +136,9 @@ The store contains hashed authorization codes/tokens, refresh-token state, and D
 
 The MCP 2026-07-28 specification prefers **Client ID Metadata Documents (CIMD)** and deprecates DCR long-term. JamRelay intentionally does not advertise CIMD in this release.
 
-Supporting CIMD on the authorization-server side means fetching client-controlled HTTPS metadata. That should be added only with deliberate SSRF and DNS-rebinding protections. Current compatibility is provided through pre-registration plus DCR.
+Supporting CIMD on the authorization-server side means fetching client-controlled HTTPS metadata. That should be added only with deliberate SSRF and DNS-rebinding protections. Current registration is provided through the static registry plus DCR.
 
-See [OAuth and multi-client compatibility](/clients/oauth-compatibility) for client-specific behavior.
+See [MCP OAuth registration](/clients/oauth-compatibility) for client-specific behavior.
+
+See [Provider connections](/provider-connections) and [Security](/security) for
+owner-session and grant-enforcement details.

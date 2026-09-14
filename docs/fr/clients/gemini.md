@@ -1,7 +1,7 @@
 ---
 title: Gemini CLI
 translationReviewed: 2026-09-12
-sourceHash: 6da9f76680dd
+sourceHash: 1b85be5d8525
 ---
 
 # Gemini CLI

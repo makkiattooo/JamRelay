@@ -1,9 +1,9 @@
 ---
-title: OAuth and multi-client compatibility
+title: MCP OAuth registration
 description: How JamRelay supports several MCP OAuth clients on one deployment using pre-registration and Dynamic Client Registration.
 ---
 
-# OAuth and multi-client compatibility
+# MCP OAuth registration
 
 JamRelay separates two unrelated authorization layers:
 
@@ -25,18 +25,17 @@ The MCP client never receives the Spotify client secret, Spotify refresh token, 
 
 A single JamRelay deployment can now accept all of these simultaneously:
 
-1. the existing legacy pre-registered client from `MCP_OAUTH_CLIENT_ID`, `MCP_OAUTH_CLIENT_SECRET`, and `MCP_OAUTH_REDIRECT_URI`;
-2. any number of operator-defined pre-registered clients from `MCP_OAUTH_CLIENTS_PATH`;
-3. dynamically registered clients through `/oauth/register` when `MCP_OAUTH_DCR_ENABLED=true`;
-4. public OAuth clients using PKCE with `token_endpoint_auth_method=none`;
-5. confidential clients using `client_secret_basic` or `client_secret_post`;
-6. the optional static `MCP_API_KEY` Bearer path for debugging/manual clients.
+1. operator-defined pre-registered clients from `MCP_OAUTH_CLIENTS_PATH`;
+2. dynamically registered clients through `/oauth/register` when `MCP_OAUTH_DCR_ENABLED=true`;
+3. public OAuth clients using PKCE with `token_endpoint_auth_method=none`;
+4. confidential clients using `client_secret_basic` or `client_secret_post`;
+5. the optional static `MCP_API_KEY` Bearer path for debugging/manual clients.
 
-The legacy client remains supported so an existing ChatGPT connection does not need to be recreated just to add Gemini CLI, Claude, Cursor, VS Code, or another client.
+Clients must be registered in the current static registry or through DCR.
 
 ## Current MCP registration landscape
 
-The MCP 2026-07-28 specification moved toward **Client ID Metadata Documents (CIMD)** and formally deprecated DCR as the long-term registration mechanism. DCR remains available for backwards compatibility and is still documented by several major deployed clients.
+The MCP 2026-07-28 specification moved toward **Client ID Metadata Documents (CIMD)**. JamRelay currently supports the static registry and RFC 7591 DCR; CIMD is not advertised until a hardened metadata-fetch path is available.
 
 JamRelay therefore implements:
 
@@ -52,7 +51,7 @@ CIMD requires the authorization server to fetch a client-controlled HTTPS metada
 
 | Client                 | Vendor-documented behavior                                                                                                                                                                                            | Best current JamRelay path                                |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| ChatGPT custom MCP app | user-defined OAuth client with an exact callback; confidential client credentials supported                                                                                                                           | legacy/static pre-registration                            |
+| ChatGPT custom MCP app | user-defined OAuth client with an exact callback; confidential client credentials supported                                                                                                                           | static registry                                           |
 | Claude hosted surfaces | DCR is supported; a custom client ID and client secret can also be supplied. Claude documents `https://claude.ai/api/mcp/auth_callback` as its callback.                                                              | DCR, or static pre-registration                           |
 | Claude Code            | remote MCP OAuth uses MCP discovery/registration behavior; use DCR where supported or pre-register credentials when needed                                                                                            | DCR or static pre-registration                            |
 | Gemini CLI             | automatic discovery and DCR; random localhost callback by default; validates RFC 9207 `iss`                                                                                                                           | DCR public client                                         |
@@ -141,7 +140,7 @@ The protected resource is:
 https://mcp.example.com/mcp
 ```
 
-JamRelay validates a supplied OAuth `resource` parameter against that endpoint. Omission is temporarily tolerated for compatibility with older clients.
+JamRelay validates a supplied OAuth `resource` parameter against that endpoint.
 
 Authorization redirects include:
 
@@ -160,7 +159,7 @@ JamRelay serves both protected-resource discovery forms:
 /.well-known/oauth-protected-resource/mcp
 ```
 
-The second path-suffixed form improves compatibility with clients that follow RFC 9728 discovery from a protected resource hosted at `/mcp`.
+The second path-suffixed form supports clients that follow RFC 9728 discovery from a protected resource hosted at `/mcp`.
 
 Authorization-server metadata is available at:
 

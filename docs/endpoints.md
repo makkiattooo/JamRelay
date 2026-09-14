@@ -8,8 +8,17 @@ The application is an Express server. URLs are relative to `PUBLIC_BASE_URL`. Th
 | --------------------- | ------------------------------------------- | ----------------------- | ---------------------------------------- |
 | `GET`                 | `/health`                                   | none                    | Liveness and connection summary          |
 | `GET`                 | `/auth/status`                              | none                    | Spotify connection summary               |
-| `GET`                 | `/auth/spotify/login`                       | none                    | Starts Spotify authorization             |
-| `GET`                 | `/auth/spotify/callback`                    | Spotify state           | Completes Spotify authorization          |
+| `GET`                 | `/auth/providers/:provider/start`           | none                    | Generic provider onboarding entrypoint   |
+| `GET`                 | `/auth/providers/:provider/callback`        | provider state          | Completes provider authorization         |
+| `GET`                 | `/owner/login`                              | none                    | Owner session login page                 |
+| `POST`                | `/owner/login`                              | owner secret            | Creates an HttpOnly owner session        |
+| `POST`                | `/owner/logout`                             | owner session           | Invalidates the owner session            |
+| `GET`                 | `/connections`                              | owner session           | Connection Hub inventory                 |
+| `GET/PATCH/DELETE`    | `/connections/:connectionId`                | owner + CSRF for writes | Inspect or manage one connection         |
+| `GET`                 | `/owner/grants`                             | owner session           | List MCP grants                          |
+| `PATCH/DELETE`        | `/owner/grants/:clientId`                   | owner + CSRF            | Modify or revoke an MCP grant            |
+| `GET`                 | `/auth/providers/:provider/start`           | none                    | Starts provider authorization            |
+| `GET`                 | `/auth/providers/:provider/callback`        | provider state          | Completes provider authorization         |
 | `GET`                 | `/.well-known/oauth-protected-resource`     | none                    | MCP protected-resource metadata          |
 | `GET`                 | `/.well-known/oauth-protected-resource/mcp` | none                    | RFC 9728 path-suffixed metadata          |
 | `GET`                 | `/.well-known/oauth-authorization-server`   | none                    | MCP authorization-server metadata        |
@@ -29,7 +38,7 @@ curl -fsS https://mcp.example.com/auth/status
 
 ## Spotify authorization
 
-1. Open `/auth/spotify/login`.
+1. Open `/auth/providers/spotify/start`.
 2. The server creates a random state and redirects to Spotify with configured scopes.
 3. Spotify redirects to the exact `SPOTIFY_REDIRECT_URI`.
 4. The server consumes the state once, exchanges the code, and stores encrypted tokens.
@@ -61,4 +70,8 @@ Authorization-server metadata advertises:
 - `client_secret_post`;
 - `/oauth/register` when DCR is enabled.
 
-JamRelay can resolve OAuth clients from the backwards-compatible legacy environment variables, the static multi-client registry, or the dynamic-client store.
+JamRelay resolves OAuth clients from the static multi-client registry or the dynamic-client store.
+
+Owner routes are separate from provider OAuth routes. Provider OAuth creates or
+refreshes a provider connection; MCP OAuth creates a client grant over the
+connections and permissions selected on its consent screen.

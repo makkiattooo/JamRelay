@@ -4,7 +4,7 @@ The server registers the core tools plus authenticated State DB tools when the r
 
 ## Catalog and discovery
 
-`search_tracks`, `search_artists`, `search_albums`, `get_track`, `get_artist`, `find_track_exact`, and `find_playlist_by_name` are reads. `get_artist_top_tracks` remains registered for compatibility and returns `spotify_feature_removed` because Spotify removed that endpoint.
+`search_tracks`, `search_artists`, `search_albums`, `get_track`, `get_artist`, `find_track_exact`, and `find_playlist_by_name` are reads. `get_artist_top_tracks` reports `spotify_feature_removed` because Spotify removed that endpoint.
 
 ## Playlists
 

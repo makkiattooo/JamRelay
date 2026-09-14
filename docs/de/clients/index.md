@@ -1,7 +1,7 @@
 ---
 title: AI-Client-Kompatibilität
 translationReviewed: 2026-09-12
-sourceHash: 92ba01eb8652
+sourceHash: 9236fcfa4cb5
 ---
 
 # AI-Client-Kompatibilität
@@ -18,4 +18,4 @@ Remote MCP Streamable HTTP: `https://mcp.example.com/mcp`. JamRelay unterstützt
 | Windsurf          | ✅          | ✅    | OAuth Discovery / Bearer | noch nicht Ende-zu-Ende verifiziert |
 | MCP Inspector     | ✅          | ✅    | OAuth oder Bearer        | Testwerkzeug                        |
 
-Eine Instanz kann Legacy Static Client, Multi-Client-Registry, DCR, Public und Confidential OAuth Clients gleichzeitig bedienen. CIMD wird noch nicht beworben.
+Eine Instanz kann mehrere statische Clients, DCR sowie öffentliche und vertrauliche OAuth-Clients bedienen. CIMD wird noch nicht beworben.

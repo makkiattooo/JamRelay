@@ -1,7 +1,7 @@
 ---
 title: Compatibilidad de clientes de IA
 translationReviewed: 2026-09-12
-sourceHash: 92ba01eb8652
+sourceHash: 9236fcfa4cb5
 ---
 
 # Compatibilidad de clientes de IA
@@ -18,4 +18,4 @@ Endpoint remoto: `https://mcp.example.com/mcp`. JamRelay admite MCP OAuth y Bear
 | Windsurf          | ✅          | ✅    | discovery OAuth / Bearer | aún no verificado end-to-end   |
 | MCP Inspector     | ✅          | ✅    | OAuth o Bearer           | herramienta de prueba          |
 
-Una instancia puede servir simultáneamente cliente legacy, registro estático multi-cliente, DCR, clientes públicos y confidenciales. CIMD todavía no se anuncia.
+Una instancia puede servir simultáneamente clientes estáticos, DCR, clientes públicos y confidenciales. CIMD todavía no se anuncia.

@@ -7,7 +7,7 @@ description: Generated reference for the MCP tools registered by the server.
 
 > **Generated file.** Do not edit this page by hand. Run `npm run docs:generate` after changing MCP tool registrations.
 
-Generated from the runtime tool registry. Current tool count: **103**.
+Generated from the runtime tool registry. Current tool count: **115**.
 
 ## `add_tracks_by_search`
 
@@ -37,10 +37,13 @@ Add tracks sequentially in chunks of at most 100 using /items.
 
 **Arguments:**
 
-| Argument      | Type    | Required | Details |
-| ------------- | ------- | -------: | ------- |
-| `playlist_id` | unknown |      yes | —       |
-| `track_ids`   | unknown |      yes | —       |
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `playlist_id`             | unknown |      yes | —       |
+| `track_ids`               | unknown |      yes | —       |
+| `connection_id`           | unknown |      yes | —       |
+| `provider`                | unknown |      yes | —       |
+| `preferred_connection_id` | unknown |      yes | —       |
 
 ## `apply_playlist_recipe`
 
@@ -66,7 +69,7 @@ Apply a persistent recipe; dry_run defaults true, execution creates one safety s
 
 **Type:** Write / action
 
-Persist an immutable local snapshot/version; no Spotify mutation.
+Persist an immutable local snapshot/version; no provider mutation.
 
 **Arguments:**
 
@@ -193,6 +196,27 @@ Cancel a durable job without deleting its history.
 | -------- | ------- | -------: | ------- |
 | `job_id` | unknown |      yes | —       |
 
+## `chapterize_playlist`
+
+**Title:** Chapterize playlist
+
+**Type:** Read
+
+Analyze the existing playlist order into deterministic narrative chapters. Read-only for Spotify.
+
+**Arguments:**
+
+| Argument                 | Type    | Required | Details |
+| ------------------------ | ------- | -------: | ------- |
+| `playlist_id`            | unknown |      yes | —       |
+| `style`                  | unknown |      yes | —       |
+| `target_chapter_minutes` | unknown |      yes | —       |
+| `min_chapter_minutes`    | unknown |      yes | —       |
+| `max_chapter_minutes`    | unknown |      yes | —       |
+| `chapter_count`          | unknown |      yes | —       |
+| `regenerate_titles`      | unknown |      yes | —       |
+| `save`                   | unknown |      yes | —       |
+
 ## `check_saved_tracks`
 
 **Title:** Check saved tracks
@@ -203,9 +227,13 @@ Return an exact input-to-saved mapping using current /me/library/contains.
 
 **Arguments:**
 
-| Argument    | Type    | Required | Details |
-| ----------- | ------- | -------: | ------- |
-| `track_ids` | unknown |      yes | —       |
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `track_ids`               | unknown |      yes | —       |
+| `connection_id`           | unknown |      yes | —       |
+| `provider`                | unknown |      yes | —       |
+| `preferred_connection_id` | unknown |      yes | —       |
+| `read_fallback`           | unknown |      yes | —       |
 
 ## `clone_playlist`
 
@@ -258,7 +286,7 @@ Read-only efficient URI, artist, album and duration comparison.
 
 **Type:** Read
 
-Read-only local-first personalization operation with explicit evidence and no automatic Spotify mutation.
+Read-only local-first personalization operation with explicit evidence and no automatic provider mutation.
 
 **Arguments:**
 
@@ -294,12 +322,15 @@ Create a playlist; collaborative playlists must be private.
 
 **Arguments:**
 
-| Argument        | Type    | Required | Details |
-| --------------- | ------- | -------: | ------- |
-| `name`          | unknown |      yes | —       |
-| `description`   | unknown |      yes | —       |
-| `public`        | unknown |      yes | —       |
-| `collaborative` | unknown |      yes | —       |
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `name`                    | unknown |      yes | —       |
+| `description`             | unknown |      yes | —       |
+| `public`                  | unknown |      yes | —       |
+| `collaborative`           | unknown |      yes | —       |
+| `connection_id`           | unknown |      yes | —       |
+| `provider`                | unknown |      yes | —       |
+| `preferred_connection_id` | unknown |      yes | —       |
 
 ## `create_playlist_from_tracks`
 
@@ -311,14 +342,17 @@ Resolves all tracks before creation in strict mode, then creates and inserts seq
 
 **Arguments:**
 
-| Argument          | Type    | Required | Details |
-| ----------------- | ------- | -------: | ------- |
-| `name`            | unknown |      yes | —       |
-| `description`     | unknown |      yes | —       |
-| `public`          | unknown |      yes | —       |
-| `tracks`          | unknown |      yes | —       |
-| `strict`          | unknown |      yes | —       |
-| `skip_duplicates` | unknown |      yes | —       |
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `name`                    | unknown |      yes | —       |
+| `description`             | unknown |      yes | —       |
+| `public`                  | unknown |      yes | —       |
+| `tracks`                  | unknown |      yes | —       |
+| `strict`                  | unknown |      yes | —       |
+| `skip_duplicates`         | unknown |      yes | —       |
+| `connection_id`           | unknown |      yes | —       |
+| `provider`                | unknown |      yes | —       |
+| `preferred_connection_id` | unknown |      yes | —       |
 
 ## `deduplicate_playlist`
 
@@ -340,7 +374,7 @@ Fetches all items, preserves first occurrence and order, and refuses lossless re
 
 **Type:** Read
 
-Read-only local-first personalization operation with explicit evidence and no automatic Spotify mutation.
+Read-only local-first personalization operation with explicit evidence and no automatic provider mutation.
 
 **Arguments:**
 
@@ -384,21 +418,58 @@ Read-only conservative Spotify API request estimate; no financial pricing.
 | `operation`   | unknown |      yes | —       |
 | `track_count` | unknown |      yes | —       |
 
+## `execute_playlist_transfer`
+
+**Title:** Execute playlist transfer
+
+**Type:** Read
+**Destructive hint:** yes
+
+Execute a previously validated transfer plan against the explicitly selected destination. Requires confirmation and verifies the resulting playlist.
+
+**Arguments:**
+
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `transfer_plan`           | unknown |      yes | —       |
+| `destination_playlist_id` | unknown |      yes | —       |
+| `confirm`                 | unknown |      yes | —       |
+| `resumed`                 | unknown |      yes | —       |
+
+## `export_playlist`
+
+**Title:** Export playlist
+
+**Type:** Read
+
+Export provider-neutral canonical playlist data without credentials or provider calls.
+
+**Arguments:**
+
+| Argument   | Type    | Required | Details |
+| ---------- | ------- | -------: | ------- |
+| `format`   | unknown |      yes | —       |
+| `playlist` | unknown |      yes | —       |
+
 ## `extend_playlist_to_duration`
+
+**Title:** Extend playlist to duration
 
 **Type:** Write / action
 **Destructive hint:** yes
 
-extend_playlist_to_duration is planned through the shared playlist engine; dry_run defaults true.
+Resolve a local candidate pool, append only needed tracks, snapshot and verify.
 
 **Arguments:**
 
 | Argument             | Type    | Required | Details |
 | -------------------- | ------- | -------: | ------- |
 | `playlist_id`        | unknown |      yes | —       |
-| `dry_run`            | unknown |      yes | —       |
-| `percentage`         | unknown |      yes | —       |
 | `target_duration_ms` | unknown |      yes | —       |
+| `dry_run`            | unknown |      yes | —       |
+| `candidate_limit`    | unknown |      yes | —       |
+| `min_artist_gap`     | unknown |      yes | —       |
+| `seed`               | unknown |      yes | —       |
 
 ## `extract_artist_tracks`
 
@@ -438,7 +509,7 @@ Filter by typed deterministic predicates; dry_run defaults true.
 
 **Type:** Read
 
-Read-only local-first personalization operation with explicit evidence and no automatic Spotify mutation.
+Read-only local-first personalization operation with explicit evidence and no automatic provider mutation.
 
 **Arguments:**
 
@@ -526,13 +597,17 @@ generate_weekly_rotation remains local-first and dry-run by default; no unsuppor
 
 **Type:** Read
 
-Get a Spotify artist by ID, URI, or URL.
+Get a provider artist by ID, URI, or URL.
 
 **Arguments:**
 
-| Argument    | Type    | Required | Details |
-| ----------- | ------- | -------: | ------- |
-| `artist_id` | unknown |      yes | —       |
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `artist_id`               | unknown |      yes | —       |
+| `connection_id`           | unknown |      yes | —       |
+| `provider`                | unknown |      yes | —       |
+| `preferred_connection_id` | unknown |      yes | —       |
+| `read_fallback`           | unknown |      yes | —       |
 
 ## `get_artist_top_tracks`
 
@@ -548,6 +623,33 @@ Spotify removed the official endpoint in February 2026; this tool returns a stru
 | ----------- | ------- | -------: | ------- |
 | `artist_id` | unknown |      yes | —       |
 
+## `get_capabilities`
+
+**Title:** Get provider capabilities
+
+**Type:** Read
+
+Describe supported provider operations and explain unavailable capabilities.
+
+**Arguments:**
+
+| Argument        | Type    | Required | Details |
+| --------------- | ------- | -------: | ------- |
+| `provider`      | unknown |      yes | —       |
+| `connection_id` | unknown |      yes | —       |
+
+## `get_connections`
+
+**Title:** Get provider connections
+
+**Type:** Read
+
+List compact provider connection summaries without credentials.
+
+**Arguments:**
+
+- None
+
 ## `get_currently_playing`
 
 **Title:** Get currently playing
@@ -558,7 +660,12 @@ Get the currently playing track or episode; 204 is returned as inactive playback
 
 **Arguments:**
 
-- None
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `connection_id`           | unknown |      yes | —       |
+| `provider`                | unknown |      yes | —       |
+| `preferred_connection_id` | unknown |      yes | —       |
+| `read_fallback`           | unknown |      yes | —       |
 
 ## `get_devices`
 
@@ -598,11 +705,15 @@ List compact playlists; all=true fetches all pages up to the server safety cap.
 
 **Arguments:**
 
-| Argument | Type    | Required | Details |
-| -------- | ------- | -------: | ------- |
-| `limit`  | unknown |      yes | —       |
-| `offset` | unknown |      yes | —       |
-| `all`    | unknown |      yes | —       |
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `limit`                   | unknown |      yes | —       |
+| `offset`                  | unknown |      yes | —       |
+| `all`                     | unknown |      yes | —       |
+| `connection_id`           | unknown |      yes | —       |
+| `provider`                | unknown |      yes | —       |
+| `preferred_connection_id` | unknown |      yes | —       |
+| `read_fallback`           | unknown |      yes | —       |
 
 ## `get_playback_state`
 
@@ -614,7 +725,12 @@ Get playback state and normalize either a track or episode item.
 
 **Arguments:**
 
-- None
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `connection_id`           | unknown |      yes | —       |
+| `provider`                | unknown |      yes | —       |
+| `preferred_connection_id` | unknown |      yes | —       |
+| `read_fallback`           | unknown |      yes | —       |
 
 ## `get_playlist`
 
@@ -626,9 +742,28 @@ Get playlist metadata.
 
 **Arguments:**
 
-| Argument      | Type    | Required | Details |
-| ------------- | ------- | -------: | ------- |
-| `playlist_id` | unknown |      yes | —       |
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `playlist_id`             | unknown |      yes | —       |
+| `connection_id`           | unknown |      yes | —       |
+| `provider`                | unknown |      yes | —       |
+| `preferred_connection_id` | unknown |      yes | —       |
+| `read_fallback`           | unknown |      yes | —       |
+
+## `get_playlist_chapters`
+
+**Title:** Get playlist chapters
+
+**Type:** Read
+
+Read the latest saved chapter set and report whether the playlist order has changed.
+
+**Arguments:**
+
+| Argument         | Type    | Required | Details |
+| ---------------- | ------- | -------: | ------- |
+| `playlist_id`    | unknown |      yes | —       |
+| `chapter_set_id` | unknown |      yes | —       |
 
 ## `get_playlist_stats`
 
@@ -654,11 +789,15 @@ Read normalized playlist items using current /items; maximum page size is 50.
 
 **Arguments:**
 
-| Argument      | Type    | Required | Details |
-| ------------- | ------- | -------: | ------- |
-| `playlist_id` | unknown |      yes | —       |
-| `limit`       | unknown |      yes | —       |
-| `offset`      | unknown |      yes | —       |
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `playlist_id`             | unknown |      yes | —       |
+| `limit`                   | unknown |      yes | —       |
+| `offset`                  | unknown |      yes | —       |
+| `connection_id`           | unknown |      yes | —       |
+| `provider`                | unknown |      yes | —       |
+| `preferred_connection_id` | unknown |      yes | —       |
+| `read_fallback`           | unknown |      yes | —       |
 
 ## `get_rate_limit_status`
 
@@ -670,10 +809,11 @@ Inspect persisted provider rate-limit scopes.
 
 **Arguments:**
 
-| Argument   | Type    | Required | Details |
-| ---------- | ------- | -------: | ------- |
-| `provider` | unknown |      yes | —       |
-| `scope`    | unknown |      yes | —       |
+| Argument        | Type    | Required | Details |
+| --------------- | ------- | -------: | ------- |
+| `provider`      | unknown |      yes | —       |
+| `scope`         | unknown |      yes | —       |
+| `connection_id` | unknown |      yes | —       |
 
 ## `get_recent_api_errors`
 
@@ -691,6 +831,7 @@ Inspect bounded, normalized API error history.
 | `provider`        | unknown |      yes | —       |
 | `status_code`     | unknown |      yes | —       |
 | `unresolved_only` | unknown |      yes | —       |
+| `connection_id`   | unknown |      yes | —       |
 
 ## `get_recently_played`
 
@@ -702,11 +843,15 @@ Read recent history; before and after cannot be combined.
 
 **Arguments:**
 
-| Argument | Type    | Required | Details |
-| -------- | ------- | -------: | ------- |
-| `limit`  | unknown |      yes | —       |
-| `before` | unknown |      yes | —       |
-| `after`  | unknown |      yes | —       |
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `limit`                   | unknown |      yes | —       |
+| `before`                  | unknown |      yes | —       |
+| `after`                   | unknown |      yes | —       |
+| `connection_id`           | unknown |      yes | —       |
+| `provider`                | unknown |      yes | —       |
+| `preferred_connection_id` | unknown |      yes | —       |
+| `read_fallback`           | unknown |      yes | —       |
 
 ## `get_saved_tracks`
 
@@ -718,10 +863,14 @@ Read saved tracks with pagination.
 
 **Arguments:**
 
-| Argument | Type    | Required | Details |
-| -------- | ------- | -------: | ------- |
-| `limit`  | unknown |      yes | —       |
-| `offset` | unknown |      yes | —       |
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `limit`                   | unknown |      yes | —       |
+| `offset`                  | unknown |      yes | —       |
+| `connection_id`           | unknown |      yes | —       |
+| `provider`                | unknown |      yes | —       |
+| `preferred_connection_id` | unknown |      yes | —       |
+| `read_fallback`           | unknown |      yes | —       |
 
 ## `get_state_diagnostics`
 
@@ -733,7 +882,10 @@ Return authenticated, bounded State DB health counters.
 
 **Arguments:**
 
-- None
+| Argument        | Type    | Required | Details |
+| --------------- | ------- | -------: | ------- |
+| `provider`      | unknown |      yes | —       |
+| `connection_id` | unknown |      yes | —       |
 
 ## `get_top_artists`
 
@@ -743,11 +895,15 @@ Read personalized top Spotify items; Spotify maximum is 50.
 
 **Arguments:**
 
-| Argument     | Type    | Required | Details |
-| ------------ | ------- | -------: | ------- |
-| `time_range` | unknown |      yes | —       |
-| `limit`      | unknown |      yes | —       |
-| `offset`     | unknown |      yes | —       |
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `time_range`              | unknown |      yes | —       |
+| `limit`                   | unknown |      yes | —       |
+| `offset`                  | unknown |      yes | —       |
+| `connection_id`           | unknown |      yes | —       |
+| `provider`                | unknown |      yes | —       |
+| `preferred_connection_id` | unknown |      yes | —       |
+| `read_fallback`           | unknown |      yes | —       |
 
 ## `get_top_tracks`
 
@@ -757,23 +913,46 @@ Read personalized top Spotify items; Spotify maximum is 50.
 
 **Arguments:**
 
-| Argument     | Type    | Required | Details |
-| ------------ | ------- | -------: | ------- |
-| `time_range` | unknown |      yes | —       |
-| `limit`      | unknown |      yes | —       |
-| `offset`     | unknown |      yes | —       |
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `time_range`              | unknown |      yes | —       |
+| `limit`                   | unknown |      yes | —       |
+| `offset`                  | unknown |      yes | —       |
+| `connection_id`           | unknown |      yes | —       |
+| `provider`                | unknown |      yes | —       |
+| `preferred_connection_id` | unknown |      yes | —       |
+| `read_fallback`           | unknown |      yes | —       |
 
 ## `get_track`
 
 **Type:** Read
 
-Get a Spotify track by ID, URI, or URL.
+Get a provider track by ID, URI, or URL.
 
 **Arguments:**
 
-| Argument   | Type    | Required | Details |
-| ---------- | ------- | -------: | ------- |
-| `track_id` | unknown |      yes | —       |
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `track_id`                | unknown |      yes | —       |
+| `connection_id`           | unknown |      yes | —       |
+| `provider`                | unknown |      yes | —       |
+| `preferred_connection_id` | unknown |      yes | —       |
+| `read_fallback`           | unknown |      yes | —       |
+
+## `import_playlist`
+
+**Title:** Import playlist
+
+**Type:** Read
+
+Parse and validate provider-neutral playlist data. This operation never writes to a provider.
+
+**Arguments:**
+
+| Argument  | Type    | Required | Details |
+| --------- | ------- | -------: | ------- |
+| `format`  | unknown |      yes | —       |
+| `content` | unknown |      yes | —       |
 
 ## `inbox_playlist`
 
@@ -942,6 +1121,25 @@ Deterministic local personalization combining affinity and artist spacing; dry_r
 | `min_artist_gap`        | unknown |      yes | —       |
 | `seed`                  | unknown |      yes | —       |
 
+## `plan_playlist_transfer`
+
+**Title:** Plan playlist transfer
+
+**Type:** Read
+
+Create an explainable cross-provider transfer plan. Dry-run only; performs zero destination writes.
+
+**Arguments:**
+
+| Argument                    | Type    | Required | Details |
+| --------------------------- | ------- | -------: | ------- |
+| `source_connection_id`      | unknown |      yes | —       |
+| `source_playlist_id`        | unknown |      yes | —       |
+| `destination_connection_id` | unknown |      yes | —       |
+| `destination_provider`      | unknown |      yes | —       |
+| `start_position`            | unknown |      yes | —       |
+| `max_tracks`                | unknown |      yes | —       |
+
 ## `play`
 
 **Title:** Play
@@ -959,6 +1157,23 @@ Start or resume playback; context_uri and uris are mutually exclusive. Verifies 
 | `uris`        | unknown |      yes | —       |
 | `offset`      | unknown |      yes | —       |
 | `position_ms` | unknown |      yes | —       |
+
+## `play_playlist_chapter`
+
+**Title:** Play playlist chapter
+
+**Type:** Write / action
+
+Start Spotify playback at a chapter offset; playback may continue after the chapter ends.
+
+**Arguments:**
+
+| Argument         | Type    | Required | Details |
+| ---------------- | ------- | -------: | ------- |
+| `playlist_id`    | unknown |      yes | —       |
+| `chapter_set_id` | unknown |      yes | —       |
+| `chapter_number` | unknown |      yes | —       |
+| `device_id`      | unknown |      yes | —       |
 
 ## `playlist_diff`
 
@@ -981,7 +1196,7 @@ Read-only linear diff between a playlist and a durable snapshot.
 
 **Type:** Read
 
-Read-only deterministic playlist health analysis; never mutates Spotify.
+Read-only deterministic playlist health analysis; never mutates a provider.
 
 **Arguments:**
 
@@ -1062,7 +1277,7 @@ Plan or trim a playlist without exceeding the target; dry_run defaults true.
 
 **Type:** Write / action
 
-Read-only local-first personalization operation with explicit evidence and no automatic Spotify mutation.
+Read-only local-first personalization operation with explicit evidence and no automatic provider mutation.
 
 **Arguments:**
 
@@ -1070,6 +1285,21 @@ Read-only local-first personalization operation with explicit evidence and no au
 | ------------- | ------- | -------: | ------- |
 | `playlist_id` | unknown |      yes | —       |
 | `limit`       | unknown |      yes | —       |
+
+## `preview_playlist_import`
+
+**Title:** Preview playlist import
+
+**Type:** Read
+
+Parse and validate provider-neutral playlist data. This operation never writes to a provider.
+
+**Arguments:**
+
+| Argument  | Type    | Required | Details |
+| --------- | ------- | -------: | ------- |
+| `format`  | unknown |      yes | —       |
+| `content` | unknown |      yes | —       |
 
 ## `previous_track`
 
@@ -1087,7 +1317,7 @@ Control Spotify playback.
 
 **Type:** Write / action
 
-Read-only local-first personalization operation with explicit evidence and no automatic Spotify mutation.
+Read-only local-first personalization operation with explicit evidence and no automatic provider mutation.
 
 **Arguments:**
 
@@ -1115,7 +1345,7 @@ Read-only explainable local affinity/freshness ranking; no Spotify popularity fa
 
 **Type:** Read
 
-Read-only local-first personalization operation with explicit evidence and no automatic Spotify mutation.
+Read-only local-first personalization operation with explicit evidence and no automatic provider mutation.
 
 **Arguments:**
 
@@ -1134,12 +1364,14 @@ Verify a known Spotify track ID, URI, or public URL and save its safe alias.
 
 **Arguments:**
 
-| Argument   | Type    | Required | Details |
-| ---------- | ------- | -------: | ------- |
-| `track_id` | unknown |      yes | —       |
-| `title`    | unknown |      yes | —       |
-| `artist`   | unknown |      yes | —       |
-| `album`    | unknown |      yes | —       |
+| Argument        | Type    | Required | Details |
+| --------------- | ------- | -------: | ------- |
+| `track_id`      | unknown |      yes | —       |
+| `title`         | unknown |      yes | —       |
+| `artist`        | unknown |      yes | —       |
+| `album`         | unknown |      yes | —       |
+| `provider`      | unknown |      yes | —       |
+| `connection_id` | unknown |      yes | —       |
 
 ## `remove_artist_from_playlist`
 
@@ -1181,10 +1413,13 @@ Remove requested URI occurrences using DELETE /items and return the final snapsh
 
 **Arguments:**
 
-| Argument      | Type    | Required | Details |
-| ------------- | ------- | -------: | ------- |
-| `playlist_id` | unknown |      yes | —       |
-| `track_ids`   | unknown |      yes | —       |
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `playlist_id`             | unknown |      yes | —       |
+| `track_ids`               | unknown |      yes | —       |
+| `connection_id`           | unknown |      yes | —       |
+| `provider`                | unknown |      yes | —       |
+| `preferred_connection_id` | unknown |      yes | —       |
 
 ## `reorder_playlist_tracks`
 
@@ -1196,13 +1431,16 @@ Reorder with current PUT /items payload.
 
 **Arguments:**
 
-| Argument        | Type    | Required | Details |
-| --------------- | ------- | -------: | ------- |
-| `playlist_id`   | unknown |      yes | —       |
-| `range_start`   | unknown |      yes | —       |
-| `insert_before` | unknown |      yes | —       |
-| `range_length`  | unknown |      yes | —       |
-| `snapshot_id`   | unknown |      yes | —       |
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `playlist_id`             | unknown |      yes | —       |
+| `range_start`             | unknown |      yes | —       |
+| `insert_before`           | unknown |      yes | —       |
+| `range_length`            | unknown |      yes | —       |
+| `snapshot_id`             | unknown |      yes | —       |
+| `connection_id`           | unknown |      yes | —       |
+| `provider`                | unknown |      yes | —       |
+| `preferred_connection_id` | unknown |      yes | —       |
 
 ## `replace_artist_tracks`
 
@@ -1247,10 +1485,13 @@ Replace then append ordered chunks, max 100 per request; rolls back after later 
 
 **Arguments:**
 
-| Argument      | Type    | Required | Details |
-| ------------- | ------- | -------: | ------- |
-| `playlist_id` | unknown |      yes | —       |
-| `track_ids`   | unknown |      yes | —       |
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `playlist_id`             | unknown |      yes | —       |
+| `track_ids`               | unknown |      yes | —       |
+| `connection_id`           | unknown |      yes | —       |
+| `provider`                | unknown |      yes | —       |
+| `preferred_connection_id` | unknown |      yes | —       |
 
 ## `restore_playlist_snapshot`
 
@@ -1263,10 +1504,12 @@ Restore exact ordered content from a durable snapshot; creates a PRE-RESTORE saf
 
 **Arguments:**
 
-| Argument      | Type    | Required | Details |
-| ------------- | ------- | -------: | ------- |
-| `snapshot_id` | unknown |      yes | —       |
-| `dry_run`     | unknown |      yes | —       |
+| Argument        | Type    | Required | Details |
+| --------------- | ------- | -------: | ------- |
+| `snapshot_id`   | unknown |      yes | —       |
+| `dry_run`       | unknown |      yes | —       |
+| `connection_id` | unknown |      yes | —       |
+| `provider`      | unknown |      yes | —       |
 
 ## `resume_job`
 
@@ -1281,6 +1524,23 @@ Make a durable job eligible for processing.
 | Argument | Type    | Required | Details |
 | -------- | ------- | -------: | ------- |
 | `job_id` | unknown |      yes | —       |
+
+## `resume_playlist_chapter`
+
+**Title:** Resume playlist chapter
+
+**Type:** Write / action
+
+Resume a previously started chapter from its first saved position.
+
+**Arguments:**
+
+| Argument         | Type    | Required | Details |
+| ---------------- | ------- | -------: | ------- |
+| `playlist_id`    | unknown |      yes | —       |
+| `chapter_set_id` | unknown |      yes | —       |
+| `chapter_number` | unknown |      yes | —       |
+| `device_id`      | unknown |      yes | —       |
 
 ## `rotation_manager`
 
@@ -1312,40 +1572,52 @@ Save or remove tracks using current /me/library endpoint in chunks of 40.
 
 **Type:** Read
 
-Search Spotify catalog with current pagination.
+Search the selected provider catalog with current pagination.
 
 **Arguments:**
 
-| Argument | Type    | Required | Details |
-| -------- | ------- | -------: | ------- |
-| `query`  | unknown |      yes | —       |
-| `limit`  | unknown |      yes | —       |
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `query`                   | unknown |      yes | —       |
+| `limit`                   | unknown |      yes | —       |
+| `connection_id`           | unknown |      yes | —       |
+| `provider`                | unknown |      yes | —       |
+| `preferred_connection_id` | unknown |      yes | —       |
+| `read_fallback`           | unknown |      yes | —       |
 
 ## `search_artists`
 
 **Type:** Read
 
-Search Spotify catalog with current pagination.
+Search the selected provider catalog with current pagination.
 
 **Arguments:**
 
-| Argument | Type    | Required | Details |
-| -------- | ------- | -------: | ------- |
-| `query`  | unknown |      yes | —       |
-| `limit`  | unknown |      yes | —       |
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `query`                   | unknown |      yes | —       |
+| `limit`                   | unknown |      yes | —       |
+| `connection_id`           | unknown |      yes | —       |
+| `provider`                | unknown |      yes | —       |
+| `preferred_connection_id` | unknown |      yes | —       |
+| `read_fallback`           | unknown |      yes | —       |
 
 ## `search_tracks`
 
 **Type:** Read
 
-Search Spotify catalog with current pagination.
+Search the selected provider catalog with current pagination.
 
 **Arguments:**
 
-| Argument | Type    | Required | Details |
-| -------- | ------- | -------: | ------- |
-| `query`  | unknown |      yes | —       |
-| `limit`  | unknown |      yes | —       |
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `query`                   | unknown |      yes | —       |
+| `limit`                   | unknown |      yes | —       |
+| `connection_id`           | unknown |      yes | —       |
+| `provider`                | unknown |      yes | —       |
+| `preferred_connection_id` | unknown |      yes | —       |
+| `read_fallback`           | unknown |      yes | —       |
 
 ## `seek`
 
@@ -1423,7 +1695,7 @@ Set volume from 0 to 100.
 
 **Type:** Read
 
-Read-only local-first personalization operation with explicit evidence and no automatic Spotify mutation.
+Read-only local-first personalization operation with explicit evidence and no automatic provider mutation.
 
 **Arguments:**
 
@@ -1542,6 +1814,24 @@ Split a playlist into deterministic groups; dry_run defaults true.
 | `dry_run`                 | unknown |      yes | —       |
 | `output_name_template`    | unknown |      yes | —       |
 
+## `sync_playlist_transfer`
+
+**Title:** Synchronize transferred playlist
+
+**Type:** Read
+**Destructive hint:** yes
+
+Apply an explicitly confirmed provider-neutral sync policy. Destructive cross-provider conflicts fail closed.
+
+**Arguments:**
+
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `transfer_plan`           | unknown |      yes | —       |
+| `destination_playlist_id` | unknown |      yes | —       |
+| `policy`                  | unknown |      yes | —       |
+| `confirm`                 | unknown |      yes | —       |
+
 ## `sync_playlists`
 
 **Title:** Sync playlists
@@ -1586,10 +1876,12 @@ Restore the latest completed JamRelay-managed reversible operation only; dry_run
 
 **Arguments:**
 
-| Argument      | Type    | Required | Details |
-| ------------- | ------- | -------: | ------- |
-| `playlist_id` | unknown |      yes | —       |
-| `dry_run`     | unknown |      yes | —       |
+| Argument        | Type    | Required | Details |
+| --------------- | ------- | -------: | ------- |
+| `playlist_id`   | unknown |      yes | —       |
+| `dry_run`       | unknown |      yes | —       |
+| `connection_id` | unknown |      yes | —       |
+| `provider`      | unknown |      yes | —       |
 
 ## `update_playlist_details`
 
@@ -1601,13 +1893,16 @@ Update playlist metadata; collaborative playlists must be private.
 
 **Arguments:**
 
-| Argument        | Type    | Required | Details |
-| --------------- | ------- | -------: | ------- |
-| `playlist_id`   | unknown |      yes | —       |
-| `name`          | unknown |      yes | —       |
-| `description`   | unknown |      yes | —       |
-| `public`        | unknown |      yes | —       |
-| `collaborative` | unknown |      yes | —       |
+| Argument                  | Type    | Required | Details |
+| ------------------------- | ------- | -------: | ------- |
+| `playlist_id`             | unknown |      yes | —       |
+| `name`                    | unknown |      yes | —       |
+| `description`             | unknown |      yes | —       |
+| `public`                  | unknown |      yes | —       |
+| `collaborative`           | unknown |      yes | —       |
+| `connection_id`           | unknown |      yes | —       |
+| `provider`                | unknown |      yes | —       |
+| `preferred_connection_id` | unknown |      yes | —       |
 
 ## `verify_playlist_integrity`
 

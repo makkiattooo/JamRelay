@@ -1,14 +1,14 @@
 ---
 title: OAuth y varios clientes
 translationReviewed: 2026-09-12
-sourceHash: 26dfccbf5620
+sourceHash: 3409130e2dab
 ---
 
 # OAuth y varios clientes
 
 El cliente MCP nunca recibe Spotify Client Secret, refresh token de Spotify, clave de cifrado ni owner secret.
 
-Una instancia puede usar a la vez legacy pre-registration, múltiples clientes estáticos mediante `MCP_OAUTH_CLIENTS_PATH`, DCR, clientes públicos, clientes confidenciales y opcionalmente `MCP_API_KEY`.
+Una instancia puede usar múltiples clientes estáticos mediante `MCP_OAUTH_CLIENTS_PATH`, DCR, clientes públicos, clientes confidenciales y opcionalmente `MCP_API_KEY`.
 
 ```text
 pre-registration  ✅

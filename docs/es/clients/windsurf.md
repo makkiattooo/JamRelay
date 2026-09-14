@@ -1,7 +1,7 @@
 ---
 title: Windsurf Cascade
 translationReviewed: 2026-09-12
-sourceHash: b54df15d155e
+sourceHash: cc8980f1a2e3
 ---
 
 # Windsurf Cascade

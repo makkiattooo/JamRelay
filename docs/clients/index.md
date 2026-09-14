@@ -18,12 +18,11 @@ It supports two authentication families:
 
 ## Multi-client OAuth
 
-JamRelay no longer has a one-client/one-callback limitation. A single deployment can keep an existing static ChatGPT client while also accepting automatically registered native/CLI clients through DCR.
+One deployment can serve multiple MCP clients through the static registry or Dynamic Client Registration (DCR).
 
 Available registration paths:
 
 ```text
-legacy single static client     ✅ backwards compatible
 multi-client static registry    ✅
 Dynamic Client Registration     ✅
 public OAuth clients            ✅
@@ -31,7 +30,7 @@ confidential OAuth clients      ✅
 CIMD                            not advertised yet
 ```
 
-See [OAuth and multi-client compatibility](./oauth-compatibility) for the registration model and current MCP-spec note about CIMD.
+See [MCP OAuth registration](./oauth-compatibility) for the registration model and current MCP-spec note about CIMD.
 
 ## Compatibility matrix
 
@@ -71,6 +70,6 @@ Create a private playlist called MCP Test and add two tracks to it.
 - [VS Code + GitHub Copilot](./vscode-copilot)
 - [Windsurf Cascade](./windsurf)
 - [MCP Inspector](./mcp-inspector)
-- [OAuth and multi-client compatibility](./oauth-compatibility)
+- [MCP OAuth registration](./oauth-compatibility)
 
 _Last reviewed against vendor documentation: 2026-09-12._

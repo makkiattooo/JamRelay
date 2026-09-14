@@ -1,7 +1,7 @@
 ---
 title: MCP Inspector
 translationReviewed: 2026-09-12
-sourceHash: 561e3e267759
+sourceHash: 44ed924f9d86
 ---
 
 # MCP Inspector
