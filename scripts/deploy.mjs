@@ -42,6 +42,21 @@ const defaults = {
   publicBaseUrl: process.env.JAMRELAY_PUBLIC_BASE_URL ?? 'https://mcp.jamrelay.com',
 };
 
+export function isOperationalHealthPayload(payload, expectedSchemaVersion) {
+  let body;
+  try {
+    body = typeof payload === 'string' ? JSON.parse(payload) : payload;
+  } catch {
+    return false;
+  }
+
+  return (
+    body?.status === 'ok' &&
+    body?.database?.status === 'ok' &&
+    body?.database?.schemaVersion === expectedSchemaVersion
+  );
+}
+
 function createStamp() {
   return new Date().toISOString().replace(/[-:]/g, '').replace(/\..+$/, '').replace('T', '-');
 }
@@ -493,7 +508,7 @@ wait_new_release_health() {
       if printf '%s' "$body" |
            grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' &&
          printf '%s' "$body" |
-           grep -Eq '"spotifyConnected"[[:space:]]*:[[:space:]]*true' &&
+           grep -Eq '"database"[[:space:]]*:[[:space:]]*\{[^}]*"status"[[:space:]]*:[[:space:]]*"ok"' &&
          printf '%s' "$body" |
            grep -Fq '"schemaVersion":"'$expected_schema_version'"'; then
 
@@ -534,7 +549,7 @@ wait_rollback_health() {
       if printf '%s' "$body" |
            grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' &&
          printf '%s' "$body" |
-           grep -Eq '"spotifyConnected"[[:space:]]*:[[:space:]]*true'; then
+           grep -Eq '"database"[[:space:]]*:[[:space:]]*\{[^}]*"status"[[:space:]]*:[[:space:]]*"ok"'; then
         return 0
       fi
     fi
@@ -564,7 +579,7 @@ wait_public_health() {
     if printf '%s' "$body" |
          grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' &&
        printf '%s' "$body" |
-         grep -Eq '"spotifyConnected"[[:space:]]*:[[:space:]]*true'; then
+         grep -Eq '"database"[[:space:]]*:[[:space:]]*\{[^}]*"status"[[:space:]]*:[[:space:]]*"ok"'; then
 
       return 0
     fi
