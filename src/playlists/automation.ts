@@ -85,16 +85,39 @@ export function registerPlaylistAutomationTools(s: any, c: SpotifyClient) {
       await c.json(`/playlists/${playlistId}/items`, { uris: uris.slice(0, 100) }, 'PUT');
       for (const part of chunks(uris.slice(100)))
         await c.json(`/playlists/${playlistId}/items`, { uris: part });
+      const verified = await state(playlistId);
+      const verifiedUris = verified.tracks.flatMap((track) => (track.uri ? [track.uri] : []));
+      if (
+        verifiedUris.length !== uris.length ||
+        verifiedUris.some((uri, index) => uri !== uris[index])
+      )
+        throw new Error('playlist_integrity_mismatch');
       return {
         plan: p,
         safety_snapshot_id: snap.id,
-        verification: { ok: true, expected_count: uris.length },
+        verification: { ok: true, expected_count: uris.length, actual_count: verifiedUris.length },
       };
     } catch (error) {
+      let rollbackSucceeded = false;
+      try {
+        const originalUris = x.tracks.flatMap((track: NormalizedPlaylistTrack) =>
+          track.uri ? [track.uri] : [],
+        );
+        await c.json(`/playlists/${playlistId}/items`, { uris: originalUris.slice(0, 100) }, 'PUT');
+        for (const part of chunks(originalUris.slice(100)))
+          await c.json(`/playlists/${playlistId}/items`, { uris: part });
+        rollbackSucceeded = true;
+      } catch {
+        rollbackSucceeded = false;
+      }
       return {
         plan: p,
         safety_snapshot_id: snap.id,
-        partial_failure: { error: String(error), rollback_available: true },
+        partial_failure: {
+          error: String(error),
+          rollback_attempted: true,
+          rollback_succeeded: rollbackSucceeded,
+        },
       };
     }
   };
@@ -472,8 +495,95 @@ export function registerPlaylistAutomationTools(s: any, c: SpotifyClient) {
       );
     },
   );
-  for (const name of [
+  s.registerTool(
     'extend_playlist_to_duration',
+    {
+      title: 'Extend playlist to duration',
+      description:
+        'Resolve a local candidate pool, append only needed tracks, snapshot and verify.',
+      inputSchema: {
+        playlist_id: id,
+        target_duration_ms: z.number().int().positive(),
+        dry_run: z.boolean().default(true),
+        candidate_limit: z.number().int().min(1).max(200).default(50),
+        min_artist_gap: z.number().int().min(0).max(100).default(1),
+        seed: z.number().int().optional(),
+      },
+    },
+    async (a: any) => {
+      const playlistId = pid(a),
+        current = await state(playlistId),
+        currentDuration = durationMs(current.tracks);
+      if (currentDuration >= a.target_duration_ms)
+        return text({
+          operation: 'extend_playlist_to_duration',
+          status: 'noop',
+          current_duration_ms: currentDuration,
+          target_duration_ms: a.target_duration_ms,
+          spotify_api_calls: 2,
+        });
+      const existing = new Set(current.tracks.map((track) => track.uri));
+      const artistNames = [
+        ...new Set(current.tracks.map((track) => track.primaryArtist).filter(Boolean)),
+      ].slice(0, 4);
+      const candidatePages = await Promise.all(
+        artistNames.map((artist) =>
+          get(
+            '/search?' +
+              new URLSearchParams({
+                q: `artist:${artist}`,
+                type: 'track',
+                limit: String(Math.min(50, a.candidate_limit)),
+              }),
+          ),
+        ),
+      );
+      const candidates = candidatePages
+        .flatMap((response: any) => response?.tracks?.items ?? [])
+        .map((track: any, position: number) =>
+          normalizePlaylistItems([track]).tracks[0]
+            ? { ...normalizePlaylistItems([track]).tracks[0], position }
+            : null,
+        )
+        .filter((track: any): track is NormalizedPlaylistTrack =>
+          Boolean(track?.uri && !existing.has(track.uri)),
+        )
+        .filter(
+          (track: NormalizedPlaylistTrack, index: number, all: NormalizedPlaylistTrack[]) =>
+            all.findIndex((item) => item.uri === track.uri) === index,
+        )
+        .slice(0, a.candidate_limit);
+      const selected: NormalizedPlaylistTrack[] = [];
+      let addedDuration = 0;
+      for (const candidate of seededShuffle(candidates, {
+        seed: a.seed,
+        minArtistGap: a.min_artist_gap,
+      })) {
+        if (addedDuration >= a.target_duration_ms - currentDuration) break;
+        selected.push({ ...candidate, position: current.tracks.length + selected.length });
+        addedDuration += candidate.durationMs ?? 0;
+      }
+      const after = [...current.tracks, ...selected];
+      const p = plan(
+        playlistId,
+        'extend_playlist_to_duration',
+        current.tracks,
+        after,
+        candidates.length ? [] : ['No candidate tracks were found from current playlist artists.'],
+      );
+      const result = a.dry_run
+        ? {
+            ...p,
+            current_duration_ms: currentDuration,
+            target_duration_ms: a.target_duration_ms,
+            candidate_count: candidates.length,
+            selected_count: selected.length,
+          }
+        : await execute(playlistId, current, after, p);
+      return text(result);
+    },
+  );
+  for (const name of [
     'replace_percentage',
     'freshen_playlist',
     'bulk_edit_playlists',
