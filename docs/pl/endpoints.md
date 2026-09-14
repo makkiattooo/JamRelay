@@ -12,8 +12,8 @@ Wszystkie URL są względne wobec `PUBLIC_BASE_URL`.
 | --------------------- | ------------------------------------------- | ------------------------ | ------------------------------- |
 | `GET`                 | `/health`                                   | brak                     | liveness/status                 |
 | `GET`                 | `/auth/status`                              | brak                     | status Spotify                  |
-| `GET`                 | `/auth/spotify/login`                       | brak                     | start Spotify OAuth             |
-| `GET`                 | `/auth/spotify/callback`                    | Spotify state            | zakończenie Spotify OAuth       |
+| `GET`                 | `/auth/providers/:provider/start`           | brak                     | start OAuth providera           |
+| `GET`                 | `/auth/providers/:provider/callback`        | stan providera           | zakończenie OAuth providera     |
 | `GET`                 | `/.well-known/oauth-protected-resource`     | brak                     | protected-resource metadata     |
 | `GET`                 | `/.well-known/oauth-protected-resource/mcp` | brak                     | RFC 9728 path-suffixed metadata |
 | `GET`                 | `/.well-known/oauth-authorization-server`   | brak                     | authorization-server metadata   |

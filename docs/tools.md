@@ -1,6 +1,12 @@
 # MCP tools
 
-The server registers the core tools plus authenticated State DB tools when the runtime database is initialized. Tool schemas are the source of truth and are validated by tests.
+The server exposes 115 tools grouped around provider-neutral workflows. Tool
+schemas are the source of truth and are validated by tests. Catalog, playlist,
+transfer, import/export, chapter, history, diagnostics, and provider management
+tools work through capabilities rather than assuming Spotify parity.
+
+Writes require an explicit or uniquely resolvable capable `connection_id`.
+Ambiguous, unavailable, or revoked targets fail closed.
 
 ## Catalog and discovery
 

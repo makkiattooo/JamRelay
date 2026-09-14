@@ -16,7 +16,7 @@ This release keeps Spotify as a supported provider and makes `ProviderRegistry` 
 
 ## Verified in repository tests
 
-- zero-provider bootstrap and Spotify-only bootstrap;
+- zero-provider bootstrap and provider-neutral health;
 - mocked SoundCloud bootstrap and capability-limited adapter behavior;
 - mocked Apple Music Developer Token signing, encrypted Music User Token onboarding and capability-limited playlist adapter behavior;
 - mocked official YouTube Data API playlist/video requests, OAuth token persistence and quota estimates;

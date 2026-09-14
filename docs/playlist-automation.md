@@ -1,6 +1,6 @@
 ---
 title: Playlist automation
-description: Analysis, cleanup, layout and composition tools for Spotify playlists.
+description: Analysis, cleanup, layout and composition tools for provider playlists.
 ---
 
 # Playlist automation
@@ -15,4 +15,6 @@ JamRelay's playlist engine works on normalized tracks and serializable operation
 - Composition: merge, split, clone and synchronization.
 - Automation: typed rules, persistent recipes and optimization.
 
-All Spotify writes use current `/items` endpoints, pagination and bounded chunks. See the [generated tool reference](/tools-reference) for exact schemas.
+Provider writes use the selected adapter's current endpoints, pagination and
+bounded chunks. Capability differences are surfaced rather than hidden. See
+the [generated tool reference](/tools-reference) for exact schemas.

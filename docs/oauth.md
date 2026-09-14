@@ -4,7 +4,9 @@ title: MCP OAuth
 
 # MCP OAuth
 
-JamRelay includes an OAuth authorization server for remote MCP clients. Spotify OAuth is separate and continues to use the `SPOTIFY_*` variables.
+JamRelay includes an OAuth authorization server for remote MCP clients. MCP
+OAuth is separate from owner sessions and each provider's authentication flow.
+Provider credentials are stored through the encrypted connection store.
 
 ## Supported features
 
@@ -85,7 +87,7 @@ Each static client can have several redirect URIs. Clients without a secret can 
 
 ## DCR security model
 
-`POST /oauth/register` is unauthenticated by design because an unknown MCP client must obtain a client ID before authorization can begin. Registration does **not** authorize Spotify access.
+`POST /oauth/register` is unauthenticated by design because an unknown MCP client must obtain a client ID before authorization can begin. Registration does **not** authorize access to any music provider.
 
 JamRelay limits the exposed registration surface by:
 

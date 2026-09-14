@@ -5,7 +5,74 @@ All notable changes to JamRelay are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] — multi-provider release candidate
+## [1.2.0] - 2026-09-14
+
+### Highlights
+
+JamRelay is now a provider-neutral music automation MCP server. Spotify remains
+fully supported as an adapter, while SoundCloud, Apple Music, and YouTube use
+their own authentication and capability boundaries.
+
+### Multi-provider architecture
+
+- Provider Registry, Provider Connection, connection IDs, capabilities, and
+  canonical tracks/provider mappings.
+- Multiple connections per provider with fail-closed write targeting.
+- Zero-provider bootstrap and provider-neutral server health.
+
+### Providers
+
+- Spotify adapter for catalog, playlists, library, playback, and history.
+- SoundCloud identity, catalog, and playlist adapter.
+- Apple Music Developer Token/Music User Token integration.
+- Official YouTube Data API playlist/video adapter with quota-aware behavior.
+- TIDAL remains feasibility-only and is not implemented.
+
+### Interoperability and automation
+
+- Canonical resolver, provider-neutral import/export, and cross-provider
+  transfer planning/execution.
+- Playlist snapshots, verification, undo, durable jobs, rate-limit diagnostics,
+  duration-based automation, and persisted playlist chapters.
+
+### Authentication and security
+
+- Connection Hub, owner sessions, MCP OAuth, per-connection grants and
+  permissions, encrypted provider credentials, and separated auth boundaries.
+- Destructive and write operations fail closed for missing or ambiguous targets.
+
+### Persistence and documentation
+
+- Provider-aware state, snapshots, resolver attempts, connection-scoped errors
+  and rate limits, canonical listening history, and chapter persistence.
+- New provider, deployment, security, transfer, import/export, chapter, and
+  release documentation.
+
+### Breaking / behavioral changes
+
+- Spotify is no longer required at startup.
+- Writes must resolve an explicit or unique capable connection.
+- Provider credentials use the encrypted provider credential store rather than a
+  Spotify-only runtime path.
+- Provider capabilities and identity semantics differ; Spotify IDs are not
+  universal track IDs.
+
+### Upgrade notes
+
+Back up the database, provider credential store, MCP OAuth store, and secrets.
+Run `npm ci && npm run check`; startup applies forward migrations automatically.
+The migration chain has no automatic down migration. See [the 1.2.0 release
+guide](docs/release-1.2.0.md).
+
+### Known limitations
+
+Real-provider OAuth, quota behavior, playback, and third-party MCP client
+compatibility require manual verification. Apple Music Music User Tokens must
+be obtained through a client context. TIDAL has no runtime adapter.
+
+## [Unreleased]
+
+- Follow-up work will be documented here without changing the 1.2.0 record.
 
 - Release-engineering validation for provider-neutral routing, Connection Hub,
   MCP connection/permission grants, migrations, backup/rollback procedures and

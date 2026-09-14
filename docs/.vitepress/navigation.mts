@@ -27,6 +27,12 @@ export const sections: Section[] = [
     label: 'Core concepts',
     pages: [
       { path: 'architecture', label: 'How JamRelay works' },
+      { path: 'providers/', label: 'Provider overview' },
+      { path: 'providers/capabilities', label: 'Provider capabilities' },
+      { path: 'providers/spotify', label: 'Spotify' },
+      { path: 'providers/soundcloud', label: 'SoundCloud' },
+      { path: 'providers/apple-music', label: 'Apple Music' },
+      { path: 'providers/youtube', label: 'YouTube' },
       { path: 'database-first-resolution', label: 'Database-first track resolution' },
       { path: 'playlist-safety', label: 'Playlist safety, snapshots and undo' },
       { path: 'playlist-chapters', label: 'Playlist chapters' },
@@ -71,6 +77,7 @@ export const sections: Section[] = [
   {
     label: 'Reference and development',
     pages: [
+      { path: 'release-1.2.0', label: 'Release 1.2.0' },
       { path: 'tools', label: 'Using JamRelay tools' },
       { path: 'tools-reference', label: 'Generated tool reference' },
       { path: 'environment-reference', label: 'Generated environment reference' },

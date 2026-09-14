@@ -1,16 +1,18 @@
 # Public release audit
 
-Date: 2026-09-12
+Date: 2026-09-14
 
 ## Release status
 
-The multi-provider release candidate passes the automated release gate in the
-current checkout. Production readiness still requires the manual provider and
-deployment checks listed in `docs/deployment/release-candidate.md`.
+JamRelay v1.2.0 passes the automated release gate in the current checkout.
+Production readiness still requires the manual provider, deployment, and MCP
+client checks listed in `docs/deployment/release-candidate.md`.
 
 ## Verified technical scope
 
-- Spotify OAuth with encrypted token persistence;
+- Spotify, SoundCloud, Apple Music, and YouTube adapter unit coverage;
+- provider-neutral routing, capability checks, canonical mappings and transfers;
+- encrypted provider credential persistence;
 - MCP Streamable HTTP transport;
 - static Bearer authentication;
 - MCP OAuth Authorization Code + PKCE S256;
@@ -24,6 +26,10 @@ deployment checks listed in `docs/deployment/release-candidate.md`.
 - Docker/Compose deployment;
 - generated MCP tool and environment references;
 - multilingual VitePress documentation and translation freshness checks.
+
+The automated suite does not prove live provider credentials, upstream quota
+behavior, playback devices, or compatibility with a particular hosted MCP
+client. Those remain `MANUAL VERIFICATION REQUIRED`.
 
 ## Client verification language
 

@@ -4,7 +4,7 @@ title: Release candidate checklist
 
 # Release candidate checklist
 
-This checklist is for the multi-provider release candidate. Automated gates use
+This checklist documents the v1.2.0 multi-provider release. Automated gates use
 mock providers and do not replace manual provider verification.
 
 ## Backup before upgrade

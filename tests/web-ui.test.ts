@@ -4,6 +4,9 @@ import {
   authResultPage,
   connectionDetailPage,
   connectionsPage,
+  clientsPage,
+  providerChooserPage,
+  systemStatusPage,
   escapeHtml,
 } from '../src/web/ui.js';
 
@@ -27,5 +30,20 @@ describe('JamRelay web UI', () => {
     expect(adminLoginPage()).toContain('JamRelay Administration');
     expect(connectionsPage([], {})).toContain('Connection Hub');
     expect(authResultPage('spotify', true, 'connected')).toContain('Connection successful');
+    expect(
+      providerChooserPage([{ id: 'soundcloud', label: 'SoundCloud', configured: false }]),
+    ).toContain('Not configured');
+    expect(
+      providerChooserPage([{ id: 'apple-music', label: 'Apple Music', configured: true }]),
+    ).toContain('Music User Token onboarding');
+    expect(clientsPage([])).toContain('Authorized MCP clients');
+    expect(
+      systemStatusPage({
+        version: '1.2.0',
+        schema: 'current',
+        authMode: 'none',
+        providers: 'none',
+      }),
+    ).toContain('Provider connectivity');
   });
 });

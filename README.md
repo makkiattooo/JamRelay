@@ -8,7 +8,7 @@
 
 <br>
 
-### Self-hosted music automation for your Spotify account.
+### Provider-neutral, self-hosted music automation through MCP.
 
 Turn high-level requests into deterministic, inspectable and reversible music operations through MCP.
 
@@ -18,7 +18,7 @@ Turn high-level requests into deterministic, inspectable and reversible music op
 [![License](https://img.shields.io/badge/license-AGPL--3.0--only-blue?style=flat-square)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.13.0-339933?style=flat-square&logo=node.js&logoColor=white)](package.json)
 [![MCP](https://img.shields.io/badge/MCP-Streamable%20HTTP-6f42c1?style=flat-square)](docs/mcp-client.md)
-[![Spotify](https://img.shields.io/badge/provider-Spotify-1DB954?style=flat-square&logo=spotify&logoColor=white)](docs/getting-started.md)
+[![Providers](https://img.shields.io/badge/providers-Spotify%20%7C%20SoundCloud%20%7C%20Apple%20Music%20%7C%20YouTube-6f42c1?style=flat-square)](docs/providers/)
 
 [Get started](docs/getting-started.md) ·
 [Documentation](docs/index.md) ·
@@ -31,9 +31,13 @@ Turn high-level requests into deterministic, inspectable and reversible music op
 
 ## What is JamRelay?
 
-JamRelay is a **self-hosted music automation engine** that connects MCP clients to Spotify while adding a stateful automation layer on top of the raw API.
+JamRelay is a **self-hosted, provider-neutral music automation engine** that connects MCP clients to independent music-provider connections through a stateful automation layer.
 
-JamRelay is a provider-neutral MCP music automation server. It can persist local state, resolve known tracks without repeated catalog calls, analyze playlists, plan mutations, preview them, snapshot state, execute bounded changes, verify the result, resume jobs after restarts and derive local personalization signals from events it actually observed.
+JamRelay can persist local state, resolve canonical tracks and provider mappings, analyze playlists, plan mutations, preview them, snapshot state, execute bounded changes, verify the result, resume jobs after restarts, transfer playlists across providers, import/export provider-neutral playlists, and derive local personalization signals from events it actually observed.
+
+Supported adapters are Spotify, SoundCloud, Apple Music, and YouTube Data API.
+They do not have identical capabilities. JamRelay also supports a valid
+zero-provider installation; provider connectivity is not server health.
 
 The goal is not to make an AI client manually coordinate hundreds of Spotify API requests.
 
@@ -50,7 +54,7 @@ preview / dry run
    ↓
 snapshot
    ↓
-execute bounded Spotify operations
+   execute bounded provider operations
    ↓
 verify
    ↓
@@ -556,7 +560,7 @@ Read:
 
 Latest release:
 
-[**JamRelay v1.1.0 — Stateful Music Automation**](https://github.com/makkiattooo/JamRelay/releases/tag/v1.1.0)
+[**JamRelay v1.2.0 — Provider-neutral Music Automation**](https://github.com/makkiattooo/JamRelay/releases/tag/v1.2.0)
 
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 

@@ -1,13 +1,17 @@
 # HTTP endpoint reference
 
-The application is an Express server. URLs are relative to `PUBLIC_BASE_URL`. The MCP endpoint is the only endpoint intended for an AI client to call repeatedly; Spotify and MCP OAuth routes are browser/protocol endpoints.
+The application is an Express server. URLs are relative to `PUBLIC_BASE_URL`.
+The MCP endpoint is the endpoint intended for an AI client to call repeatedly;
+provider and MCP OAuth routes are browser/protocol endpoints. `/health` reports
+server/database readiness and provider status separately; a connected Spotify
+account is not required.
 
 ## Endpoint map
 
 | Method                | Path                                        | Auth                    | Purpose                                  |
 | --------------------- | ------------------------------------------- | ----------------------- | ---------------------------------------- |
 | `GET`                 | `/health`                                   | none                    | Liveness and connection summary          |
-| `GET`                 | `/auth/status`                              | none                    | Spotify connection summary               |
+| `GET`                 | `/auth/status`                              | none                    | Provider connection summary              |
 | `GET`                 | `/auth/providers/:provider/start`           | none                    | Generic provider onboarding entrypoint   |
 | `GET`                 | `/auth/providers/:provider/callback`        | provider state          | Completes provider authorization         |
 | `GET`                 | `/owner/login`                              | none                    | Owner session login page                 |

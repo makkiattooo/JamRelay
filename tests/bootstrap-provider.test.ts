@@ -37,6 +37,17 @@ describe('provider-neutral bootstrap', () => {
     const login = await fetch(base + '/auth/providers/spotify/start');
     expect(login.status).toBe(503);
     expect((await login.json()).error.code).toBe('PROVIDER_NOT_CONFIGURED');
+    for (const path of [
+      '/admin',
+      '/admin/connections',
+      '/admin/providers',
+      '/admin/clients',
+      '/admin/status',
+    ]) {
+      const response = await fetch(base + path, { redirect: 'manual' });
+      expect(response.status).toBe(302);
+      expect(response.headers.get('location')).toBe('/admin/login');
+    }
   });
 
   it('registers Spotify when the configuration group is complete and exposes provider onboarding', async () => {
@@ -70,5 +81,16 @@ describe('provider-neutral bootstrap', () => {
     const login = await fetch(base + '/auth/providers/spotify/start', { redirect: 'manual' });
     expect(login.status).toBe(302);
     expect(login.headers.get('location')).toContain('accounts.spotify.com/authorize');
+    const legacyLogin = await fetch(base + '/auth/spotify/login', { redirect: 'manual' });
+    expect(legacyLogin.status).toBe(302);
+    expect(legacyLogin.headers.get('location')).toContain('accounts.spotify.com/authorize');
+    const canonicalCallback = await fetch(
+      base + '/auth/providers/spotify/callback?error=access_denied',
+    );
+    const legacyCallback = await fetch(base + '/auth/spotify/callback?error=access_denied');
+    expect(canonicalCallback.status).toBe(400);
+    expect(legacyCallback.status).toBe(400);
+    expect(await canonicalCallback.text()).toContain('Authorization failed');
+    expect(await legacyCallback.text()).toContain('Authorization failed');
   });
 });

@@ -10,6 +10,10 @@ and write connections. Read routing may fall back only among permitted,
 capable connections. Writes remain fail-closed when the target is missing or
 ambiguous.
 
+The Hub is the onboarding and administration surface, not the MCP client
+authentication layer. Owner login/session and CSRF protection guard its
+mutations; MCP OAuth/API-key authentication and grants guard `/mcp` separately.
+
 The JSON owner API is available after signing in at `/owner/login`:
 
 - `GET /connections` lists connection summaries and preferred targets;

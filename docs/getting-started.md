@@ -3,19 +3,22 @@
 ## Requirements
 
 - Node.js 22 or newer, or Docker.
-- A Spotify Developer application with a callback URL you control.
-- A Spotify account. Playback control may require Spotify Premium and an active compatible device.
+- A provider application only if you want provider-backed operations immediately.
+- A Spotify Premium account and active device only for Spotify playback controls.
 
 ## Quick start
 
 ```bash
-npm install
+npm ci
 cp .env.example .env
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 npm run dev
 ```
 
-Fill `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `TOKEN_ENCRYPTION_KEY`, and `PUBLIC_BASE_URL` in `.env`. For a protected remote deployment, use `MCP_AUTH_MODE=bearer` with a strong `MCP_API_KEY`, or configure MCP OAuth as described in [MCP authentication](/oauth).
+Fill `PUBLIC_BASE_URL` and `TOKEN_ENCRYPTION_KEY` in `.env`. Provider blocks
+are optional, but each configured block must be complete. For a protected
+remote deployment, use `MCP_AUTH_MODE=bearer` with a strong `MCP_API_KEY`, or
+configure MCP OAuth as described in [MCP authentication](/oauth).
 
 Open `http://127.0.0.1:5267/auth/providers/spotify/start`, approve access, then check `/auth/status` and `/health`. Configure the client with `http://127.0.0.1:5267/mcp` for local use.
 

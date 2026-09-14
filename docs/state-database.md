@@ -19,7 +19,8 @@ jamrelay_app
 Docker external volume: jamrelay_data
 ```
 
-The encrypted `spotify-token.json` and the MCP OAuth store remain separate files under `/data`. The SQLite database is state storage, not credential storage.
+The encrypted provider credential store and the MCP OAuth store remain separate
+files under `/data`. The SQLite database is state storage, not credential storage.
 
 | Location             | Purpose                                         |
 | -------------------- | ----------------------------------------------- |
@@ -45,16 +46,16 @@ This is intentionally a single-process/local-volume design. It is not a distribu
 
 The first migration establishes the state model used by the runtime resolver, API diagnostics, rate-limit guard, and durable single-worker jobs. Migration `0001_state_db.sql` is immutable; phase metadata is stored in `jobs.payload_json`.
 
-| Table               | Purpose and relationships                                                                            |
-| ------------------- | ---------------------------------------------------------------------------------------------------- |
-| `schema_migrations` | Applied migration filenames and timestamps; managed by startup.                                      |
-| `tracks`            | Canonical Spotify tracks and resolver metadata. Parent of aliases, attempts, and optional job items. |
-| `track_aliases`     | Normalized title/artist/album lookup aliases for a track.                                            |
-| `resolver_attempts` | Resolver diagnostics, strategy, outcome, confidence, and optional track/API error links.             |
-| `api_errors`        | Fingerprinted provider errors with first/last occurrence data, counts, and normalized details.       |
-| `rate_limit_state`  | Provider/scope blocking and retry state; standalone from track identity.                             |
-| `jobs`              | Durable future work records, status, scheduling, attempts, and optional last error.                  |
-| `job_items`         | Per-item durable job progress; belongs to `jobs`, and may reference a track or API error.            |
+| Table               | Purpose and relationships                                                                      |
+| ------------------- | ---------------------------------------------------------------------------------------------- |
+| `schema_migrations` | Applied migration filenames and timestamps; managed by startup.                                |
+| `tracks`            | Canonical tracks and resolver metadata. Parent of aliases, attempts, and optional job items.   |
+| `track_aliases`     | Normalized title/artist/album lookup aliases for a track.                                      |
+| `resolver_attempts` | Resolver diagnostics, strategy, outcome, confidence, and optional track/API error links.       |
+| `api_errors`        | Fingerprinted provider errors with first/last occurrence data, counts, and normalized details. |
+| `rate_limit_state`  | Provider/scope blocking and retry state; standalone from track identity.                       |
+| `jobs`              | Durable future work records, status, scheduling, attempts, and optional last error.            |
+| `job_items`         | Per-item durable job progress; belongs to `jobs`, and may reference a track or API error.      |
 
 ```mermaid
 graph TD
@@ -68,7 +69,7 @@ graph TD
   rate_limit_state[rate_limit_state: provider + scope]
 ```
 
-The runtime error path is `Spotify HTTP client → normalized API error → api_errors → rate_limit_state → resolver/job result`. Error fingerprints are SHA-256 hashes of normalized provider, method, endpoint path, status, and provider reason; volatile request IDs and retry values are excluded. Repeated errors update `last_seen_at`, `occurrences`, and the newest useful retry metadata instead of inserting duplicate rows.
+The runtime error path is `provider client → normalized API error → api_errors → rate_limit_state → resolver/job result`. Error fingerprints are SHA-256 hashes of normalized provider, method, endpoint path, status, and provider reason; volatile request IDs and retry values are excluded. Repeated errors update `last_seen_at`, `occurrences`, and the newest useful retry metadata instead of inserting duplicate rows.
 
 Spotify rate limits are persisted per provider and scope. `/search` uses scope `search`; playlist and player endpoints use their normalized endpoint scope, so a search quota block does not unnecessarily disable playlist writes. A 429 is recorded, converted to `blocked_until` using `ceil(Retry-After)`, and returned immediately. Future requests preflight this state before authentication/network I/O, including after an application restart; no request sleeps for the Spotify cooldown.
 

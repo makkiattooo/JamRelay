@@ -25,18 +25,18 @@ MCP tool failures use the same stable application code inside an `isError: true`
 
 ## Application and Spotify errors
 
-| Code                                 | Meaning                                         | Action                                    |
-| ------------------------------------ | ----------------------------------------------- | ----------------------------------------- |
-| `reauthorization_required`           | Spotify is disconnected or refresh was rejected | Run `/auth/spotify/login`                 |
-| `spotify_feature_removed`            | Provider endpoint is no longer available        | Use another supported workflow            |
-| `artist_top_tracks_endpoint_removed` | Specific removed-endpoint marker                | Expected for `get_artist_top_tracks`      |
-| `invalid_json`                       | Unexpected malformed success body               | Inspect logs and provider status          |
-| `rate_limited`                       | Spotify returned HTTP 429                       | Respect `Retry-After`                     |
-| `unauthorized`                       | Provider rejected authentication                | Reauthorize                               |
-| `forbidden`                          | Provider denied the operation                   | Check scopes, account, Premium, ownership |
-| `not_found`                          | Provider returned HTTP 404                      | Check identifier or endpoint availability |
-| `http_<status>`                      | Non-JSON provider error                         | Inspect status and sanitized message      |
-| `spotify_api_error`                  | Other provider failure                          | Inspect logs; retry only safe reads       |
+| Code                                 | Meaning                                                          | Action                                           |
+| ------------------------------------ | ---------------------------------------------------------------- | ------------------------------------------------ |
+| `reauthorization_required`           | A provider authorization is disconnected or refresh was rejected | Reconnect from `/auth/providers/:provider/start` |
+| `spotify_feature_removed`            | Provider endpoint is no longer available                         | Use another supported workflow                   |
+| `artist_top_tracks_endpoint_removed` | Specific removed-endpoint marker                                 | Expected for `get_artist_top_tracks`             |
+| `invalid_json`                       | Unexpected malformed success body                                | Inspect logs and provider status                 |
+| `rate_limited`                       | Spotify returned HTTP 429                                        | Respect `Retry-After`                            |
+| `unauthorized`                       | Provider rejected authentication                                 | Reauthorize                                      |
+| `forbidden`                          | Provider denied the operation                                    | Check scopes, account, Premium, ownership        |
+| `not_found`                          | Provider returned HTTP 404                                       | Check identifier or endpoint availability        |
+| `http_<status>`                      | Non-JSON provider error                                          | Inspect status and sanitized message             |
+| `spotify_api_error`                  | Other provider failure                                           | Inspect logs; retry only safe reads              |
 
 ## MCP OAuth errors
 

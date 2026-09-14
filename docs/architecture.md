@@ -1,5 +1,19 @@
 # Architecture
 
+JamRelay is provider-neutral. MCP requests reach shared services, which select
+a capable `ProviderConnection` through the registry; canonical entities and
+SQLite state remain independent of provider IDs. Spotify is one adapter, not a
+boot or health prerequisite.
+
+```mermaid
+flowchart LR
+  M[MCP client] --> S[Provider-neutral services]
+  S --> R[Provider Registry]
+  R --> C[Provider Connection]
+  C --> A[Provider Adapter]
+  S --> D[(Canonical state)]
+```
+
 ```mermaid
 sequenceDiagram
   participant Client as AI client

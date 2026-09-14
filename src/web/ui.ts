@@ -14,37 +14,27 @@ const providerLabel = (provider: string) =>
     youtube: 'YouTube',
     'apple-music': 'Apple Music',
   })[provider] ?? provider;
-
-const shell = (title: string, content: string, active = '') => `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light dark"><title>${escapeHtml(title)} · JamRelay</title>
-<meta name="referrer" content="no-referrer"><style>
-:root{font-family:Inter,ui-sans-serif,system-ui,sans-serif;color:#e8eef5;background:#10151c;line-height:1.5}
-*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 20% 0,#1b2a38 0,#10151c 42%)}
-a{color:#82c7ff}a:focus,button:focus,input:focus{outline:3px solid #8bd3ff;outline-offset:2px}
-.top{border-bottom:1px solid #2c3946;background:#151d26}.bar{max-width:1120px;margin:auto;padding:18px 24px;display:flex;align-items:center;justify-content:space-between;gap:18px}.brand{font-weight:800;color:#fff;text-decoration:none;letter-spacing:.02em}.nav{display:flex;gap:14px;flex-wrap:wrap}.nav a{font-size:.92rem;text-decoration:none;padding:6px 8px;border-radius:6px}.nav a[aria-current=page]{background:#263c50;color:#fff}
-main{max-width:1120px;margin:0 auto;padding:44px 24px 70px}.eyebrow{color:#8bd3ff;text-transform:uppercase;letter-spacing:.12em;font-size:.76rem;font-weight:700}h1{font-size:clamp(2rem,5vw,3.4rem);line-height:1.08;margin:8px 0 12px}h2{margin-top:0}.lede{color:#b3c0cd;max-width:720px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;margin:28px 0}.card{background:#18222c;border:1px solid #314252;border-radius:14px;padding:22px;box-shadow:0 8px 24px #0002}.muted{color:#a9b7c5}.label{font-size:.8rem;color:#9db0c0;text-transform:uppercase;letter-spacing:.08em}.value{font-size:1.55rem;font-weight:750;margin-top:5px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}.button,button{display:inline-block;border:1px solid #52708a;border-radius:8px;background:#263d52;color:#fff;padding:10px 15px;font:inherit;font-weight:700;text-decoration:none;cursor:pointer}.button.primary,button.primary{background:#1676b8;border-color:#58b9ef}.button.danger,button.danger{background:#742d37;border-color:#c46d78}.badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:.78rem;font-weight:750;background:#29465b;color:#bce3ff}.badge.ok{background:#214a3d;color:#a9f0cd}.badge.warn{background:#5a4521;color:#ffe0a1}.badge.bad{background:#5b2932;color:#ffc1c8}.list{display:grid;gap:12px}.row{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap}.details{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}.details div{border-top:1px solid #314252;padding-top:8px}form{display:grid;gap:12px;max-width:520px}label{font-weight:650}input,select{width:100%;padding:11px 12px;border:1px solid #52708a;border-radius:8px;background:#101820;color:#fff;font:inherit}.alert{padding:13px 15px;border-radius:9px;background:#5b2932;color:#ffd5d9;margin:18px 0}.empty{padding:32px;text-align:center;border:1px dashed #52708a;border-radius:12px;color:#a9b7c5}@media(max-width:600px){.bar{padding:15px}.nav{gap:3px}main{padding:30px 15px}.card{padding:18px}}
-@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
-</style></head><body><header class="top"><div class="bar"><a class="brand" href="/admin">◆ JamRelay</a><nav class="nav" aria-label="Administration"><a ${active === 'connections' ? 'aria-current="page"' : ''} href="/admin/connections">Connections</a><a ${active === 'clients' ? 'aria-current="page"' : ''} href="/admin/clients">Clients</a><a ${active === 'status' ? 'aria-current="page"' : ''} href="/admin/status">System status</a></nav></div></header>${content}</body></html>`;
-
-export const page = (title: string, body: string, active = '') =>
-  shell(title, `<main>${body}</main>`, active);
-const statusBadge = (status: string) =>
-  `<span class="badge ${status === 'connected' ? 'ok' : status === 'error' ? 'bad' : 'warn'}">${escapeHtml(status)}</span>`;
-const preferredRoles = (id: string, preferred: { read?: string; write?: string }) => {
-  const roles = [
-    preferred.read === id ? '<span class="badge">Read</span>' : '',
-    preferred.write === id ? '<span class="badge">Write</span>' : '',
-  ].filter(Boolean);
-  return roles.join(' ') || 'None';
-};
-
+const state = (value: string) =>
+  value === 'connected'
+    ? 'Connected'
+    : value === 'disconnected'
+      ? 'Disconnected'
+      : 'Not configured';
+const roles = (id: string, preferred: { read?: string; write?: string }) =>
+  [preferred.read === id ? 'preferred read' : '', preferred.write === id ? 'preferred write' : '']
+    .filter(Boolean)
+    .join(' · ') || 'no preferred role';
+const css = `:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0d1117;color:#e6edf3}*{box-sizing:border-box}body{min-height:100vh;margin:0;padding:24px;background:#0d1117}a{color:#8b949e}a:hover{color:#c9d1d9}.wrap{width:min(100%,760px);margin:auto}.brand{display:flex;align-items:center;gap:10px;margin:12px 0 42px;color:#e6edf3;font-weight:600;text-decoration:none}.brand img{width:32px;height:32px;border-radius:6px}nav{display:flex;flex-wrap:wrap;gap:16px;margin:-24px 0 36px;font-size:14px}h1{margin:0 0 12px;color:#f0f3f6;font-size:29px;line-height:1.2}h2{margin:28px 0 8px;color:#f0f3f6;font-size:18px}p{color:#8b949e;line-height:1.5}code{color:#c9d1d9}.intro{margin:0 0 24px;max-width:680px}.section{margin:26px 0;padding:18px 0;border-top:1px solid #30363d}.row{display:flex;justify-content:space-between;align-items:baseline;gap:18px;padding:14px 0;border-bottom:1px solid #21262d}.row:last-child{border-bottom:0}.muted{color:#8b949e;font-size:14px}.state{color:#d29922;font-size:14px}.state.ok{color:#7ee787}.state.bad{color:#f85149}.actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:22px}.button,button{display:inline-block;border:1px solid #484f58;border-radius:6px;padding:9px 14px;background:transparent;color:#c9d1d9;font:inherit;font-size:14px;font-weight:600;text-decoration:none;cursor:pointer}.button:hover,button:hover{border-color:#8b949e}.primary{border-color:#238636;background:#238636;color:#fff}.danger{border-color:#da3633;color:#ff7b72}form{display:grid;gap:10px;max-width:440px}label{color:#c9d1d9;font-size:14px;font-weight:600}input{width:100%;padding:10px 12px;border:1px solid #484f58;border-radius:6px;background:#010409;color:#e6edf3;font:inherit}.error{margin:18px 0;padding-left:12px;border-left:2px solid #da3633;color:#ff7b72}.empty{padding:18px 0;color:#8b949e}.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:18px}@media(max-width:520px){body{padding:14px}.brand{margin-bottom:34px}.row{display:block}.row .state{display:block;margin-top:6px}}`;
+const shell = (title: string, content: string, active = '') =>
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark"><meta name="referrer" content="no-referrer"><title>${escapeHtml(title)} · JamRelay</title><style>${css}</style></head><body><div class="wrap"><a class="brand" href="/admin"><img src="/assets/icons/jamrelay-icon-dark.png.png" alt="JamRelay" width="32" height="32">JamRelay</a><nav aria-label="Administration"><a ${active === 'connections' ? 'aria-current="page"' : ''} href="/admin/connections">Connections</a><a ${active === 'clients' ? 'aria-current="page"' : ''} href="/admin/clients">Clients</a><a ${active === 'status' ? 'aria-current="page"' : ''} href="/admin/status">System status</a></nav>${content}</div></body></html>`;
+export const page = (title: string, body: string, active = '') => shell(title, body, active);
+const status = (value: string) =>
+  `<span class="state ${value === 'connected' ? 'ok' : value === 'disconnected' ? 'bad' : ''}">${escapeHtml(state(value))}</span>`;
 export const adminLoginPage = (error = '') =>
   page(
     'Administration',
-    `<div class="card" style="max-width:520px;margin:8vh auto"><div class="eyebrow">JamRelay Administration</div><h1>Owner sign in</h1><p class="lede">Sign in to manage this JamRelay instance. This is owner authentication, not Spotify, SoundCloud, YouTube, or Apple Music authentication.</p>${error ? `<div class="alert" role="alert">${escapeHtml(error)}</div>` : ''}<form method="post" action="/admin/login"><label for="owner-secret">Owner secret</label><input id="owner-secret" name="owner_secret" type="password" autocomplete="current-password" required><button class="primary" type="submit">Sign in securely</button></form></div>`,
+    `<main><p class="muted">JamRelay Administration</p><h1>Owner sign in</h1><p class="intro">Sign in to manage this JamRelay instance. Owner authentication is separate from MCP and provider authentication.</p>${error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ''}<form method="post" action="/admin/login"><label for="owner-secret">Owner secret</label><input id="owner-secret" name="owner_secret" type="password" autocomplete="current-password" required><button class="primary" type="submit">Sign in</button></form></main>`,
   );
-
 export const dashboardPage = (stats: {
   connections: number;
   connected: number;
@@ -52,34 +42,32 @@ export const dashboardPage = (stats: {
   schema: string;
 }) =>
   page(
-    'Dashboard',
-    `<div class="eyebrow">Owner dashboard</div><h1>JamRelay</h1><p class="lede">Manage provider connections and MCP client access from one administration space.</p><section class="grid" aria-label="Instance summary"><div class="card"><div class="label">Instance status</div><div class="value"><span class="badge ok">Operational</span></div></div><div class="card"><div class="label">Connected providers</div><div class="value">${stats.connected}</div><div class="muted">of ${stats.connections} connections</div></div><div class="card"><div class="label">Authorized MCP clients</div><div class="value">${stats.clients}</div></div><div class="card"><div class="label">Database schema</div><div class="value">${escapeHtml(stats.schema)}</div></div></section><div class="grid"><section class="card"><h2>Connections</h2><p class="muted">Music provider authorization, health and preferred read/write roles.</p><a class="button primary" href="/admin/connections">Open Connection Hub</a></section><section class="card"><h2>Authorized clients</h2><p class="muted">Review MCP OAuth grants and revoke access when needed.</p><a class="button" href="/admin/clients">Manage clients</a></section><section class="card"><h2>MCP endpoint</h2><p class="muted"><code>/mcp</code><br>Owner authentication and MCP OAuth are separate security layers.</p></section></div><form method="post" action="/owner/logout"><button class="button" type="submit">Sign out</button></form>`,
+    'JamRelay',
+    `<main><h1>JamRelay</h1><p class="intro">Owner controls for provider connections, MCP grants and system diagnostics.</p><section class="section facts"><div><div class="muted">Connections</div><div>${stats.connected} connected / ${stats.connections} configured</div></div><div><div class="muted">MCP clients</div><div>${stats.clients} authorized</div></div><div><div class="muted">Database</div><div>${escapeHtml(stats.schema)}</div></div></section><div class="actions"><a class="button primary" href="/admin/connections">Connections</a><a class="button" href="/admin/clients">Clients</a><a class="button" href="/admin/status">System status</a><form method="post" action="/owner/logout"><button type="submit">Sign out</button></form></div></main>`,
   );
-
 export const connectionsPage = (
   connections: ProviderConnectionSummary[],
   preferred: { read?: string; write?: string },
 ) =>
   page(
     'Connections',
-    `<div class="eyebrow">Connection Hub</div><h1>Music provider connections</h1><p class="lede">Each connection has its own authorization, account identity and capabilities. Disconnecting removes authorization but retains JamRelay history and snapshots.</p><div class="actions"><a class="button primary" href="/admin/providers">＋ Connect a music service</a><a class="button" href="/admin">Dashboard</a></div><section class="list" style="margin-top:28px">${
+    `<main><p class="muted">Connection Hub</p><h1>Provider connections</h1><p class="intro">Each connection has independent authorization and capabilities. Disconnecting it retains local state.</p><div class="actions"><a class="button primary" href="/admin/providers">Add provider</a><a class="button" href="/admin">Home</a></div><section class="section">${
       connections.length
         ? connections
             .map(
               (c) =>
-                `<article class="card"><div class="row"><div><h2>${escapeHtml(c.displayName || providerLabel(c.provider))}</h2><p class="muted">${escapeHtml(providerLabel(c.provider))} · <code>${escapeHtml(c.connectionId)}</code></p></div>${statusBadge(c.connected === false ? 'disconnected' : 'connected')}</div><div class="details"><div><span class="label">Capabilities</span><br>${escapeHtml(
+                `<div class="row"><div><h2>${escapeHtml(c.displayName || providerLabel(c.provider))}</h2><div class="muted">${escapeHtml(providerLabel(c.provider))} · <code>${escapeHtml(c.connectionId)}</code></div><div class="muted">Capabilities: ${escapeHtml(
                   Object.entries(c.capabilities || {})
-                    .filter(([, v]) => v)
-                    .map(([k]) => k)
-                    .join(', ') || 'None',
-                )}</div><div><span class="label">Preferred roles</span><br>${preferredRoles(c.connectionId, preferred)}</div></div><div class="actions"><a class="button" href="/admin/connections/${encodeURIComponent(c.connectionId)}">View connection</a><a class="button" href="/auth/providers/${encodeURIComponent(c.provider)}/start">Reconnect</a></div></article>`,
+                    .filter(([, value]) => value)
+                    .map(([key]) => key)
+                    .join(', ') || 'none',
+                )} · ${escapeHtml(roles(c.connectionId, preferred))}</div></div><div>${status(c.connected === false ? 'disconnected' : 'connected')}<div class="actions"><a href="/admin/connections/${encodeURIComponent(c.connectionId)}">Details</a> <a href="/auth/providers/${encodeURIComponent(c.provider)}/start">Reconnect</a></div></div></div>`,
             )
             .join('')
-        : '<div class="empty">No provider connections are configured.</div>'
-    }</section>`,
+        : '<div class="empty">No provider connections are configured. JamRelay can operate with zero providers.</div>'
+    }</section></main>`,
     'connections',
   );
-
 export const connectionDetailPage = (
   c: ProviderConnectionSummary,
   preferred: { read?: string; write?: string },
@@ -87,19 +75,42 @@ export const connectionDetailPage = (
 ) =>
   page(
     'Connection details',
-    `<div class="eyebrow"><a href="/admin/connections">Connections</a> / Details</div><h1>${escapeHtml(c.displayName || providerLabel(c.provider))}</h1><p class="lede">${escapeHtml(providerLabel(c.provider))} connection details and access controls.</p><section class="card"><div class="row"><h2>Status</h2>${statusBadge(c.connected === false ? 'disconnected' : 'connected')}</div><div class="details"><div><span class="label">Provider</span><br>${escapeHtml(providerLabel(c.provider))}</div><div><span class="label">Connection ID</span><br><code>${escapeHtml(c.connectionId)}</code></div><div><span class="label">Account</span><br>${escapeHtml((c.metadata?.account as any)?.displayName || (c.metadata?.account as any)?.id || 'Not provided')}</div><div><span class="label">Preferred roles</span><br>${preferredRoles(c.connectionId, preferred)}</div></div><div class="actions"><a class="button primary" href="/auth/providers/${encodeURIComponent(c.provider)}/start">Reconnect</a><form method="post" action="/admin/connections/${encodeURIComponent(c.connectionId)}/disconnect"><input type="hidden" name="csrf_token" value="${escapeHtml(csrfToken)}"><button class="danger" type="submit">Disconnect</button></form></div></section>`,
+    `<main><p><a href="/admin/connections">Connections</a> / Details</p><h1>${escapeHtml(c.displayName || providerLabel(c.provider))}</h1><p class="intro">${escapeHtml(providerLabel(c.provider))} connection details and controls.</p><section class="section"><div class="row"><span>State</span>${status(c.connected === false ? 'disconnected' : 'connected')}</div><div class="row"><span>Connection ID</span><code>${escapeHtml(c.connectionId)}</code></div><div class="row"><span>Provider</span><span>${escapeHtml(providerLabel(c.provider))}</span></div><div class="row"><span>Capabilities</span><span>${escapeHtml(
+      Object.entries(c.capabilities || {})
+        .filter(([, value]) => value)
+        .map(([key]) => key)
+        .join(', ') || 'none',
+    )}</span></div><div class="row"><span>Preferred role</span><span>${escapeHtml(roles(c.connectionId, preferred))}</span></div></section><div class="actions"><a class="button primary" href="/auth/providers/${encodeURIComponent(c.provider)}/start">Reconnect</a><form method="post" action="/admin/connections/${encodeURIComponent(c.connectionId)}/disconnect"><input type="hidden" name="csrf_token" value="${escapeHtml(csrfToken)}"><button class="danger" type="submit">Disconnect</button></form></div></main>`,
     'connections',
   );
-
 export const providerChooserPage = (
   providers: Array<{ id: string; label: string; configured: boolean }>,
 ) =>
   page(
-    'Connect provider',
-    `<div class="eyebrow"><a href="/admin/connections">Connections</a> / Add</div><h1>Connect a music service</h1><p class="lede">Choose a provider that is configured in this JamRelay instance. Each provider uses its own authorization model.</p><div class="grid">${providers.map((p) => `<article class="card"><h2>${escapeHtml(p.label)}</h2><p class="muted">${p.configured ? 'Ready for provider authorization.' : 'Not configured on this server.'}</p>${p.configured ? `<a class="button primary" href="/auth/providers/${encodeURIComponent(p.id)}/start">Connect ${escapeHtml(p.label)}</a>` : '<span class="badge warn">Disabled</span>'}</article>`).join('')}</div>`,
+    'Add provider',
+    `<main><p><a href="/admin/connections">Connections</a> / Add</p><h1>Add a provider</h1><p class="intro">Choose a configured provider. Each service has its own authentication and capability model.</p><section class="section">${providers.map((p) => `<div class="row"><div><h2>${escapeHtml(p.label)}</h2><div class="muted">${p.configured ? 'Server credentials are configured.' : 'Server credentials are not configured.'}</div></div>${p.id === 'apple-music' ? '<span class="state">Music User Token onboarding</span>' : p.configured ? `<a class="button primary" href="/auth/providers/${encodeURIComponent(p.id)}/start">Connect</a>` : '<span class="state">Not configured</span>'}</div>`).join('')}</section></main>`,
     'connections',
   );
-
+export const clientsPage = (
+  grants: Array<{ clientId: string; connectionIds: string[]; permissions: string[] }>,
+) =>
+  page(
+    'Authorized clients',
+    `<main><h1>Authorized MCP clients</h1><p class="intro">MCP grants are separate from owner authentication and provider connections.</p><section class="section">${grants.length ? grants.map((g) => `<div class="row"><div><h2>${escapeHtml(g.clientId)}</h2><div class="muted">Connections: ${escapeHtml(g.connectionIds.join(', ') || 'none')}</div><div class="muted">Permissions: ${escapeHtml(g.permissions.join(', ') || 'none')}</div></div><a href="/owner/grants">Manage grant</a></div>`).join('') : '<div class="empty">No MCP clients have been authorized.</div>'}</section></main>`,
+    'clients',
+  );
+export const systemStatusPage = (data: {
+  version: string;
+  schema: string;
+  currentVersion?: string;
+  authMode: string;
+  providers: string;
+}) =>
+  page(
+    'System status',
+    `<main><h1>System status</h1><p class="intro">Operator diagnostics. Provider connectivity is shown as data and does not determine server health.</p><section class="section"><div class="row"><span>Application version</span><span>${escapeHtml(data.version)}</span></div><div class="row"><span>Database</span><span>${escapeHtml(data.schema)}${data.currentVersion ? ` · ${escapeHtml(data.currentVersion)}` : ''}</span></div><div class="row"><span>MCP auth mode</span><span>${escapeHtml(data.authMode)}</span></div><div class="row"><span>Providers</span><span>${escapeHtml(data.providers)}</span></div></section><p class="muted">Secrets, tokens, private keys and raw provider responses are never displayed.</p></main>`,
+    'status',
+  );
 export const authResultPage = (
   provider: string,
   ok: boolean,
@@ -107,6 +118,6 @@ export const authResultPage = (
   requestId?: string,
 ) =>
   page(
-    ok ? 'Connection successful' : 'Connection could not be completed',
-    `<div class="card" style="max-width:650px;margin:8vh auto"><div class="eyebrow">JamRelay connection</div><h1>${ok ? 'Connection successful' : 'Authorization failed'}</h1><h2>${escapeHtml(providerLabel(provider))}</h2><p class="lede">${escapeHtml(message)}</p>${requestId ? `<p class="muted">Diagnostic request ID: <code>${escapeHtml(requestId)}</code></p>` : ''}<div class="actions"><a class="button primary" href="/admin/connections">View connections</a><a class="button" href="/admin/providers">Back to providers</a></div></div>`,
+    ok ? 'Connection successful' : 'Authorization failed',
+    `<main><h1>${ok ? 'Connection successful' : 'Authorization failed'}</h1><h2>${escapeHtml(providerLabel(provider))}</h2><p class="intro">${escapeHtml(message)}</p>${requestId ? `<p class="muted">Diagnostic request ID: <code>${escapeHtml(requestId)}</code></p>` : ''}<div class="actions"><a class="button primary" href="/admin/connections">View connections</a><a class="button" href="/admin/providers">Back to providers</a></div></main>`,
   );

@@ -16,3 +16,16 @@ Tokens without a current grant are rejected and must be authorized again.
 Every consented grant contains an explicit connection and permission allow-list;
 owners can replace or revoke it from the Connection Hub. Revocation is checked
 against each request and invalidates the grant immediately.
+
+## Three separate trust boundaries
+
+1. **MCP authentication** protects `/mcp` with bearer API keys or MCP OAuth.
+2. **Owner authentication** protects the Connection Hub with the owner secret,
+   an owner session cookie, and CSRF checks for mutations.
+3. **Provider authentication** is the independent OAuth/token model of Spotify,
+   SoundCloud, YouTube, or Apple Music.
+
+An MCP grant can restrict both permissions and allowed connection IDs. Writes
+and destructive operations fail closed when a target is missing, revoked,
+ambiguous, or lacks the capability. Provider status is never treated as a
+server-health credential.

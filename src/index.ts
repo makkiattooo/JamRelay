@@ -36,10 +36,11 @@ import {
   authResultPage,
   connectionDetailPage,
   connectionsPage,
+  clientsPage,
   dashboardPage,
   providerChooserPage,
+  systemStatusPage,
   escapeHtml,
-  page,
 } from './web/ui.js';
 import {
   closeDatabase,
@@ -302,13 +303,7 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
     return res
       .type('html')
       .set(oauthPageHeaders)
-      .send(
-        page(
-          'Authorized clients',
-          `<div class="eyebrow">Access management</div><h1>Authorized MCP clients</h1><p class="lede">MCP OAuth grants are separate from owner authentication and provider connections.</p><div class="list">${grants.length ? grants.map((g) => `<article class="card"><h2>${escapeHtml(g.clientId)}</h2><p class="muted">${g.connectionIds.length} connection(s) · ${g.permissions.length} permission(s)</p><a class="button" href="/owner/grants">View grant data</a></article>`).join('') : '<div class="empty">No MCP clients have been authorized.</div>'}</div>`,
-          'clients',
-        ),
-      );
+      .send(clientsPage(grants as any));
   });
   app.get('/admin/status', async (req, res) => {
     if (!owner(req)) return res.redirect('/admin/login');
@@ -317,11 +312,17 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
       .type('html')
       .set(oauthPageHeaders)
       .send(
-        page(
-          'System status',
-          `<div class="eyebrow">Owner-only diagnostics</div><h1>System status</h1><div class="grid"><div class="card"><div class="label">Version</div><div class="value">${escapeHtml(APP_VERSION)}</div></div><div class="card"><div class="label">Database</div><div class="value">${escapeHtml(dbStatus.schemaState)}</div><p class="muted">${escapeHtml(dbStatus.currentVersion || 'not initialized')}</p></div><div class="card"><div class="label">MCP auth mode</div><div class="value">${escapeHtml(cfg.MCP_AUTH_MODE)}</div></div></div><p class="muted">Secrets, tokens, encryption keys and raw provider responses are never displayed here.</p>`,
-          'status',
-        ),
+        systemStatusPage({
+          version: APP_VERSION,
+          schema: dbStatus.schemaState,
+          currentVersion: dbStatus.currentVersion ?? undefined,
+          authMode: cfg.MCP_AUTH_MODE,
+          providers:
+            registry
+              .listConnections()
+              .map((x) => `${x.provider}:${x.connected === false ? 'disconnected' : 'configured'}`)
+              .join(', ') || 'none',
+        }),
       );
   });
   app.post('/owner/logout', (req, res) => {
@@ -456,17 +457,19 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
       reauthorizationRequired: false,
     }),
   );
-  app.get('/auth/providers/:provider/start', (req, res) => {
-    const provider = req.params.provider.toLowerCase();
+  const providerStart = (req: express.Request, res: express.Response) => {
+    const provider = String(req.params.provider ?? 'spotify').toLowerCase();
     if (!['spotify', 'soundcloud', 'youtube'].includes(provider))
       return res.status(404).json({ error: 'PROVIDER_AUTH_UNSUPPORTED' });
     const authFlow =
       provider === 'spotify' ? auth : provider === 'soundcloud' ? soundCloudAuth : youtubeAuth;
     if (!authFlow) return sendApiError(res, providerNotConfigured());
     return res.redirect(authFlow.loginUrl().url);
-  });
-  app.get('/auth/providers/:provider/callback', async (req, res) => {
-    const provider = req.params.provider.toLowerCase();
+  };
+  app.get('/auth/providers/:provider/start', providerStart);
+  app.get('/auth/spotify/login', providerStart);
+  const providerCallback = async (req: express.Request, res: express.Response) => {
+    const provider = String(req.params.provider ?? 'spotify').toLowerCase();
     if (!['spotify', 'soundcloud', 'youtube'].includes(provider))
       return res.status(404).json({ error: 'PROVIDER_AUTH_UNSUPPORTED' });
     try {
@@ -510,7 +513,9 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
           ),
         );
     }
-  });
+  };
+  app.get('/auth/providers/:provider/callback', providerCallback);
+  app.get('/auth/spotify/callback', providerCallback);
   app.post('/auth/apple-music/user-token', express.json({ limit: '16kb' }), async (req, res) => {
     const supplied = req.header('x-jamrelay-owner-secret') || '';
     if (!cfg.MCP_OAUTH_OWNER_SECRET || supplied !== cfg.MCP_OAUTH_OWNER_SECRET)

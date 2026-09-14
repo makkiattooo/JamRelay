@@ -1,7 +1,7 @@
 # Rozwiązywanie problemów
 
 - **Invalid redirect URI:** callback musi być identyczny w Spotify Dashboard, `.env` i adresie publicznym.
-- **`invalid_grant` / `reauthorization_required`:** uruchom ponownie `/auth/spotify/login`.
+- **`invalid_grant` / `reauthorization_required`:** połącz ponownie providera przez `/auth/providers/:provider/start`.
 - **MCP `401`:** sprawdź bearer key, OAuth metadata, client ID/secret, callback i PKCE verifier.
 - **Owner secret:** `MCP_OAUTH_OWNER_SECRET` pozostaje wyłącznie na serwerze.
 - **Playback:** sprawdź `get_devices`, Spotify Premium i aktywne urządzenie.

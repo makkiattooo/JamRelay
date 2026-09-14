@@ -1,5 +1,17 @@
 # Troubleshooting
 
+## No providers connected
+
+This is valid. JamRelay can boot with an empty provider registry and `/health`
+can still be `status: ok` when the database is ready. Connect a provider through
+the [Connection Hub](/provider-connections) before calling provider-scoped tools.
+
+## Write target errors
+
+Supply the intended `connection_id` and confirm the connection declares the
+required capability. Multiple possible write targets are rejected deliberately;
+JamRelay never silently switches provider or account.
+
 - **Spotify authorization failure:** callback must exactly match the dashboard and `SPOTIFY_REDIRECT_URI`.
 - **`reauthorization_required` / `invalid_grant`:** authorize again at `/auth/providers/spotify/start`.
 - **MCP 401:** check bearer/OAuth token, `.well-known` metadata, `PUBLIC_BASE_URL`, client ID, secret, callback, and PKCE verifier.
