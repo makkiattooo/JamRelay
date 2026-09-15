@@ -43,7 +43,7 @@ describe('JamRelay web UI', () => {
     expect(clientsPage([])).toContain('Authorized MCP clients');
     expect(
       systemStatusPage({
-        version: '1.2.0',
+        version: '1.3.0',
         schema: 'current',
         authMode: 'none',
         providers: 'none',

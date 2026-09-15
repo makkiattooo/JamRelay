@@ -11,8 +11,8 @@ export const localeMeta: Record<
   en: { label: 'English', lang: 'en', prefix: '', canonical: true },
   pl: { label: 'Polski', lang: 'pl', prefix: '/pl', canonical: false },
   de: { label: 'Deutsch', lang: 'de', prefix: '/de', canonical: false },
-  fr: { label: 'Français', lang: 'fr', prefix: '/fr', canonical: false },
-  es: { label: 'Español', lang: 'es', prefix: '/es', canonical: false },
+  fr: { label: 'FranÃ§ais', lang: 'fr', prefix: '/fr', canonical: false },
+  es: { label: 'EspaÃ±ol', lang: 'es', prefix: '/es', canonical: false },
 };
 export const sections: Section[] = [
   {
@@ -77,6 +77,7 @@ export const sections: Section[] = [
   {
     label: 'Reference and development',
     pages: [
+      { path: 'release-1.3.0', label: 'Release 1.3.0' },
       { path: 'release-1.2.0', label: 'Release 1.2.0' },
       { path: 'tools', label: 'Using JamRelay tools' },
       { path: 'tools-reference', label: 'Generated tool reference' },

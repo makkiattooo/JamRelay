@@ -30,7 +30,7 @@ describe('provider-neutral bootstrap', () => {
     const healthBody: any = await health.json();
     expect(healthBody.providers).toEqual([]);
     expect(healthBody.spotifyConnected).toBe(false);
-    expect(healthBody.version).toBe('1.2.0');
+    expect(healthBody.version).toBe('1.3.0');
     const status: any = await (await fetch(base + '/auth/status')).json();
     expect(status.providers).toEqual([]);
     expect(status.spotifyConnected).toBe(false);

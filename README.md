@@ -20,9 +20,9 @@ Turn high-level requests into deterministic, inspectable and reversible music op
 [![MCP](https://img.shields.io/badge/MCP-Streamable%20HTTP-6f42c1?style=flat-square)](docs/mcp-client.md)
 [![Providers](https://img.shields.io/badge/providers-Spotify%20%7C%20SoundCloud%20%7C%20Apple%20Music%20%7C%20YouTube-6f42c1?style=flat-square)](docs/providers/)
 
-[Get started](docs/getting-started.md) ·
-[Documentation](docs/index.md) ·
-[MCP tools](docs/tools-reference.md) ·
+[Get started](docs/getting-started.md) Â·
+[Documentation](docs/index.md) Â·
+[MCP tools](docs/tools-reference.md) Â·
 [Latest release](https://github.com/makkiattooo/JamRelay/releases/latest)
 
 </div>
@@ -45,19 +45,19 @@ The goal is:
 
 ```text
 request
-   ↓
+   â†“
 analyze state
-   ↓
+   â†“
 build deterministic plan
-   ↓
+   â†“
 preview / dry run
-   ↓
+   â†“
 snapshot
-   ↓
+   â†“
    execute bounded provider operations
-   ↓
+   â†“
 verify
-   ↓
+   â†“
 record state
 ```
 
@@ -88,7 +88,7 @@ Examples include:
 Complex playlist mutations are designed around:
 
 ```text
-ANALYZE → PLAN → DRY RUN → SNAPSHOT → EXECUTE → VERIFY → RECORD
+ANALYZE â†’ PLAN â†’ DRY RUN â†’ SNAPSHOT â†’ EXECUTE â†’ VERIFY â†’ RECORD
 ```
 
 Smart mutations use dry-run-first behavior where supported. JamRelay can preserve ordered playlist snapshots before a change and verify the resulting playlist afterwards.
@@ -99,12 +99,12 @@ JamRelay does not immediately call Spotify Search for every metadata lookup.
 
 ```text
 metadata query
-   ↓
+   â†“
 normalize
-   ↓
+   â†“
 local canonical / alias lookup
-   ├── hit  → return local result
-   └── miss → Spotify Search → validate → persist
+   â”œâ”€â”€ hit  â†’ return local result
+   â””â”€â”€ miss â†’ Spotify Search â†’ validate â†’ persist
 ```
 
 Known tracks can resolve locally. Ambiguous or low-confidence matches are not blindly cached.
@@ -167,17 +167,17 @@ can become:
 
 ```text
 playlist health report
-        ↓
+        â†“
 deterministic optimization plan
-        ↓
+        â†“
 dry run
-        ↓
+        â†“
 safety snapshot
-        ↓
+        â†“
 apply ordering changes
-        ↓
+        â†“
 capture resulting state
-        ↓
+        â†“
 verify ordered playlist contents
 ```
 
@@ -481,11 +481,11 @@ npm run release:check
 
 The VitePress documentation is the primary technical documentation.
 
-- [English](docs/index.md) — canonical
-- [Polski](docs/pl/index.md) — high priority
-- [Deutsch](docs/de/index.md) — best effort
-- [Français](docs/fr/index.md) — best effort
-- [Español](docs/es/index.md) — best effort
+- [English](docs/index.md) â€” canonical
+- [Polski](docs/pl/index.md) â€” high priority
+- [Deutsch](docs/de/index.md) â€” best effort
+- [FranÃ§ais](docs/fr/index.md) â€” best effort
+- [EspaÃ±ol](docs/es/index.md) â€” best effort
 
 Fast-changing references are generated from project sources with:
 
@@ -560,10 +560,14 @@ Read:
 
 Latest release:
 
-[**JamRelay v1.2.0 — Provider-neutral Music Automation**](https://github.com/makkiattooo/JamRelay/releases/tag/v1.2.0)
+[**JamRelay v1.3.0 â€” Production Hardening & Admin Console**](https://github.com/makkiattooo/JamRelay/releases/tag/v1.3.0)
 
-See [CHANGELOG.md](CHANGELOG.md) for release history.
+Release notes:
 
+- [JamRelay 1.3.0](docs/release-1.3.0.md)
+- [JamRelay 1.2.0](docs/release-1.2.0.md)
+
+See [CHANGELOG.md](CHANGELOG.md) for the complete release history.
 ---
 
 ## License

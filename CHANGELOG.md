@@ -7,12 +7,123 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Reliability and security hardening
+## [1.3.0] - 2026-09-15
 
-- Serialized encrypted credential-store mutations across all instances sharing a file path.
-- Added bounded, cancellable concurrency for YouTube playlist writes.
-- MCP handlers now await lifecycle completion and propagate disconnect cancellation.
-- Durable job shutdown drains active work before closing SQLite.
+### Highlights
+
+JamRelay 1.3.0 is a production-hardening and operations release built on top of the provider-neutral architecture introduced in 1.2.0.
+
+The release substantially improves concurrency safety, MCP request lifecycle, large-playlist processing, authorization metadata, provider capabilities, durable jobs, backup operations and the built-in Admin Console.
+
+### Admin Console
+
+- Expanded the owner interface into an operator-oriented Admin Console.
+- Added a responsive application shell and self-hosted admin CSS/JavaScript.
+- Added dedicated views for durable jobs, diagnostics and MCP tools.
+- Expanded provider connection and MCP client management.
+- Added connection settings and grant-management actions.
+- Added job detail and supported cancel/resume controls.
+- Added rate-limit and provider API-error diagnostics.
+- Added safe system/runtime configuration views.
+- Added a dedicated Admin Console CSP.
+- Added secret-canary regression tests to prevent credentials from being rendered in administrative HTML.
+
+### Reliability
+
+- Serialized encrypted credential-store mutations across all instances sharing the same credential file.
+- Added deterministic regression coverage for concurrent credential saves, updates and removals.
+- Added bounded concurrency primitives with cancellation and stable result ordering.
+- Improved MCP request lifecycle handling and cancellation propagation.
+- MCP request handlers now await execution instead of running detached.
+- Added operation deadline classes for interactive and heavy work.
+- Improved graceful shutdown so durable work is stopped/drained before SQLite is closed.
+- Isolated provider startup and health failures more defensively.
+
+### Playlist engine
+
+- Added a shared provider-neutral `PlaylistStateReader`.
+- Centralized complete playlist pagination.
+- Added support for offset and cursor/page-token pagination models.
+- Fixed transfer/synchronization state handling for playlists larger than one provider page.
+- Added revision-aware playlist state caching.
+- Added request-scoped singleflight for duplicate expensive reads.
+- Added a shared playlist mutation service.
+- Reduced duplicated playlist read/write orchestration.
+- Preserved deterministic ordering and conservative ordered writes.
+- Added regression tests for large playlists and shared state reads.
+
+### Providers
+
+- Added granular playlist-operation capabilities: create, add, remove, reorder, replace and update.
+- Added fail-closed checks before unsupported provider operations.
+- Improved provider HTTP deadline and cancellation behavior.
+- Added bounded YouTube playlist-operation concurrency.
+- Added YouTube OAuth refresh singleflight to prevent concurrent refresh storms.
+- Continued to keep provider-specific behavior behind adapters and explicit compatibility boundaries.
+- TIDAL remains feasibility-only and is not implemented.
+
+### MCP authorization
+
+- Added a centralized MCP tool manifest.
+- Consolidated permission and mutation metadata.
+- Improved fail-closed behavior for tools missing authorization metadata.
+- Strengthened connection-scoped authorization.
+- Added architectural regression tests preventing generic playlist/MCP code from drifting back into direct Spotify coupling.
+
+### Durable jobs
+
+- Added controlled bounded batching for resolver work.
+- Preserved ordered durable progress.
+- Improved rate-limit-aware waiting behavior.
+- Reduced unnecessary continued scheduling after provider 429 responses.
+- Expanded durable-job regression coverage.
+- Preserved protection against blindly repeating externally uncertain writes.
+
+### Backup and operations
+
+- Added application-aware backup support and `npm run backup`.
+- Added backup validation tests.
+- Updated operations, security and State DB documentation.
+- Added release guidance for protecting `TOKEN_ENCRYPTION_KEY` separately from ordinary application backups.
+
+### Testing
+
+- Added regression suites covering Admin Console routes, secret rendering, architecture boundaries, backup, concurrency, credential-store races, MCP ACL behavior, playlist mutation ordering, provider-neutral playlist state, request lifecycle/cancellation, singleflight, transfer planning and YouTube token refresh behavior.
+- Expanded large-playlist and provider-capability coverage.
+
+### Security
+
+- Prevented lost provider credentials during concurrent credential-store writes.
+- Strengthened fail-closed MCP tool authorization metadata.
+- Improved connection grant isolation.
+- Improved provider-operation capability enforcement.
+- Added permanent secret-canary rendering tests for the Admin Console.
+- Preserved separation between owner authentication, MCP authentication and provider authentication.
+- Provider tokens, MCP tokens, owner secrets and encryption keys remain outside administrative rendering.
+
+### Upgrade notes
+
+Before upgrading:
+
+1. preserve persistent JamRelay state;
+2. preserve `TOKEN_ENCRYPTION_KEY`;
+3. preserve provider credentials and MCP OAuth state;
+4. create a backup;
+5. deploy the new version;
+6. verify `/health`;
+7. verify the Admin Console;
+8. verify provider connections;
+9. perform a read-only MCP smoke test;
+10. verify writes only after read-path validation.
+
+Recommended release validation:
+
+```bash
+npm ci
+npm run check
+```
+
+See [JamRelay 1.3.0 release notes](docs/release-1.3.0.md).
 
 ## [1.2.0] - 2026-09-14
 
@@ -78,16 +189,6 @@ guide](docs/release-1.2.0.md).
 Real-provider OAuth, quota behavior, playback, and third-party MCP client
 compatibility require manual verification. Apple Music Music User Tokens must
 be obtained through a client context. TIDAL has no runtime adapter.
-
-## [Unreleased]
-
-- Follow-up work will be documented here without changing the 1.2.0 record.
-
-- Release-engineering validation for provider-neutral routing, Connection Hub,
-  MCP connection/permission grants, migrations, backup/rollback procedures and
-  deployment compatibility.
-- Manual provider credentials remain required before production readiness is
-  declared.
 
 ## [1.1.0] - 2026-09-13
 
@@ -220,7 +321,7 @@ v1.1.0 ships:
 
 High-level lifecycle:
 
-`ANALYZE → PLAN → DRY RUN → SNAPSHOT → EXECUTE → VERIFY → RECORD`
+`ANALYZE â†’ PLAN â†’ DRY RUN â†’ SNAPSHOT â†’ EXECUTE â†’ VERIFY â†’ RECORD`
 
 #### Rules and recipes
 
@@ -438,5 +539,7 @@ Initial public release of JamRelay.
 - Stopped silently resetting unreadable OAuth stores.
 - Improved issuer information and DCR callback validation.
 
+[1.3.0]: https://github.com/makkiattooo/JamRelay/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/makkiattooo/JamRelay/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/makkiattooo/JamRelay/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/makkiattooo/JamRelay/releases/tag/v1.0.0
