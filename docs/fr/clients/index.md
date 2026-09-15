@@ -1,7 +1,7 @@
 ---
 title: Compatibilité des clients IA
 translationReviewed: 2026-09-12
-sourceHash: 9236fcfa4cb5
+sourceHash: 55bdab3da45c
 ---
 
 # Compatibilité des clients IA

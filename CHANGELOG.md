@@ -5,6 +5,15 @@ All notable changes to JamRelay are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Reliability and security hardening
+
+- Serialized encrypted credential-store mutations across all instances sharing a file path.
+- Added bounded, cancellable concurrency for YouTube playlist writes.
+- MCP handlers now await lifecycle completion and propagate disconnect cancellation.
+- Durable job shutdown drains active work before closing SQLite.
+
 ## [1.2.0] - 2026-09-14
 
 ### Highlights

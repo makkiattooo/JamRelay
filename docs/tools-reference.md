@@ -50,7 +50,6 @@ Add tracks sequentially in chunks of at most 100 using /items.
 **Title:** Apply playlist recipe
 
 **Type:** Write / action
-**Destructive hint:** yes
 
 Apply a persistent recipe; dry_run defaults true, execution creates one safety snapshot.
 
@@ -68,6 +67,7 @@ Apply a persistent recipe; dry_run defaults true, execution creates one safety s
 **Title:** Archive playlist
 
 **Type:** Write / action
+**Destructive hint:** yes
 
 Persist an immutable local snapshot/version; no provider mutation.
 
@@ -117,7 +117,6 @@ Reorder without removing tracks; dry_run defaults true.
 ## `batch_playlist_jobs`
 
 **Type:** Write / action
-**Destructive hint:** yes
 
 batch_playlist_jobs is planned through the shared playlist engine; dry_run defaults true.
 
@@ -169,7 +168,6 @@ Add mixed ID/URI/search track inputs in ordered chunks; supports strict, dry_run
 ## `bulk_edit_playlists`
 
 **Type:** Write / action
-**Destructive hint:** yes
 
 bulk_edit_playlists is planned through the shared playlist engine; dry_run defaults true.
 
@@ -240,7 +238,6 @@ Return an exact input-to-saved mapping using current /me/library/contains.
 **Title:** Clone playlist
 
 **Type:** Write / action
-**Destructive hint:** yes
 
 Clone ordered playlist content; dry_run defaults true and never creates a playlist.
 
@@ -422,7 +419,7 @@ Read-only conservative Spotify API request estimate; no financial pricing.
 
 **Title:** Execute playlist transfer
 
-**Type:** Read
+**Type:** Write / action
 **Destructive hint:** yes
 
 Execute a previously validated transfer plan against the explicitly selected destination. Requires confirmation and verifies the resulting playlist.
@@ -456,7 +453,6 @@ Export provider-neutral canonical playlist data without credentials or provider 
 **Title:** Extend playlist to duration
 
 **Type:** Write / action
-**Destructive hint:** yes
 
 Resolve a local candidate pool, append only needed tracks, snapshot and verify.
 
@@ -474,7 +470,6 @@ Resolve a local candidate pool, append only needed tracks, snapshot and verify.
 ## `extract_artist_tracks`
 
 **Type:** Write / action
-**Destructive hint:** yes
 
 extract_artist_tracks using playlist metadata; dry_run defaults true.
 
@@ -492,7 +487,6 @@ extract_artist_tracks using playlist metadata; dry_run defaults true.
 **Title:** Filter playlist
 
 **Type:** Write / action
-**Destructive hint:** yes
 
 Filter by typed deterministic predicates; dry_run defaults true.
 
@@ -552,7 +546,6 @@ Resolve a track by deterministic title/artist/album/year scoring; returns matche
 ## `freshen_playlist`
 
 **Type:** Write / action
-**Destructive hint:** yes
 
 freshen_playlist is planned through the shared playlist engine; dry_run defaults true.
 
@@ -613,7 +606,7 @@ Get a provider artist by ID, URI, or URL.
 
 **Title:** Get artist top tracks
 
-**Type:** Read
+**Type:** Write / action
 
 Spotify removed the official endpoint in February 2026; this tool returns a structured platform limitation.
 
@@ -943,7 +936,7 @@ Get a provider track by ID, URI, or URL.
 
 **Title:** Import playlist
 
-**Type:** Read
+**Type:** Write / action
 
 Parse and validate provider-neutral playlist data. This operation never writes to a provider.
 
@@ -971,6 +964,7 @@ inbox_playlist remains local-first and dry-run by default; no unsupported Spotif
 ## `liked_to_playlist_sync`
 
 **Type:** Write / action
+**Destructive hint:** yes
 
 liked_to_playlist_sync remains local-first and dry-run by default; no unsupported Spotify behavior is assumed.
 
@@ -1021,7 +1015,6 @@ List bounded durable job summaries.
 **Title:** Smart merge playlists
 
 **Type:** Write / action
-**Destructive hint:** yes
 
 Merge source playlists without mutating them; dry_run defaults true.
 
@@ -1040,7 +1033,6 @@ Merge source playlists without mutating them; dry_run defaults true.
 ## `move_artist_tracks`
 
 **Type:** Write / action
-**Destructive hint:** yes
 
 move_artist_tracks using playlist metadata; dry_run defaults true.
 
@@ -1242,6 +1234,7 @@ Read-only deterministic rule evaluation; never mutates Spotify.
 ## `playlist_skip_cleanup`
 
 **Type:** Write / action
+**Destructive hint:** yes
 
 playlist_skip_cleanup remains local-first and dry-run by default; no unsupported Spotify behavior is assumed.
 
@@ -1258,7 +1251,6 @@ playlist_skip_cleanup remains local-first and dry-run by default; no unsupported
 **Title:** Trim playlist to duration
 
 **Type:** Write / action
-**Destructive hint:** yes
 
 Plan or trim a playlist without exceeding the target; dry_run defaults true.
 
@@ -1276,6 +1268,7 @@ Plan or trim a playlist without exceeding the target; dry_run defaults true.
 ## `playlist_versioning`
 
 **Type:** Write / action
+**Destructive hint:** yes
 
 Read-only local-first personalization operation with explicit evidence and no automatic provider mutation.
 
@@ -1290,7 +1283,7 @@ Read-only local-first personalization operation with explicit evidence and no au
 
 **Title:** Preview playlist import
 
-**Type:** Read
+**Type:** Write / action
 
 Parse and validate provider-neutral playlist data. This operation never writes to a provider.
 
@@ -1376,7 +1369,6 @@ Verify a known Spotify track ID, URI, or public URL and save its safe alias.
 ## `remove_artist_from_playlist`
 
 **Type:** Write / action
-**Destructive hint:** yes
 
 remove_artist_from_playlist using playlist metadata; dry_run defaults true.
 
@@ -1445,7 +1437,6 @@ Reorder with current PUT /items payload.
 ## `replace_artist_tracks`
 
 **Type:** Write / action
-**Destructive hint:** yes
 
 replace_artist_tracks using playlist metadata; dry_run defaults true.
 
@@ -1461,7 +1452,6 @@ replace_artist_tracks using playlist metadata; dry_run defaults true.
 ## `replace_percentage`
 
 **Type:** Write / action
-**Destructive hint:** yes
 
 replace_percentage is planned through the shared playlist engine; dry_run defaults true.
 
@@ -1799,7 +1789,6 @@ Plan or reorder using local evidence only; dry_run defaults true and snapshots o
 **Title:** Split playlist
 
 **Type:** Write / action
-**Destructive hint:** yes
 
 Split a playlist into deterministic groups; dry_run defaults true.
 
@@ -1818,7 +1807,7 @@ Split a playlist into deterministic groups; dry_run defaults true.
 
 **Title:** Synchronize transferred playlist
 
-**Type:** Read
+**Type:** Write / action
 **Destructive hint:** yes
 
 Apply an explicitly confirmed provider-neutral sync policy. Destructive cross-provider conflicts fail closed.
@@ -1837,7 +1826,6 @@ Apply an explicitly confirmed provider-neutral sync policy. Destructive cross-pr
 **Title:** Sync playlists
 
 **Type:** Write / action
-**Destructive hint:** yes
 
 Plan or apply deterministic playlist synchronization; dry_run defaults true.
 

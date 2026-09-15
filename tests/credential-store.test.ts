@@ -84,4 +84,26 @@ describe('encrypted provider credential store', () => {
     expect(await migrateLegacyCredentialStore(legacy, store, 'spotify-main')).toBe('skipped');
     expect(await store.load('spotify-main')).toEqual(legacy && (await legacy.load()));
   });
+
+  it('serializes mutations across store instances sharing the same path', async () => {
+    const { path, key } = await setup();
+    const first = new EncryptedCredentialStore(path, key);
+    const second = new EncryptedCredentialStore(path, key);
+
+    await Promise.all([
+      first.save('spotify-main', { refreshToken: 'spotify' }, { provider: 'spotify' }),
+      second.save('youtube-main', { refreshToken: 'youtube' }, { provider: 'youtube' }),
+    ]);
+    expect((await first.list()).map((record) => record.connectionId).sort()).toEqual([
+      'spotify-main',
+      'youtube-main',
+    ]);
+
+    await Promise.all([
+      first.save('spotify-main', { refreshToken: 'spotify-2' }),
+      second.remove('youtube-main'),
+    ]);
+    expect(await first.load('spotify-main')).toEqual({ refreshToken: 'spotify-2' });
+    expect(await second.load('youtube-main')).toBeNull();
+  });
 });

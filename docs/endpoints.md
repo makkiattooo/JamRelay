@@ -17,6 +17,9 @@ account is not required.
 | `GET`                 | `/owner/login`                              | none                    | Owner session login page                 |
 | `POST`                | `/owner/login`                              | owner secret            | Creates an HttpOnly owner session        |
 | `POST`                | `/owner/logout`                             | owner session           | Invalidates the owner session            |
+| `GET`                 | `/admin` and `/admin/*`                     | owner session           | Owner administration console pages       |
+| `POST`                | `/admin/logout`                             | owner + CSRF            | Invalidates the owner session            |
+| `POST`                | `/admin/backups/create`                     | owner + CSRF            | Creates an application-aware backup      |
 | `GET`                 | `/connections`                              | owner session           | Connection Hub inventory                 |
 | `GET/PATCH/DELETE`    | `/connections/:connectionId`                | owner + CSRF for writes | Inspect or manage one connection         |
 | `GET`                 | `/owner/grants`                             | owner session           | List MCP grants                          |

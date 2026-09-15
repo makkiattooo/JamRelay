@@ -58,7 +58,18 @@ export interface ProviderCapabilities {
   library?: boolean;
   playback?: boolean;
   history?: boolean;
+  playlistOperations?: Partial<Record<PlaylistOperation, boolean>>;
 }
+
+export const PLAYLIST_OPERATIONS = [
+  'create',
+  'add',
+  'remove',
+  'reorder',
+  'replace',
+  'update',
+] as const;
+export type PlaylistOperation = (typeof PLAYLIST_OPERATIONS)[number];
 
 export type ProviderCapabilityName = keyof ProviderCapabilities;
 

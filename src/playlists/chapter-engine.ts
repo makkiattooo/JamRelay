@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { SpotifyClient } from '../spotify/client.js';
+import type { ProviderHttpClient } from '../providers/http-client.js';
 import { getDatabase, isDatabaseInitialized } from '../db/database.js';
 import { normalizePlaylistItems } from './normalize.js';
 import type { NormalizedPlaylistTrack } from './types.js';
@@ -207,7 +207,7 @@ export function analyzeChapters(tracks: NormalizedPlaylistTrack[], options: Chap
 
 export class PlaylistChapterEngine {
   constructor(
-    private readonly client: SpotifyClient,
+    private readonly client: ProviderHttpClient,
     private readonly fetchPlaylist: (playlistId: string) => Promise<{ meta: any; raw: any[] }>,
   ) {}
   async chapterize(

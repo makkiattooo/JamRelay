@@ -14,3 +14,12 @@ Tracks are represented internally as canonical entities with provider mappings.
 Provider IDs and URLs remain provider-specific evidence; they are not universal
 identifiers. Cross-provider transfer therefore plans a match and exposes
 confidence/ambiguity before any destination write.
+
+## Playlist operation capabilities
+
+In addition to the legacy high-level `playlistRead` and `playlistWrite`
+booleans, provider connections expose granular playlist operations:
+`create`, `add`, `remove`, `reorder`, `replace`, and `update`. Generic writes
+check the exact operation before provider I/O. For example, YouTube supports
+playlist item insertion, deletion, reordering, and metadata updates, but does
+not advertise `replace`; a generic replace request fails closed.

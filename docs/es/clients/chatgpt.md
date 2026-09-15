@@ -1,7 +1,7 @@
 ---
 title: ChatGPT
 translationReviewed: 2026-09-12
-sourceHash: 9de76e63d024
+sourceHash: 3d334093a42f
 ---
 
 # ChatGPT

@@ -2,6 +2,7 @@ import type { MusicCandidate } from '../music/normalize.js';
 import type { ProviderConnection } from '../providers/types.js';
 import type { YouTubeAuth } from './auth.js';
 import { YouTubeClient } from './client.js';
+import { mapLimit } from '../utils/concurrency.js';
 const video = (x: any): MusicCandidate | null => {
   const s = x?.snippet ?? {};
   const id = x?.id?.videoId ?? x?.contentDetails?.videoId ?? x?.id;
@@ -45,7 +46,19 @@ export class YouTubeProviderAdapter implements ProviderConnection {
     this.summary = {
       connectionId,
       provider: 'youtube',
-      capabilities: { catalog: true, playlistRead: true, playlistWrite: true },
+      capabilities: {
+        catalog: true,
+        playlistRead: true,
+        playlistWrite: true,
+        playlistOperations: {
+          create: true,
+          add: true,
+          remove: true,
+          reorder: true,
+          replace: false,
+          update: true,
+        },
+      },
       metadata: { itemKind: 'video', quotaModel: 'YouTube Data API units' },
     };
     this.catalog = {
@@ -110,18 +123,18 @@ export class YouTubeProviderAdapter implements ProviderConnection {
           )
           .then((r) => playlist(r.value)),
       addTracks: async (id: string, ids: string[]) =>
-        Promise.all(
-          ids.map((videoId) =>
-            this.client.request(
-              'playlistItems.insert',
-              { part: 'snippet' },
-              { snippet: { playlistId: id, resourceId: { kind: 'youtube#video', videoId } } },
-            ),
+        // YouTube assigns playlist positions in insertion order; serialize
+        // ordered inserts instead of trading correctness for throughput.
+        mapLimit(ids, { concurrency: 1 }, (videoId) =>
+          this.client.request(
+            'playlistItems.insert',
+            { part: 'snippet' },
+            { snippet: { playlistId: id, resourceId: { kind: 'youtube#video', videoId } } },
           ),
         ).then(() => ({ added: ids.length, quota_cost: ids.length * 50 })),
       removeTracks: async (_playlistId: string, itemIds: string[]) => {
-        await Promise.all(
-          itemIds.map((itemId) => this.client.request('playlistItems.delete', { id: itemId })),
+        await mapLimit(itemIds, { concurrency: 8 }, (itemId) =>
+          this.client.request('playlistItems.delete', { id: itemId }),
         );
         return { removed: itemIds.length, quota_cost: itemIds.length * 50 };
       },

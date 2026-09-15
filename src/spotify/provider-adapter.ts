@@ -13,6 +13,7 @@ import type { ProviderConnection } from '../providers/types.js';
 import { chunks } from '../utils/chunks.js';
 import { SpotifyAuth } from './auth.js';
 import { SpotifyClient } from './client.js';
+import type { ProviderHttpClient } from '../providers/http-client.js';
 import { SpotifyApiError } from './errors.js';
 import { parseSpotifyIdentifier } from './identifiers.js';
 
@@ -154,7 +155,7 @@ export class SpotifyProviderAdapter implements ProviderConnection {
 
   constructor(
     private readonly auth: SpotifyAuth,
-    private readonly client: SpotifyClient = new SpotifyClient(auth),
+    private readonly client: ProviderHttpClient = new SpotifyClient(auth),
     options: SpotifyAdapterOptions = {},
   ) {
     const connectionId = options.connectionId ?? 'spotify-default';
@@ -170,6 +171,14 @@ export class SpotifyProviderAdapter implements ProviderConnection {
         library: true,
         playback: true,
         history: true,
+        playlistOperations: {
+          create: true,
+          add: true,
+          remove: true,
+          reorder: true,
+          replace: true,
+          update: true,
+        },
       },
       metadata: { provider: 'spotify' },
     };
@@ -459,7 +468,6 @@ export class SpotifyProviderAdapter implements ProviderConnection {
     try {
       return await operation();
     } catch (error) {
-      if (error instanceof ProviderApiError) throw error;
       if (error instanceof SpotifyApiError)
         throw new ProviderApiError(
           error.status,
@@ -474,6 +482,7 @@ export class SpotifyProviderAdapter implements ProviderConnection {
             cause: error,
           },
         );
+      if (error instanceof ProviderApiError) throw error;
       throw error;
     }
   }

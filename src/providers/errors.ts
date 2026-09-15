@@ -1,5 +1,9 @@
 export class ProviderApiError extends Error {
+  public apiErrorId?: number;
   public readonly providerCode?: string;
+  public readonly retryAfter?: number;
+  public readonly scope?: string;
+  public readonly capability?: string;
 
   constructor(
     public readonly status: number,
@@ -21,10 +25,6 @@ export class ProviderApiError extends Error {
     this.capability = options.capability;
     this.providerCode = options.providerCode;
   }
-
-  public readonly retryAfter?: number;
-  public readonly scope?: string;
-  public readonly capability?: string;
 }
 
 export class ProviderSelectionError extends Error {

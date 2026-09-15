@@ -3,8 +3,21 @@ import { PlaylistGateway } from '../src/providers/playlist-gateway.js';
 import { ProviderRegistry } from '../src/providers/registry.js';
 import { ProviderSelectionError } from '../src/providers/errors.js';
 
-const fake = (id: string, provider: string, calls: string[] = [], batchSize = 2): any => ({
-  summary: { connectionId: id, provider, capabilities: { playlistWrite: true } },
+const fake = (
+  id: string,
+  provider: string,
+  calls: string[] = [],
+  batchSize = 2,
+  operations?: any,
+): any => ({
+  summary: {
+    connectionId: id,
+    provider,
+    capabilities: {
+      playlistWrite: true,
+      ...(operations ? { playlistOperations: operations } : {}),
+    },
+  },
   playlistWrite: {
     createPlaylist: async (input: any) => ({ id: `${id}-playlist`, ...input }),
     addTracks: async (playlistId: string, tracks: string[]) => {
@@ -44,5 +57,15 @@ describe('PlaylistGateway', () => {
     registry.register(fake('a', 'alpha'));
     const result = await new PlaylistGateway(registry).create({ name: 'x' }, { provider: 'alpha' });
     expect(result).toMatchObject({ id: 'a-playlist', name: 'x' });
+  });
+
+  it('rejects an unsupported granular operation before provider I/O', async () => {
+    const calls: string[] = [];
+    const registry = new ProviderRegistry();
+    registry.register(fake('youtube', 'youtube', calls, 2, { replace: false }));
+    expect(() =>
+      new PlaylistGateway(registry).replace('p1', ['t1'], { connection_id: 'youtube' }),
+    ).toThrow('does not support playlist replace');
+    expect(calls).toEqual([]);
   });
 });

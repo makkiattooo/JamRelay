@@ -121,5 +121,5 @@ export const oauthPageHeaders = {
   Pragma: 'no-cache',
   'Referrer-Policy': 'no-referrer',
   'Content-Security-Policy':
-    "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
+    "default-src 'none'; img-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
 };

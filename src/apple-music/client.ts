@@ -1,5 +1,6 @@
 import { ProviderApiError } from '../providers/errors.js';
 import type { AppleMusicAuth } from './auth.js';
+import { toolContext } from '../mcp/context.js';
 
 export class AppleMusicClient {
   constructor(
@@ -23,9 +24,16 @@ export class AppleMusicClient {
         );
       headers['Music-User-Token'] = userToken;
     }
+    const parentSignal = toolContext.get()?.signal;
+    const timeoutSignal = AbortSignal.timeout(15_000);
     const response = await fetch(`https://api.music.apple.com/v1${path}`, {
       ...init,
       headers: { ...headers, ...(init.headers as any) },
+      signal: AbortSignal.any([
+        timeoutSignal,
+        ...(parentSignal ? [parentSignal] : []),
+        ...(init.signal ? [init.signal] : []),
+      ]),
     });
     const value: any = await response.json().catch(() => ({}));
     if (!response.ok)

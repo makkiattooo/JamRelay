@@ -1,5 +1,6 @@
 import { ProviderApiError } from '../providers/errors.js';
 import type { SoundCloudAuth } from './auth.js';
+import { toolContext } from '../mcp/context.js';
 export class SoundCloudClient {
   constructor(
     private readonly auth: SoundCloudAuth,
@@ -15,12 +16,20 @@ export class SoundCloudClient {
         this.connectionId,
       );
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
+    const remaining = toolContext.get()?.deadlineAt
+      ? Math.max(1, toolContext.get()!.deadlineAt - Date.now())
+      : 15_000;
+    const timer = setTimeout(() => controller.abort(), Math.min(15_000, remaining));
     try {
+      const parentSignal = toolContext.get()?.signal;
       const response = await fetch('https://api.soundcloud.com' + path, {
         ...init,
         headers: { accept: 'application/json', Authorization: 'OAuth ' + token, ...init.headers },
-        signal: AbortSignal.any([controller.signal, ...(init.signal ? [init.signal] : [])]),
+        signal: AbortSignal.any([
+          controller.signal,
+          ...(parentSignal ? [parentSignal] : []),
+          ...(init.signal ? [init.signal] : []),
+        ]),
       });
       const value: any = await response.json().catch(() => ({}));
       if (!response.ok)

@@ -127,4 +127,12 @@ describe('provider-aware personalization history', () => {
     const source = await readFile(join(process.cwd(), 'src/playlists/personalization.ts'), 'utf8');
     expect(source).not.toContain('SpotifyClient');
   });
+
+  it('does not import SpotifyClient in the generic automation module', async () => {
+    const source = await readFile(
+      new URL('../src/playlists/automation.ts', import.meta.url),
+      'utf8',
+    );
+    expect(source).not.toContain('SpotifyClient');
+  });
 });

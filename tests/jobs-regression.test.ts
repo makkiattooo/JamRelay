@@ -17,6 +17,7 @@ import { recordRateLimit } from '../src/db/state.js';
 import { registerAdvanced } from '../src/mcp/helpers.js';
 import { createApp } from '../src/index.js';
 import { SpotifyApiError } from '../src/spotify/errors.js';
+import { toolContext } from '../src/mcp/context.js';
 
 let root: string | undefined;
 afterEach(async () => {
@@ -122,6 +123,29 @@ describe('durable job regressions', () => {
     await new Promise((r) => setTimeout(r, 80));
     await runner.stop();
     expect(getJob(id, 0, 1).status).toBe('cancelled');
+    expect(getJobItems(id)[0].status).toBe('pending');
+  });
+
+  it('aborts active provider work before the runner stop resolves', async () => {
+    await setup();
+    const id = createJob('bulk_add_tracks', { phase: 'created' }, [
+      { title: 'Long running', artist: 'Artist' },
+    ]);
+    let entered = false;
+    const runner = new JobRunner({
+      resolve: async () => {
+        entered = true;
+        await new Promise<void>((_resolve, reject) => {
+          const signal = toolContext.get()!.signal;
+          signal.addEventListener('abort', () => reject(new Error('cancelled')), { once: true });
+        });
+        return { status: 'matched', id: 'never' };
+      },
+    });
+    runner.start();
+    await waitFor(() => entered);
+    await runner.stop();
+    expect(getJob(id, 0, 1).status).toBe('running');
     expect(getJobItems(id)[0].status).toBe('pending');
   });
 

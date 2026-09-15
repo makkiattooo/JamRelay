@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFile } from 'node:fs/promises';
 import {
   adminLoginPage,
   authResultPage,
@@ -7,8 +8,11 @@ import {
   clientsPage,
   providerChooserPage,
   systemStatusPage,
+  dashboardPage,
+  adminPageHeaders,
   escapeHtml,
 } from '../src/web/ui.js';
+import { oauthPageHeaders } from '../src/mcp/oauth-authorize-page.js';
 
 describe('JamRelay web UI', () => {
   it('escapes owner/provider-controlled values', () => {
@@ -45,5 +49,29 @@ describe('JamRelay web UI', () => {
         providers: 'none',
       }),
     ).toContain('Provider connectivity');
+  });
+
+  it('uses the self-hosted admin shell and separate strict admin CSP', () => {
+    const html = dashboardPage({ connections: 0, connected: 0, clients: 0, schema: 'ready' });
+    expect(html).toContain('/assets/admin/admin.css');
+    expect(html).toContain('data-nav-toggle');
+    expect(adminPageHeaders['Content-Security-Policy']).toContain("script-src 'self'");
+    expect(adminPageHeaders['Content-Security-Policy']).not.toContain('unsafe-inline');
+  });
+
+  it('keeps responsive layout in the external admin stylesheet', async () => {
+    const css = await readFile('assets/admin/admin.css', 'utf8');
+    expect(css).toContain('@media (max-width: 850px)');
+    expect(css).toContain('@media (max-width: 560px)');
+    expect(css).toContain('grid-template-columns: var(--sidebar) minmax(0, 1fr)');
+    expect(css).toContain('min-width: 0');
+    expect(css).toContain('width: min(100%, 760px)');
+  });
+
+  it('allows the styled provider callback to load the shared admin stylesheet', () => {
+    expect(oauthPageHeaders['Content-Security-Policy']).toContain(
+      "style-src 'self' 'unsafe-inline'",
+    );
+    expect(authResultPage('spotify', true, 'connected')).toContain('/assets/admin/admin.css');
   });
 });

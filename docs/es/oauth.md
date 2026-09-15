@@ -1,7 +1,7 @@
 ---
 title: MCP OAuth
 translationReviewed: 2026-09-12
-sourceHash: 522bd71adc1a
+sourceHash: 3035042a0b24
 ---
 
 # MCP OAuth

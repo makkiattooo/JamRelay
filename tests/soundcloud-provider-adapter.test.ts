@@ -32,12 +32,13 @@ describe('SoundCloud provider adapter', () => {
       }),
     };
     const adapter = new SoundCloudProviderAdapter(auth, client as any);
-    expect(adapter.summary.capabilities).toEqual({
+    expect(adapter.summary.capabilities).toMatchObject({
       identity: true,
       catalog: true,
       playlistRead: true,
       playlistWrite: true,
     });
+    expect(adapter.summary.capabilities.playlistOperations?.replace).toBe(true);
     expect((adapter as any).playback).toBeUndefined();
     expect(await adapter.catalog.searchTracks('Track')).toMatchObject([
       { id: '42', name: 'Track' },

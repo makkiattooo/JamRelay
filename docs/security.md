@@ -1,5 +1,10 @@
 ## Owner sessions and MCP grants
 
+Credential-store mutations are serialized by canonical file path, including
+across multiple in-process store instances. The encrypted file store remains a
+single-process/single-writer design; use one JamRelay writer per credential
+path unless deployment-level file locking is added.
+
 The owner secret is a bootstrap credential. `/owner/login` exchanges it for a
 short-lived HttpOnly session cookie; production cookies are Secure and use
 SameSite=Lax. Owner mutations require the session's CSRF token. Sessions can be
@@ -29,3 +34,8 @@ An MCP grant can restrict both permissions and allowed connection IDs. Writes
 and destructive operations fail closed when a target is missing, revoked,
 ambiguous, or lacks the capability. Provider status is never treated as a
 server-health credential.
+
+Tool authorization, read-only/destructive MCP annotations and execution
+budgets come from one declarative tool-security manifest. Registration fails
+closed when a tool has no manifest entry. Generic MCP and playlist services use
+the provider transport contract rather than depending on `SpotifyClient`.

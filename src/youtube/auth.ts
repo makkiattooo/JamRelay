@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { EncryptedCredentialStore } from '../providers/credential-store.js';
 import { ProviderApiError } from '../providers/errors.js';
+import { toolContext } from '../mcp/context.js';
 
 export const YOUTUBE_SCOPE = 'https://www.googleapis.com/auth/youtube.force-ssl';
 export type YouTubeToken = {
@@ -11,6 +12,7 @@ export type YouTubeToken = {
 };
 export class YouTubeAuth {
   private states = new Map<string, { verifier: string; expiresAt: number }>();
+  private refreshPromise?: Promise<string>;
   constructor(
     private readonly cfg: { clientId: string; clientSecret: string; redirectUri: string },
     private readonly store: EncryptedCredentialStore,
@@ -69,16 +71,24 @@ export class YouTubeAuth {
         'youtube',
         this.connectionId,
       );
-    const response = await this.tokenRequest(
-      new URLSearchParams({
-        client_id: this.cfg.clientId,
-        client_secret: this.cfg.clientSecret,
-        refresh_token: token.refreshToken,
-        grant_type: 'refresh_token',
-      }),
-    );
-    await this.save(response, token);
-    return response.access_token;
+    if (!this.refreshPromise) {
+      this.refreshPromise = this.tokenRequest(
+        new URLSearchParams({
+          client_id: this.cfg.clientId,
+          client_secret: this.cfg.clientSecret,
+          refresh_token: token.refreshToken,
+          grant_type: 'refresh_token',
+        }),
+      )
+        .then(async (response) => {
+          await this.save(response, token);
+          return response.access_token as string;
+        })
+        .finally(() => {
+          this.refreshPromise = undefined;
+        });
+    }
+    return this.refreshPromise;
   }
   connected() {
     return this.store.load<YouTubeToken>(this.connectionId).then(Boolean);
@@ -96,10 +106,15 @@ export class YouTubeAuth {
     );
   }
   private async tokenRequest(body: URLSearchParams) {
+    const parentSignal = toolContext.get()?.signal;
     const response = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body,
+      signal: AbortSignal.any([
+        AbortSignal.timeout(8_000),
+        ...(parentSignal ? [parentSignal] : []),
+      ]),
     });
     const value: any = await response.json().catch(() => ({}));
     if (!response.ok || !value.access_token)

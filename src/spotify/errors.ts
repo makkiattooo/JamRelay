@@ -1,5 +1,6 @@
-export class SpotifyApiError extends Error {
-  public apiErrorId?: number;
+import { ProviderApiError } from '../providers/errors.js';
+
+export class SpotifyApiError extends ProviderApiError {
   constructor(
     public status: number,
     public code: string,
@@ -8,7 +9,11 @@ export class SpotifyApiError extends Error {
     public reauthorizationRequired = false,
     public scope?: string,
   ) {
-    super(message);
+    super(status, message, 'spotify', 'spotify-default', {
+      retryAfter,
+      scope,
+      providerCode: code,
+    });
     this.name = 'SpotifyApiError';
   }
 }

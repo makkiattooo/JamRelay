@@ -1,5 +1,6 @@
 import * as z from 'zod/v4';
 import type { PlaylistGateway } from '../providers/playlist-gateway.js';
+import { PlaylistStateReader } from './state-reader.js';
 import { normalizePlaylistItems } from './normalize.js';
 import { rankTracks } from './affinity.js';
 import { listHistory, ingestPlayback, stableSeed, historyStats } from './history.js';
@@ -35,19 +36,19 @@ export const PLAYLIST_PERSONALIZATION_TOOL_NAMES = [
   'playlist_versioning',
 ] as const;
 export function registerPlaylistPersonalizationTools(s: any, playlists: PlaylistGateway) {
+  const stateReader = new PlaylistStateReader(playlists);
   const state = async (v: string, options: Record<string, unknown> = {}) => {
     const idv = v,
-      meta: any = await playlists.get(idv, options),
-      all: any[] = [];
-    for (let o = 0; o < 10000;) {
-      const p: any = await playlists.items(idv, { ...options, limit: 50, offset: o }),
-        page = p?.items ?? [];
-      if (!page.length) break;
-      all.push(...page);
-      o += page.length;
-      if (!p.next) break;
-    }
-    return { id: idv, meta, raw: all, ...normalizePlaylistItems(all) };
+      result = await stateReader.read(idv, options);
+    return {
+      id: idv,
+      meta: result.playlist as any,
+      raw: result.items,
+      ...normalizePlaylistItems(result.items),
+      state_provenance: result.provenance,
+      provider_revision: result.providerRevision,
+      provider_calls: result.metrics.providerCalls,
+    };
   };
   s.registerTool(
     'session_history',

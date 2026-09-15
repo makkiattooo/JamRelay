@@ -1,10 +1,9 @@
 import * as z from 'zod/v4';
-import { SpotifyClient } from '../spotify/client.js';
-import { parseSpotifyIdentifier } from '../spotify/identifiers.js';
+import { parseProviderIdentifier } from '../providers/identifiers.js';
 import { chunks } from '../utils/chunks.js';
 import { normalizeText, resolveCandidates } from '../music/normalize.js';
-import { writeChunks, writePlaylistOrder } from '../spotify/write-operation.js';
-import { TrackResolver } from '../spotify/resolver.js';
+import { writeChunks, writePlaylistOrder } from '../providers/write-operation.js';
+import { createLegacyResolver } from './legacy-resolver.js';
 import {
   cancelJob,
   createJob,
@@ -17,7 +16,7 @@ import {
   updateJobPayload,
 } from '../db/jobs.js';
 import { isDatabaseInitialized } from '../db/database.js';
-import { SpotifyApiError } from '../spotify/errors.js';
+import { ProviderApiError } from '../providers/errors.js';
 import { getRateLimit, getRateLimitStatus, getRecentApiErrors } from '../db/state.js';
 import { normalizePlaylistItems, fingerprint } from '../playlists/normalize.js';
 import { healthReport, semanticDuplicateGroups } from '../playlists/analyzer.js';
@@ -35,15 +34,20 @@ import { registerPlaylistAutomationTools } from '../playlists/automation.js';
 import { registerPlaylistPersonalizationTools } from '../playlists/personalization.js';
 import type { ProviderReadServices } from '../providers/read-services.js';
 import type { PlaylistGateway } from '../providers/playlist-gateway.js';
+import { invalidatePlaylistStateCache, PlaylistStateReader } from '../playlists/state-reader.js';
+import { PlaylistMutationService } from '../playlists/mutation-service.js';
 import { PlaylistGateway as PlaylistGatewayImpl } from '../providers/playlist-gateway.js';
 import { ProviderRegistry } from '../providers/registry.js';
-import { SpotifyProviderAdapter } from '../spotify/provider-adapter.js';
+import type { ProviderHttpClient } from '../providers/http-client.js';
+import { toolContext } from './context.js';
+import type { TrackResolutionService } from '../music/resolver-service.js';
+import { createLegacyProviderRegistry } from './legacy-provider-registry.js';
 const id = z.string().min(1);
 const text = (x: unknown) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(x) }],
   structuredContent: x,
 });
-const tid = (x: string) => parseSpotifyIdentifier(x, 'track');
+const tid = (x: string) => parseProviderIdentifier(x, 'spotify', 'track');
 function compact(x: any) {
   return {
     id: x.id,
@@ -60,15 +64,24 @@ function compact(x: any) {
 }
 export function registerAdvanced(
   s: any,
-  c: SpotifyClient,
+  c: ProviderHttpClient,
   includeStateTools = isDatabaseInitialized(),
   reads?: ProviderReadServices,
   playlists?: PlaylistGateway,
+  providedResolver?: TrackResolutionService,
 ) {
-  const resolver = new TrackResolver(c);
+  const resolver = providedResolver ?? createLegacyResolver(c);
+  const stateReader = playlists ? new PlaylistStateReader(playlists) : undefined;
   const get = (p: string) => c.request<any>(p);
-  const pid = (a: any) => parseSpotifyIdentifier(a.playlist_id, 'playlist').id;
+  const pid = (a: any) => parseProviderIdentifier(a.playlist_id, 'spotify', 'playlist').id;
   const allPlaylistItems = async (idValue: string) => {
+    if (stateReader) {
+      const state = await stateReader.read(idValue, {
+        provider: 'spotify',
+        connection_id: toolContext.get()?.mcpAccess?.connectionIds?.[0],
+      });
+      return state.items;
+    }
     const all: any[] = [];
     const seen = new Set<number>();
     for (let offset = 0; offset < 10000;) {
@@ -105,8 +118,14 @@ export function registerAdvanced(
       await c.json('/playlists/' + playlistId + '/items', { uris: part });
   };
   const playlistState = async (playlistId: string) => {
-    const meta: any = await get('/playlists/' + playlistId);
-    const raw = await allPlaylistItems(playlistId),
+    const state = stateReader
+      ? await stateReader.read(playlistId, {
+          provider: 'spotify',
+          connection_id: toolContext.get()?.mcpAccess?.connectionIds?.[0],
+        })
+      : undefined;
+    const meta: any = state?.playlist ?? (await get('/playlists/' + playlistId));
+    const raw = state?.items ?? (await allPlaylistItems(playlistId)),
       normalized = normalizePlaylistItems(raw);
     return { meta, raw, ...normalized };
   };
@@ -171,72 +190,55 @@ export function registerAdvanced(
     after: NormalizedPlaylistTrack[],
     plan: any,
   ) => {
-    const apiBefore = c.getApiCallMetrics();
+    const apiBefore = c.getApiCallMetrics?.();
+    const apiDelta = () =>
+      c.getApiCallDelta && apiBefore !== undefined
+        ? c.getApiCallDelta(apiBefore)
+        : { total: 0, by_endpoint: {} };
     const startedAt = Date.now();
-    const safety = stateSnapshot(playlistId, state, operation.toUpperCase());
-    try {
-      await replaceUris(playlistId, after.map((x) => x.uri!).filter(Boolean));
-      const verify: any = await playlistState(playlistId);
-      const ok =
-        verify.tracks.length === after.length &&
-        fingerprint(verify.tracks.map((x: NormalizedPlaylistTrack) => x.uri)) ===
-          fingerprint(after.map((x) => x.uri));
-      if (!ok) throw new Error('playlist_integrity_mismatch');
-      const afterSnapshot = stateSnapshot(playlistId, verify, operation + '_after');
-      saveOperation({
-        id: plan.id,
-        playlistId,
-        operation,
-        beforeSnapshotId: safety.id,
-        afterSnapshotId: afterSnapshot.id,
-        plan,
-        status: 'completed',
-        providerId: safety.providerId,
-        connectionId: safety.connectionId,
-      });
-      return {
-        plan,
-        safety_snapshot_id: safety.id,
-        after_snapshot_id: afterSnapshot.id,
-        verification: { ok, count: verify.tracks.length },
-        spotify_api_calls: c.getApiCallDelta(apiBefore),
-        duration_ms: Date.now() - startedAt,
-      };
-    } catch (error) {
-      let rollbackAttempted = false;
-      let rollbackSucceeded = false;
-      let rollbackError: string | undefined;
-      try {
-        rollbackAttempted = true;
-        await restoreSnapshot(playlistId, state.raw);
-        rollbackSucceeded = true;
-      } catch (rollbackFailure) {
-        rollbackError = String(rollbackFailure);
-      }
-      saveOperation({
-        id: plan.id,
-        playlistId,
-        operation,
-        beforeSnapshotId: safety.id,
-        plan,
-        status: 'partial_failure',
-        providerId: safety.providerId,
-        connectionId: safety.connectionId,
-      });
-      return {
-        plan,
-        safety_snapshot_id: safety.id,
-        partial_failure: {
-          completed: false,
-          error: String(error),
-          rollback_attempted: rollbackAttempted,
-          rollback_succeeded: rollbackSucceeded,
-          rollback_error: rollbackError,
-        },
-        spotify_api_calls: c.getApiCallDelta(apiBefore),
-        duration_ms: Date.now() - startedAt,
-      };
-    }
+    const service = new PlaylistMutationService({
+      read: () => playlistState(playlistId),
+      write: (uris) => replaceUris(playlistId, uris),
+      restore: (raw) => restoreSnapshot(playlistId, raw),
+      snapshot: (snapshotState, reason) => stateSnapshot(playlistId, snapshotState as any, reason),
+      invalidate: () => invalidatePlaylistStateCache(playlistId),
+      record: (record) =>
+        saveOperation({
+          id: plan.id,
+          playlistId,
+          operation,
+          beforeSnapshotId: record.beforeSnapshotId,
+          afterSnapshotId: record.afterSnapshotId,
+          plan,
+          status: record.status,
+          providerId: 'spotify',
+          connectionId: 'spotify-default',
+        }),
+    });
+    const result = await service.execute(
+      operation,
+      state,
+      after.map((x) => x.uri!).filter(Boolean),
+    );
+    return {
+      plan,
+      safety_snapshot_id: result.safetySnapshotId,
+      ...(result.afterSnapshotId ? { after_snapshot_id: result.afterSnapshotId } : {}),
+      ...(result.partialFailure
+        ? {
+            partial_failure: {
+              completed: false,
+              error: result.partialFailure.error,
+              rollback_attempted: result.partialFailure.rollbackAttempted,
+              rollback_succeeded: result.partialFailure.rollbackSucceeded,
+              rollback_error: result.partialFailure.rollbackError,
+            },
+          }
+        : { verification: result.verification }),
+      spotify_api_calls: apiDelta(),
+      provider_api_calls: apiDelta(),
+      duration_ms: Date.now() - startedAt,
+    };
   };
   const mutationSchema = { playlist_id: id, dry_run: z.boolean().default(true) };
   s.registerTool(
@@ -793,7 +795,7 @@ export function registerAdvanced(
         try {
           r = batch[searchIndex++];
         } catch (error) {
-          if (error instanceof SpotifyApiError && error.status === 429)
+          if (error instanceof ProviderApiError && error.status === 429)
             r = { status: 'waiting', source: 'spotify_search', errorId: error.apiErrorId };
           else throw error;
         }
@@ -1463,12 +1465,11 @@ export function registerAdvanced(
     async (a: any) =>
       text(await chapterEngine.play(pid(a), a.chapter_set_id, a.chapter_number, a.device_id)),
   );
-  registerPlaylistAutomationTools(s, c);
+  registerPlaylistAutomationTools(s, c, playlists);
   const personalizationGateway =
     playlists ??
     (() => {
-      const registry = new ProviderRegistry();
-      registry.register(new SpotifyProviderAdapter(undefined as any, c));
+      const registry = createLegacyProviderRegistry(c);
       return new PlaylistGatewayImpl(registry);
     })();
   registerPlaylistPersonalizationTools(s, personalizationGateway);

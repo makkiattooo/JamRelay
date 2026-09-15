@@ -1,7 +1,9 @@
 import * as z from 'zod/v4';
 import { randomUUID } from 'node:crypto';
-import { SpotifyClient } from '../spotify/client.js';
-import { parseSpotifyIdentifier } from '../spotify/identifiers.js';
+import { parseProviderIdentifier } from '../providers/identifiers.js';
+import type { PlaylistGateway } from '../providers/playlist-gateway.js';
+import { PlaylistStateReader } from './state-reader.js';
+import { toolContext } from '../mcp/context.js';
 import { chunks } from '../utils/chunks.js';
 import { normalizePlaylistItems } from './normalize.js';
 import { durationMs, trimTracks } from './duration.js';
@@ -39,10 +41,27 @@ export const PLAYLIST_AUTOMATION_TOOL_NAMES = [
   'batch_playlist_jobs',
   'estimate_operation_cost',
 ] as const;
-export function registerPlaylistAutomationTools(s: any, c: SpotifyClient) {
+export type PlaylistAutomationClient = {
+  request<T = unknown>(path: string, init?: RequestInit): Promise<T | null>;
+  json<T = unknown>(path: string, body: unknown, method?: string): Promise<T | null>;
+};
+export function registerPlaylistAutomationTools(
+  s: any,
+  c: PlaylistAutomationClient,
+  playlists?: PlaylistGateway,
+) {
+  const stateReader = playlists ? new PlaylistStateReader(playlists) : undefined;
   const get = (p: string) => c.request<any>(p),
-    pid = (x: string) => parseSpotifyIdentifier(x, 'playlist').id;
+    pid = (x: string) => parseProviderIdentifier(x, 'spotify', 'playlist').id;
   const state = async (playlistId: string) => {
+    if (stateReader) {
+      const result = await stateReader.read(playlistId, {
+        provider: 'spotify',
+        connection_id: toolContext.get()?.mcpAccess?.connectionIds?.[0],
+      });
+      const raw = result.items as any[];
+      return { meta: result.playlist, raw, ...normalizePlaylistItems(raw) };
+    }
     const meta: any = await get('/playlists/' + playlistId),
       all: any[] = [];
     for (let o = 0; o < 10000;) {

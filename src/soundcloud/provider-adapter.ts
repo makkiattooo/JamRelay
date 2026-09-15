@@ -73,7 +73,20 @@ export class SoundCloudProviderAdapter implements ProviderConnection {
       connectionId,
       provider: 'soundcloud',
       displayName: options.displayName ?? 'SoundCloud',
-      capabilities: { identity: true, catalog: true, playlistRead: true, playlistWrite: true },
+      capabilities: {
+        identity: true,
+        catalog: true,
+        playlistRead: true,
+        playlistWrite: true,
+        playlistOperations: {
+          create: true,
+          add: true,
+          remove: true,
+          reorder: true,
+          replace: true,
+          update: true,
+        },
+      },
       metadata: { provider: 'soundcloud' },
     };
     this.identity = {

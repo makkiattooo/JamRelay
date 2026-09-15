@@ -44,7 +44,7 @@ describe('SpotifyProviderAdapter', () => {
       ),
       new SpotifyClient(auth),
     );
-    expect(adapter.summary.capabilities).toEqual({
+    expect(adapter.summary.capabilities).toMatchObject({
       identity: true,
       catalog: true,
       playlistRead: true,
@@ -53,6 +53,7 @@ describe('SpotifyProviderAdapter', () => {
       playback: true,
       history: true,
     });
+    expect(adapter.summary.capabilities.playlistOperations?.replace).toBe(true);
     expect(await adapter.catalog.searchTracks('Song')).toEqual([
       {
         id: 't1',

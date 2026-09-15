@@ -23,6 +23,7 @@ describe('official YouTube Data API provider', () => {
       capabilities: { catalog: true, playlistRead: true, playlistWrite: true },
       metadata: { itemKind: 'video' },
     });
+    expect(adapter.summary.capabilities.playlistOperations?.replace).toBe(false);
     const result = await adapter.catalog.searchTracks('song');
     expect(result[0]).toMatchObject({ id: 'v1', metadata: { providerItemKind: 'video' } });
     expect(client.request).toHaveBeenCalledWith(

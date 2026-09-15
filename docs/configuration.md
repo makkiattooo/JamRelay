@@ -170,3 +170,5 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
 Use separate random values for the encryption key, API key, OAuth client secret, and owner secret. `TOKEN_ENCRYPTION_KEY` must decode from base64 to exactly 32 bytes.
+`PLAYLIST_READ_CONCURRENCY` controls the bounded worker count used for safe
+offset-based playlist pagination. Cursor-based providers remain sequential.

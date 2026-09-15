@@ -127,4 +127,24 @@ describe('dry-run cross-provider transfer planner', () => {
     expect(writes).toBe(0);
     expect(limited.writes_performed).toBe(0);
   });
+
+  it('deduplicates identical catalog queries and keeps bounded concurrency', async () => {
+    await setup();
+    let active = 0;
+    let maximum = 0;
+    const search = vi.fn(async () => {
+      active++;
+      maximum = Math.max(maximum, active);
+      await Promise.resolve();
+      active--;
+      return [candidate('42', 'Shared', 'Artist')];
+    });
+    const plan = await run(
+      Array.from({ length: 20 }, (_, index) => item(`unmapped-${index}`, 'Shared')),
+      search,
+    );
+    expect(plan.items).toHaveLength(20);
+    expect(search).toHaveBeenCalledTimes(1);
+    expect(maximum).toBeLessThanOrEqual(8);
+  });
 });

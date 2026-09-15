@@ -1,5 +1,5 @@
 import { promises as fs } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
 export type CredentialMetadata = Record<string, boolean | number | string | null>;
@@ -50,8 +50,15 @@ type StoreFile = {
 
 const emptyStore = (): StoreFile => ({ version: 1, records: {} });
 
+// Credential files are process-local persistence boundaries.  All instances
+// targeting the same canonical path share this queue, so a read-modify-write
+// mutation always observes the previous successful mutation.  Cross-process
+// locking is intentionally not implied; deployments must use one writer.
+const mutationQueues = new Map<string, Promise<void>>();
+
 export class EncryptedCredentialStore {
   private readonly key: Buffer;
+  private readonly canonicalPath: string;
 
   constructor(
     private readonly path: string,
@@ -61,6 +68,7 @@ export class EncryptedCredentialStore {
     this.key = Buffer.from(raw, 'base64');
     if (this.key.length !== 32)
       throw new Error('TOKEN_ENCRYPTION_KEY must be base64 encoded 32 bytes');
+    this.canonicalPath = resolve(path);
   }
 
   async list(): Promise<CredentialRecord[]> {
@@ -93,36 +101,58 @@ export class EncryptedCredentialStore {
 
   async save(connectionId: string, credentials: unknown, metadata: CredentialMetadata = {}) {
     if (!connectionId) throw new Error('connectionId is required');
-    const store = await this.readStore();
-    const previous = store.records[connectionId];
-    const iv = randomBytes(12);
-    const cipher = createCipheriv('aes-256-gcm', this.key, iv);
-    const data = Buffer.concat([cipher.update(JSON.stringify(credentials)), cipher.final()]);
-    const now = Date.now();
-    store.records[connectionId] = {
-      connectionId,
-      metadata: { ...metadata },
-      createdAt: previous?.createdAt ?? now,
-      updatedAt: now,
-      iv: iv.toString('base64'),
-      tag: cipher.getAuthTag().toString('base64'),
-      data: data.toString('base64'),
-    };
-    await this.writeStore(store);
+    await this.mutate((store) => {
+      const previous = store.records[connectionId];
+      const iv = randomBytes(12);
+      const cipher = createCipheriv('aes-256-gcm', this.key, iv);
+      const data = Buffer.concat([cipher.update(JSON.stringify(credentials)), cipher.final()]);
+      const now = Date.now();
+      store.records[connectionId] = {
+        connectionId,
+        metadata: { ...metadata },
+        createdAt: previous?.createdAt ?? now,
+        updatedAt: now,
+        iv: iv.toString('base64'),
+        tag: cipher.getAuthTag().toString('base64'),
+        data: data.toString('base64'),
+      };
+    });
   }
 
   async remove(connectionId: string): Promise<boolean> {
-    const store = await this.readStore();
-    if (!store.records[connectionId]) return false;
-    delete store.records[connectionId];
-    await this.writeStore(store);
-    return true;
+    let removed = false;
+    await this.mutate((store) => {
+      if (!store.records[connectionId]) return;
+      delete store.records[connectionId];
+      removed = true;
+    });
+    return removed;
+  }
+
+  private async mutate(mutator: (store: StoreFile) => void): Promise<void> {
+    const previous = mutationQueues.get(this.canonicalPath) ?? Promise.resolve();
+    const current = previous.then(async () => {
+      const store = await this.readStore();
+      mutator(store);
+      await this.writeStore(store);
+    });
+    const queued = current.then(
+      () => undefined,
+      () => undefined,
+    );
+    mutationQueues.set(this.canonicalPath, queued);
+    try {
+      await current;
+    } finally {
+      if (mutationQueues.get(this.canonicalPath) === queued)
+        mutationQueues.delete(this.canonicalPath);
+    }
   }
 
   private async readStore(): Promise<StoreFile> {
     let raw: string;
     try {
-      raw = await fs.readFile(this.path, 'utf8');
+      raw = await fs.readFile(this.canonicalPath, 'utf8');
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return emptyStore();
       throw new Error('Provider credential store is corrupt or cannot be read');
@@ -139,7 +169,7 @@ export class EncryptedCredentialStore {
 
   private async writeStore(store: StoreFile): Promise<void> {
     await fs.mkdir(dirname(this.path), { recursive: true });
-    const tmp = `${this.path}.tmp-${randomBytes(6).toString('hex')}`;
+    const tmp = `${this.canonicalPath}.tmp-${randomBytes(6).toString('hex')}`;
     const handle = await fs.open(tmp, 'w', 0o600);
     try {
       await handle.writeFile(JSON.stringify(store));
@@ -148,8 +178,8 @@ export class EncryptedCredentialStore {
       await handle.close();
     }
     try {
-      await fs.rename(tmp, this.path);
-      await fs.chmod(this.path, 0o600);
+      await fs.rename(tmp, this.canonicalPath);
+      await fs.chmod(this.canonicalPath, 0o600);
     } catch (error) {
       await fs.unlink(tmp).catch(() => undefined);
       throw error;

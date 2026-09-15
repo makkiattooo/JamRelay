@@ -1,4 +1,4 @@
-import { SpotifyClient } from './client.js';
+import type { ProviderHttpClient } from '../providers/http-client.js';
 import { normalizeText, resolveCandidates } from '../music/normalize.js';
 import type { TrackCandidate } from './normalize.js';
 import { parseSpotifyIdentifier } from './identifiers.js';
@@ -50,7 +50,7 @@ export class TrackResolver {
     durationMs: 0,
   };
   constructor(
-    private client: SpotifyClient,
+    private client: ProviderHttpClient,
     private alternate: AlternateTrackProvider = new ConfiguredAlternateTrackProvider(),
   ) {}
   private normalized(input: TrackQuery): TrackQuery {

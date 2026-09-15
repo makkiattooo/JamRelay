@@ -1,7 +1,7 @@
 ---
 title: Compatibilité des clients
 translationReviewed: 2026-09-12
-sourceHash: 7b8572d73e76
+sourceHash: ad52817d5c2d
 ---
 
 # Compatibilité des clients

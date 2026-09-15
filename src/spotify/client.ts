@@ -107,7 +107,19 @@ export class SpotifyClient {
       const signal = parentSignal
         ? AbortSignal.any([parentSignal, controller.signal])
         : controller.signal;
-      const timer = setTimeout(() => controller.abort(), 8000);
+      const remainingDeadline = toolContext.get()?.deadlineAt
+        ? toolContext.get()!.deadlineAt - Date.now()
+        : Number.POSITIVE_INFINITY;
+      if (remainingDeadline <= 0)
+        throw new SpotifyApiError(
+          408,
+          'deadline_exceeded',
+          'The provider request deadline has expired.',
+        );
+      const timer = setTimeout(
+        () => controller.abort(),
+        Math.max(1, Math.min(8000, remainingDeadline)),
+      );
       let response: Response;
       try {
         const started = Date.now();

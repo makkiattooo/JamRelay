@@ -89,4 +89,45 @@ describe('MCP grant ACLs', () => {
     expect(denied.isError).toBe(true);
     expect(denied.content[0].text).toContain('PERMISSION_NOT_GRANTED');
   });
+
+  it('does not let a read-only personalization grant execute a playlist write', async () => {
+    const callbacks = new Map<string, (input: any) => Promise<any>>();
+    const server = {
+      registerTool(name: string, _config: unknown, callback: (input: any) => Promise<any>) {
+        callbacks.set(name, callback);
+      },
+    };
+    const registry = {
+      listConnections: () => [connection('spotify-main', 'spotify')],
+      getConnection: () => undefined,
+      resolvePreferredReadTarget: () => ({
+        summary: {
+          connectionId: 'spotify-main',
+          provider: 'spotify',
+          capabilities: { playlistRead: true },
+        },
+        playlistRead: {
+          getPlaylist: async () => ({}),
+          getPlaylistTracks: async () => ({ items: [] }),
+          listPlaylists: async () => ({ items: [] }),
+        },
+      }),
+    } as any;
+    registerTools(server as any, {} as any, undefined, false, registry);
+    const result = await toolContext.run(
+      {
+        requestId: 'personalization-acl',
+        signal: new AbortController().signal,
+        deadlineAt: Date.now() + 1000,
+        mcpAccess: {
+          clientId: 'client-a',
+          connectionIds: ['spotify-main'],
+          permissions: ['personalization.read'],
+        },
+      },
+      () => callbacks.get('personalize_playlist')!({ playlist_id: 'playlist' }),
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('PERMISSION_NOT_GRANTED');
+  });
 });

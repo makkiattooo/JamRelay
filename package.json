@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "node --env-file=.env --watch --import tsx src/index.ts",
     "build": "tsc -p tsconfig.json",
+    "backup": "tsx scripts/backup.ts",
     "start": "node --env-file=.env dist/index.js",
     "test": "vitest run",
     "db:migration:new": "tsx scripts/create-migration.ts",

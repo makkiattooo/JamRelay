@@ -64,6 +64,33 @@ export function getJobItems(id: number) {
   }>;
 }
 
+export function getNextJobItems(id: number, limit = 25) {
+  return getDatabase()
+    .prepare(
+      "SELECT id,position,track_id as trackId,status,payload_json as payload,error_id as errorId FROM job_items WHERE job_id=? AND status IN ('pending','waiting') ORDER BY position LIMIT ?",
+    )
+    .all(id, Math.min(100, Math.max(1, limit))) as Array<{
+    id: number;
+    position: number;
+    trackId: number | null;
+    status: string;
+    payload: string;
+    errorId: number | null;
+  }>;
+}
+
+export function hasRemainingJobItems(id: number) {
+  return Boolean(
+    (
+      getDatabase()
+        .prepare(
+          "SELECT 1 as present FROM job_items WHERE job_id=? AND status IN ('pending','waiting') LIMIT 1",
+        )
+        .get(id) as { present?: number } | undefined
+    )?.present,
+  );
+}
+
 export function updateJobItem(
   id: number,
   status: 'pending' | 'waiting' | 'completed' | 'failed' | 'skipped',
@@ -85,12 +112,36 @@ export function updateJobItem(
     );
 }
 
-export function listJobs(offset = 0, limit?: number) {
+export function listJobs(
+  offset = 0,
+  limit?: number,
+  filters: { status?: JobStatus; provider?: string; connectionId?: string; type?: string } = {},
+) {
+  const clauses: string[] = [];
+  const args: (string | number)[] = [];
+  if (filters.status) {
+    clauses.push('status=?');
+    args.push(filters.status);
+  }
+  if (filters.type) {
+    clauses.push('type=?');
+    args.push(filters.type);
+  }
+  if (filters.provider) {
+    clauses.push("json_extract(payload_json, '$.provider')=?");
+    args.push(filters.provider);
+  }
+  if (filters.connectionId) {
+    clauses.push("json_extract(payload_json, '$.connection_id')=?");
+    args.push(filters.connectionId);
+  }
+  const conditions = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
   return getDatabase()
     .prepare(
-      'SELECT id,type,status,attempts,max_attempts as maxAttempts,run_after as runAfter,last_error_id as lastErrorId,created_at as createdAt,updated_at as updatedAt FROM jobs ORDER BY created_at DESC LIMIT ? OFFSET ?',
+      `SELECT id,type,status,payload_json as payload,attempts,max_attempts as maxAttempts,run_after as runAfter,last_error_id as lastErrorId,created_at as createdAt,updated_at as updatedAt FROM jobs ${conditions} ORDER BY updated_at DESC LIMIT ? OFFSET ?`,
     )
-    .all(maxPage(limit), Math.max(0, offset));
+    .all(...args, maxPage(limit), Math.max(0, offset))
+    .map((job: any) => ({ ...job, payload: JSON.parse(String(job.payload)) }));
 }
 
 export function claimEligibleJob(now = Date.now()) {

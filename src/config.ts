@@ -78,6 +78,7 @@ const schema = z.object({
   TRUST_PROXY: z.string().default('false'),
   SPOTIFY_MARKET: z.string().length(2).default('PL'),
   SPOTIFY_READ_CONCURRENCY: z.coerce.number().int().min(1).max(32).default(12),
+  PLAYLIST_READ_CONCURRENCY: z.coerce.number().int().min(1).max(32).default(8),
   // Optional, disabled-by-default adapter. The endpoint must be an operator-
   // configured API returning { candidates: [{ spotifyId|spotifyUrl }] }.
   ALTERNATE_TRACK_RESOLVER_URL: optionalUrl,

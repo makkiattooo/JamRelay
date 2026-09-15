@@ -12,15 +12,21 @@ import { SpotifyProviderAdapter } from './spotify/provider-adapter.js';
 import { ProviderRegistry } from './providers/registry.js';
 import { providerNotConfigured } from './http/errors.js';
 import { APP_VERSION } from './version.js';
-import { registerTools } from './mcp/tools.js';
+import {
+  registerTools,
+  REQUIRED_TOOL_NAMES,
+  SMART_PLAYLIST_TOOL_NAMES,
+  toolsetIncludes,
+} from './mcp/tools.js';
 import { McpOAuthStore, registerMcpOAuthRoutes } from './mcp/oauth.js';
 import { oauthPageHeaders } from './mcp/oauth-authorize-page.js';
 import { OwnerSessionStore } from './mcp/owner-session.js';
-import { apiErrorHandler, requestId, sendApiError, ApiError } from './http/errors.js';
+import { apiErrorHandler, requestId, sendApiError, ApiError, toApiError } from './http/errors.js';
 import { toolContext } from './mcp/context.js';
 import { recoverInterruptedJobs } from './db/jobs.js';
 import { JobRunner } from './db/job-runner.js';
 import { TrackResolver } from './spotify/resolver.js';
+import { Singleflight } from './utils/singleflight.js';
 import {
   ConnectionCredentialStore,
   EncryptedCredentialStore,
@@ -33,14 +39,21 @@ import { YouTubeAuth } from './youtube/auth.js';
 import { YouTubeProviderAdapter } from './youtube/provider-adapter.js';
 import {
   adminLoginPage,
+  adminConfirmationPage,
+  adminPageHeaders,
   authResultPage,
   connectionDetailPage,
   connectionsPage,
   clientsPage,
+  clientDetailPage,
   dashboardPage,
   providerChooserPage,
   systemStatusPage,
+  adminListPage,
+  adminJobDetailPage,
+  adminErrorPage,
   escapeHtml,
+  withAdminFlash,
 } from './web/ui.js';
 import {
   closeDatabase,
@@ -48,6 +61,13 @@ import {
   initializeDatabase,
   isDatabaseInitialized,
 } from './db/database.js';
+import { getJob, listJobs, setJobStatus } from './db/jobs.js';
+import { getRecentApiErrors } from './db/state.js';
+import { listStateDiagnostics } from './db/jobs.js';
+import { beginDraining } from './runtime/lifecycle.js';
+import { getToolSecurityMetadata } from './mcp/tool-manifest.js';
+import { createAdminRouter } from './web/admin-router.js';
+import { registerAdminRoutes } from './web/admin-routes.js';
 export type AppDependencies = {
   auth?: SpotifyAuth;
   client?: SpotifyClient;
@@ -58,6 +78,7 @@ export type AppDependencies = {
   logger: Logger;
 };
 export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
+  const adminRouter = createAdminRouter();
   const logger =
     provided?.logger ??
     pino({
@@ -80,6 +101,12 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
   const spotifyConfigured = Boolean(
     cfg.SPOTIFY_CLIENT_ID && cfg.SPOTIFY_CLIENT_SECRET && cfg.SPOTIFY_REDIRECT_URI,
   );
+  const sharedCredentialStore =
+    cfg.TOKEN_ENCRYPTION_KEY && cfg.PROVIDER_CREDENTIAL_STORE_PATH
+      ? new EncryptedCredentialStore(cfg.PROVIDER_CREDENTIAL_STORE_PATH, cfg.TOKEN_ENCRYPTION_KEY)
+      : undefined;
+  const credentialStore = () =>
+    sharedCredentialStore ?? new EncryptedCredentialStore(cfg.PROVIDER_CREDENTIAL_STORE_PATH);
   const auth =
     provided?.auth ??
     (spotifyConfigured
@@ -89,13 +116,7 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
             SPOTIFY_CLIENT_SECRET: cfg.SPOTIFY_CLIENT_SECRET!,
             SPOTIFY_REDIRECT_URI: cfg.SPOTIFY_REDIRECT_URI!,
           },
-          new ConnectionCredentialStore(
-            new EncryptedCredentialStore(
-              cfg.PROVIDER_CREDENTIAL_STORE_PATH,
-              cfg.TOKEN_ENCRYPTION_KEY,
-            ),
-            'spotify-default',
-          ),
+          new ConnectionCredentialStore(credentialStore(), 'spotify-default'),
         )
       : undefined);
   const soundCloudConfigured = Boolean(
@@ -110,7 +131,7 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
             SOUNDCLOUD_CLIENT_SECRET: cfg.SOUNDCLOUD_CLIENT_SECRET!,
             SOUNDCLOUD_REDIRECT_URI: cfg.SOUNDCLOUD_REDIRECT_URI!,
           },
-          new EncryptedCredentialStore(cfg.PROVIDER_CREDENTIAL_STORE_PATH),
+          credentialStore(),
         )
       : undefined);
   const appleMusicConfigured = Boolean(
@@ -122,7 +143,7 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
       ? new AppleMusicAuth(
           { teamId: cfg.APPLE_MUSIC_TEAM_ID!, keyId: cfg.APPLE_MUSIC_KEY_ID!, privateKey: '' },
           cfg.APPLE_MUSIC_PRIVATE_KEY_PATH!,
-          new EncryptedCredentialStore(cfg.PROVIDER_CREDENTIAL_STORE_PATH),
+          credentialStore(),
         )
       : undefined);
   const youtubeConfigured = Boolean(
@@ -137,7 +158,7 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
             clientSecret: cfg.YOUTUBE_CLIENT_SECRET!,
             redirectUri: cfg.YOUTUBE_REDIRECT_URI!,
           },
-          new EncryptedCredentialStore(cfg.PROVIDER_CREDENTIAL_STORE_PATH),
+          credentialStore(),
         )
       : undefined);
   const client =
@@ -149,7 +170,12 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
     ? new AppleMusicProviderAdapter(appleMusicAuth, { storefront: cfg.APPLE_MUSIC_STOREFRONT })
     : undefined;
   if (appleMusicAdapter) {
-    void appleMusicAdapter.refreshCapabilities();
+    void appleMusicAdapter.refreshCapabilities().catch(() => {
+      logger.warn(
+        { event: 'provider_capability_refresh_failed', provider: 'apple-music' },
+        'Apple Music capability refresh failed; provider is degraded',
+      );
+    });
     registry.register(appleMusicAdapter);
   }
   if (youtubeAuth) registry.register(new YouTubeProviderAdapter(youtubeAuth));
@@ -189,8 +215,17 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
     const session = owner(req);
     return session && req.header('x-csrf-token') === session.csrf;
   };
+  const updateConnectionSettings = (connectionId: string, body: any) => {
+    const connection = registry.getConnection(connectionId);
+    if (!connection) return null;
+    if (typeof body?.display_name === 'string')
+      connection.summary.displayName = body.display_name.slice(0, 120);
+    if (body?.preferred_read === true) registry.setPreferredRead(connectionId);
+    if (body?.preferred_write === true) registry.setPreferredWrite(connectionId);
+    return { ...connection.summary, preferred: registry.getPreferred() };
+  };
   app.get('/owner/login', (_req, res) =>
-    res.type('html').set(oauthPageHeaders).send(adminLoginPage()),
+    res.type('html').set(adminPageHeaders).send(adminLoginPage()),
   );
   app.post('/owner/login', express.urlencoded({ extended: false }), (req, res) => {
     const session = ownerSessions.authenticate(
@@ -201,7 +236,7 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
       return res
         .status(401)
         .type('html')
-        .set(oauthPageHeaders)
+        .set(adminPageHeaders)
         .send(adminLoginPage('The owner secret was not accepted. Try again.'));
     const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
     return res
@@ -211,122 +246,28 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
       )
       .redirect('/connections');
   });
-  app.get('/admin/login', (_req, res) =>
-    res.type('html').set(oauthPageHeaders).send(adminLoginPage()),
-  );
-  app.post('/admin/login', express.urlencoded({ extended: false }), (req, res) => {
-    const session = ownerSessions.authenticate(
-      String(req.body?.owner_secret ?? ''),
-      cfg.MCP_OAUTH_OWNER_SECRET ?? '',
-    );
+  app.post('/owner/logout', express.urlencoded({ extended: false }), (req, res) => {
+    const session = owner(req);
     if (!session)
       return res
         .status(401)
         .type('html')
-        .set(oauthPageHeaders)
-        .send(adminLoginPage('The owner secret was not accepted. Try again.'));
-    const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-    return res
-      .setHeader(
-        'Set-Cookie',
-        `jamrelay_owner=${session.token}; HttpOnly; SameSite=Lax; Max-Age=1800${secure}`,
-      )
-      .redirect('/admin');
-  });
-  app.get('/admin', async (req, res) => {
-    if (!owner(req)) return res.redirect('/admin/login');
-    const connections = await providerSummary();
-    return res
-      .type('html')
-      .set(oauthPageHeaders)
-      .send(
-        dashboardPage({
-          connections: connections.length,
-          connected: connections.filter((x) => x.status === 'connected').length,
-          clients: (await oauthStore.listGrants()).length,
-          schema: getDatabaseStatus().schemaState,
-        }),
-      );
-  });
-  app.get('/admin/connections', async (req, res) => {
-    if (!owner(req)) return res.redirect('/admin/login');
-    return res
-      .type('html')
-      .set(oauthPageHeaders)
-      .send(connectionsPage((await providerSummary()) as any, registry.getPreferred()));
-  });
-  app.get('/admin/connections/:connectionId', (req, res) => {
-    if (!owner(req)) return res.redirect('/admin/login');
-    const connection = registry.getConnection(req.params.connectionId);
-    return connection
-      ? res
-          .type('html')
-          .set(oauthPageHeaders)
-          .send(connectionDetailPage(connection.summary, registry.getPreferred(), owner(req)!.csrf))
-      : res
-          .status(404)
-          .type('html')
-          .set(oauthPageHeaders)
-          .send(authResultPage('', false, 'Connection not found.'));
-  });
-  app.post(
-    '/admin/connections/:connectionId/disconnect',
-    express.urlencoded({ extended: false }),
-    (req, res) => {
-      if (!owner(req) || (!csrf(req) && req.body?.csrf_token !== owner(req)?.csrf))
-        return res
-          .status(403)
-          .type('html')
-          .set(oauthPageHeaders)
-          .send(authResultPage('', false, 'Your owner session or CSRF token is no longer valid.'));
-      registry.unregister(req.params.connectionId);
-      return res.redirect('/admin/connections');
-    },
-  );
-  app.get('/admin/providers', (req, res) => {
-    if (!owner(req)) return res.redirect('/admin/login');
-    return res
-      .type('html')
-      .set(oauthPageHeaders)
-      .send(
-        providerChooserPage([
-          { id: 'spotify', label: 'Spotify', configured: Boolean(auth) },
-          { id: 'soundcloud', label: 'SoundCloud', configured: Boolean(soundCloudAuth) },
-          { id: 'youtube', label: 'YouTube', configured: Boolean(youtubeAuth) },
-          { id: 'apple-music', label: 'Apple Music', configured: Boolean(appleMusicAuth) },
-        ]),
-      );
-  });
-  app.get('/admin/clients', async (req, res) => {
-    if (!owner(req)) return res.redirect('/admin/login');
-    const grants = await oauthStore.listGrants();
-    return res
-      .type('html')
-      .set(oauthPageHeaders)
-      .send(clientsPage(grants as any));
-  });
-  app.get('/admin/status', async (req, res) => {
-    if (!owner(req)) return res.redirect('/admin/login');
-    const dbStatus = getDatabaseStatus();
-    return res
-      .type('html')
-      .set(oauthPageHeaders)
-      .send(
-        systemStatusPage({
-          version: APP_VERSION,
-          schema: dbStatus.schemaState,
-          currentVersion: dbStatus.currentVersion ?? undefined,
-          authMode: cfg.MCP_AUTH_MODE,
-          providers:
-            registry
-              .listConnections()
-              .map((x) => `${x.provider}:${x.connected === false ? 'disconnected' : 'configured'}`)
-              .join(', ') || 'none',
-        }),
-      );
-  });
-  app.post('/owner/logout', (req, res) => {
-    ownerSessions.revoke(cookie(req, 'jamrelay_owner'));
+        .set(adminPageHeaders)
+        .send(authResultPage('', false, 'Your owner session is no longer valid.'));
+    if (!csrf(req) && req.body?.csrf_token !== session.csrf)
+      return res
+        .status(403)
+        .type('html')
+        .set(adminPageHeaders)
+        .send(
+          adminConfirmationPage(
+            'Sign out',
+            'Confirm signing out of the owner session.',
+            '/owner/logout',
+            session.csrf,
+          ),
+        );
+    ownerSessions.revoke(session.token);
     return res
       .setHeader('Set-Cookie', 'jamrelay_owner=; HttpOnly; SameSite=Lax; Max-Age=0')
       .status(204)
@@ -366,13 +307,8 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
   });
   app.patch('/connections/:connectionId', express.json({ limit: '16kb' }), (req, res) => {
     if (!owner(req) || !csrf(req)) return res.status(403).json({ error: 'CSRF_REQUIRED' });
-    const connection = registry.getConnection(req.params.connectionId);
-    if (!connection) return res.status(404).json({ error: 'CONNECTION_NOT_FOUND' });
-    if (typeof req.body?.display_name === 'string')
-      connection.summary.displayName = req.body.display_name.slice(0, 120);
-    if (req.body?.preferred_read === true) registry.setPreferredRead(req.params.connectionId);
-    if (req.body?.preferred_write === true) registry.setPreferredWrite(req.params.connectionId);
-    return res.json({ ...connection.summary, preferred: registry.getPreferred() });
+    const updated = updateConnectionSettings(req.params.connectionId, req.body);
+    return updated ? res.json(updated) : res.status(404).json({ error: 'CONNECTION_NOT_FOUND' });
   });
   app.delete('/connections/:connectionId', (req, res) => {
     if (!owner(req) || !csrf(req)) return res.status(403).json({ error: 'CSRF_REQUIRED' });
@@ -381,6 +317,27 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
       state_retained: true,
     });
   });
+  adminRouter.post(
+    '/connections/:connectionId/settings',
+    express.urlencoded({ extended: false }),
+    (req, res) => {
+      const session = owner(req);
+      if (!session || req.body?.csrf_token !== session.csrf)
+        return res
+          .status(403)
+          .type('html')
+          .set(adminPageHeaders)
+          .send(authResultPage('', false, 'Your owner session or CSRF token is no longer valid.'));
+      if (!updateConnectionSettings(req.params.connectionId, req.body))
+        return res
+          .status(404)
+          .type('html')
+          .set(adminPageHeaders)
+          .send(authResultPage('', false, 'Connection not found.'));
+      ownerSessions.setFlash(session.token, 'Connection settings saved.');
+      return res.redirect(`/admin/connections/${encodeURIComponent(req.params.connectionId)}`);
+    },
+  );
   app.get('/owner/grants', async (req, res) => {
     if (!owner(req)) return res.status(401).json({ error: 'OWNER_AUTH_REQUIRED' });
     return res.json({ grants: await oauthStore.listGrants() });
@@ -400,30 +357,85 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
   });
   const providerSummary = async () =>
     Promise.all(
-      registry.listConnections().map(async (summary) => ({
-        ...summary,
-        status:
-          summary.provider === 'spotify' && auth
-            ? (await auth.connected())
+      registry.listConnections().map(async (summary) => {
+        try {
+          const connected =
+            summary.provider === 'spotify' && auth
+              ? await auth.connected()
+              : summary.provider === 'soundcloud' && soundCloudAuth
+                ? await soundCloudAuth.connected()
+                : summary.provider === 'apple-music' && appleMusicAuth
+                  ? await appleMusicAuth.connected()
+                  : summary.provider === 'youtube' && youtubeAuth
+                    ? await youtubeAuth.connected()
+                    : summary.connected !== false;
+          return {
+            ...summary,
+            status: connected
               ? 'connected'
-              : 'disconnected'
-            : summary.provider === 'soundcloud' && soundCloudAuth
-              ? (await soundCloudAuth.connected())
-                ? 'connected'
-                : 'disconnected'
-              : summary.provider === 'apple-music' && appleMusicAuth
-                ? (await appleMusicAuth.connected())
-                  ? 'connected'
-                  : 'configured'
-                : summary.provider === 'youtube' && youtubeAuth
-                  ? (await youtubeAuth.connected())
-                    ? 'connected'
-                    : 'disconnected'
-                  : summary.connected === false
-                    ? 'disconnected'
-                    : 'configured',
-      })),
+              : summary.provider === 'apple-music'
+                ? 'configured'
+                : 'disconnected',
+          };
+        } catch {
+          logger.warn(
+            {
+              event: 'provider_status_failed',
+              provider: summary.provider,
+              connection_id: summary.connectionId,
+            },
+            'Provider status check failed',
+          );
+          return { ...summary, status: 'degraded' };
+        }
+      }),
     );
+  registerAdminRoutes(adminRouter, {
+    ownerSessions,
+    owner,
+    csrf,
+    cfg,
+    registry,
+    providerSummary,
+    oauthStore,
+    auth,
+    soundCloudAuth,
+    youtubeAuth,
+    appleMusicAuth,
+    appleMusicAdapter,
+    updateConnectionSettings,
+    backupOptions: {
+      databasePath: cfg.JAMRELAY_DB_PATH ?? resolve(process.cwd(), 'data', 'jamrelay.db'),
+      baseOutputDir: resolve(cfg.JAMRELAY_DATA_DIR ?? resolve(process.cwd(), 'data'), 'backups'),
+      credentialFiles: [
+        {
+          name: 'provider-credentials.json',
+          path:
+            process.env.PROVIDER_CREDENTIAL_STORE_PATH ??
+            resolve(
+              cfg.JAMRELAY_DATA_DIR ?? resolve(process.cwd(), 'data'),
+              'provider-credentials.json',
+            ),
+        },
+        {
+          name: 'mcp-oauth.json',
+          path:
+            process.env.MCP_OAUTH_STORE_PATH ??
+            resolve(cfg.JAMRELAY_DATA_DIR ?? resolve(process.cwd(), 'data'), 'mcp-oauth.json'),
+        },
+        {
+          name: 'mcp-oauth-clients.json',
+          path:
+            process.env.MCP_OAUTH_CLIENTS_PATH ??
+            resolve(
+              cfg.JAMRELAY_DATA_DIR ?? resolve(process.cwd(), 'data'),
+              'mcp-oauth-clients.json',
+            ),
+        },
+      ],
+    },
+  });
+  app.use('/admin', adminRouter);
   app.get('/providers', async (_req, res) => res.json({ providers: await providerSummary() }));
   app.get('/providers/:provider/connections', async (req, res) =>
     res.json({
@@ -570,6 +582,7 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
   const mcpHandler = createMcpHandler(
     () => {
       const server = new McpServer({ name: 'jamrelay', version: APP_VERSION });
+      const resolver = new TrackResolver(safeClient);
       registerTools(
         server,
         safeClient,
@@ -577,6 +590,7 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
         isDatabaseInitialized(),
         registry,
         cfg.JAMRELAY_TOOLSET,
+        resolver,
       );
       return server;
     },
@@ -609,20 +623,77 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
         'MCP request',
       ),
     );
-    void toolContext.run(
-      {
-        requestId: res.locals.requestId,
-        signal: new AbortController().signal,
-        deadlineAt: Date.now() + 15000,
-        mcpAccess: access,
-      },
-      () => nodeMcpHandler(req, res, req.body),
-    );
+    const requestController = new AbortController();
+    const singleflight = new Singleflight();
+    const abortOnDisconnect = () => {
+      if (!res.writableEnded) requestController.abort();
+    };
+    req.on('aborted', abortOnDisconnect);
+    res.on('close', abortOnDisconnect);
+    try {
+      await toolContext.run(
+        {
+          requestId: res.locals.requestId,
+          signal: requestController.signal,
+          // The tool wrapper applies the execution-class budget. This outer
+          // deadline bounds the whole MCP exchange and is not reset by nesting.
+          deadlineAt: Date.now() + 5 * 60_000,
+          mcpAccess: access,
+          singleflight,
+        },
+        () => nodeMcpHandler(req, res, req.body),
+      );
+    } catch (error) {
+      if (!res.headersSent) return sendApiError(res, toApiError(error));
+      logger.warn(
+        { event: 'mcp_handler_error', request_id: res.locals.requestId },
+        'MCP handler failed after response started',
+      );
+    } finally {
+      req.off('aborted', abortOnDisconnect);
+      res.off('close', abortOnDisconnect);
+    }
   });
-  app.use((_req, res) =>
-    sendApiError(res, new ApiError(404, 'RESOURCE_NOT_FOUND', 'Resource not found.')),
+  app.use((req, res) => {
+    if (req.path.startsWith('/admin') && req.accepts('html'))
+      return res
+        .status(404)
+        .type('html')
+        .set(adminPageHeaders)
+        .send(
+          adminErrorPage(
+            404,
+            'Page not found',
+            'The requested admin page does not exist.',
+            res.locals.requestId,
+          ),
+        );
+    return sendApiError(res, new ApiError(404, 'RESOURCE_NOT_FOUND', 'Resource not found.'));
+  });
+  app.use(
+    (error: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
+      if (req.path.startsWith('/admin') && req.accepts('html') && !res.headersSent) {
+        const apiError = toApiError(error);
+        return res
+          .status(apiError.status)
+          .type('html')
+          .set(adminPageHeaders)
+          .send(
+            adminErrorPage(
+              apiError.status,
+              apiError.status === 403
+                ? 'Access denied'
+                : apiError.status === 409
+                  ? 'Conflict'
+                  : 'Request failed',
+              apiError.message,
+              res.locals.requestId,
+            ),
+          );
+      }
+      return apiErrorHandler(error, req, res, next);
+    },
   );
-  app.use(apiErrorHandler);
   (
     app as typeof app & { jamrelayClient: SpotifyClient; jamrelayRegistry: ProviderRegistry }
   ).jamrelayClient = safeClient;
@@ -665,11 +736,23 @@ export async function startServer(cfg = getConfig()) {
   const shutdown = (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
-    void jobRunner.stop();
+    beginDraining();
     logger.info({ event: 'shutdown', signal }, `${APP_NAME} shutdown requested`);
+    let closed = false;
+    const finish = () => {
+      if (closed) return;
+      closed = true;
+      void jobRunner.stop().finally(() => closeDatabase());
+    };
+    const graceTimer = setTimeout(() => {
+      logger.warn({ event: 'shutdown.timeout', grace_ms: 10_000 }, 'Shutdown grace elapsed');
+      server.closeAllConnections?.();
+      finish();
+    }, 10_000);
     server.close((error) => {
       if (error) logger.error({ err: error }, 'HTTP server shutdown failed');
-      closeDatabase();
+      clearTimeout(graceTimer);
+      finish();
     });
   };
   process.once('SIGTERM', () => shutdown('SIGTERM'));

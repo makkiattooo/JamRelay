@@ -37,6 +37,11 @@ manages credentials and connection lifecycle, while MCP OAuth manages a client
 grant over selected connection IDs and granular operation permissions. The MCP
 request path enforces that grant before provider routing.
 
+Owner-facing HTML administration is mounted through `src/web/admin-router.ts`.
+It is a separate route boundary from public provider and owner JSON APIs; page
+renderers receive sanitized view data, and mutation feedback is kept in the
+owner session as bounded one-request flash state.
+
 The MCP endpoint is stateless at the transport layer. Durable state includes the SQLite State DB plus the encrypted Spotify credentials and MCP OAuth store. The database is documented in [State Database](/state-database); do not share any of these stores between unrelated deployments.
 
 ## Request lifecycle

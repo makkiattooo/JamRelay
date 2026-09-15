@@ -6,6 +6,7 @@ import {
 } from '../db/state.js';
 import { getRateLimit } from '../db/state.js';
 import { normalizeText, resolveCandidates, type MusicCandidate } from '../music/normalize.js';
+import { mapLimit } from '../utils/concurrency.js';
 
 export type TransferClassification =
   'exact' | 'high-confidence' | 'ambiguous' | 'unmatched' | 'unavailable' | 'unsupported';
@@ -112,6 +113,56 @@ export async function planPlaylistTransfer(
     warnings.push('Destination connection does not support catalog search/resolution.');
   const items: TransferItem[] = [];
   let calls = 0;
+  // Catalog resolution is independent per source item. Prefetch only items
+  // that still need a search, deduplicate identical queries within this plan,
+  // and keep provider pressure bounded.
+  const pendingSearches = new Map<string, string>();
+  for (let index = 0; index < deps.sourceTracks.length; index++) {
+    const source = sourceTrack(deps.sourceTracks[index], (deps.sourceOffset ?? 0) + index);
+    if (!source.title || !source.artist || !deps.destinationCatalogSupported) continue;
+    const sourceMapping = source.id
+      ? findTrackProviderMapping({
+          providerId: deps.sourceProvider,
+          connectionId: deps.sourceConnectionId,
+          providerTrackId: source.id,
+        })
+      : null;
+    const sourceRaw = rawTrack(deps.sourceTracks[index]);
+    const canonicalId =
+      sourceMapping?.trackId ??
+      sourceRaw?.canonicalTrackId ??
+      sourceRaw?.metadata?.canonicalTrackId;
+    const canonicalDestination =
+      canonicalId == null
+        ? null
+        : getTrackProviderMappings(canonicalId).find(
+            (mapping) =>
+              mapping.providerId === deps.destinationProvider &&
+              mapping.connectionId === deps.destinationConnectionId,
+          );
+    if (canonicalDestination) continue;
+    if (
+      deps.rateLimit?.(deps.destinationProvider, 'catalog', deps.destinationConnectionId) ??
+      Boolean(getRateLimit(deps.destinationProvider, 'catalog', deps.destinationConnectionId))
+    )
+      continue;
+    const query = source.title + ' ' + source.artist;
+    pendingSearches.set(
+      `${deps.destinationProvider}:${deps.destinationConnectionId}:${query}`,
+      query,
+    );
+  }
+  const searchResults = new Map<string, MusicCandidate[]>();
+  await mapLimit([...pendingSearches.entries()], { concurrency: 8 }, async ([key, query]) => {
+    searchResults.set(
+      key,
+      await deps.searchTracks(query, {
+        connection_id: deps.destinationConnectionId,
+        provider: deps.destinationProvider,
+      }),
+    );
+  });
+  calls = pendingSearches.size;
   for (let index = 0; index < deps.sourceTracks.length; index++) {
     const position = (deps.sourceOffset ?? 0) + index;
     const source = sourceTrack(deps.sourceTracks[index], position);
@@ -187,11 +238,9 @@ export async function planPlaylistTransfer(
       });
       continue;
     }
-    calls++;
-    const candidates = await deps.searchTracks(source.title + ' ' + source.artist, {
-      connection_id: deps.destinationConnectionId,
-      provider: deps.destinationProvider,
-    });
+    const query = source.title + ' ' + source.artist;
+    const key = `${deps.destinationProvider}:${deps.destinationConnectionId}:${query}`;
+    const candidates = searchResults.get(key) ?? [];
     const result = resolveCandidates(
       candidates,
       source.title,

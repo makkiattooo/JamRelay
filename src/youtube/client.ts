@@ -1,5 +1,6 @@
 import { ProviderApiError } from '../providers/errors.js';
 import type { YouTubeAuth } from './auth.js';
+import { toolContext } from '../mcp/context.js';
 export const YOUTUBE_QUOTA_COST: Record<string, number> = {
   'playlists.list': 1,
   'playlists.insert': 50,
@@ -38,6 +39,8 @@ export class YouTubeClient {
         : body === undefined
           ? 'GET'
           : 'POST';
+    const timeoutSignal = AbortSignal.timeout(15_000);
+    const parentSignal = toolContext.get()?.signal;
     const response = await fetch(url, {
       method: httpMethod,
       headers: {
@@ -46,6 +49,7 @@ export class YouTubeClient {
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.any([timeoutSignal, ...(parentSignal ? [parentSignal] : [])]),
     });
     const value: any = await response.json().catch(() => ({}));
     if (!response.ok)

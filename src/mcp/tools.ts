@@ -1,14 +1,14 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
-import { SpotifyClient } from '../spotify/client.js';
-import { SpotifyApiError } from '../spotify/errors.js';
-import { parseSpotifyIdentifier } from '../spotify/identifiers.js';
+import { ProviderApiError } from '../providers/errors.js';
+import { parseProviderIdentifier } from '../providers/identifiers.js';
 import { chunks } from '../utils/chunks.js';
 import { normalizeText, resolveCandidates } from '../music/normalize.js';
-import { paginate } from '../spotify/pagination.js';
-import { writeChunks } from '../spotify/write-operation.js';
+import { paginate } from '../providers/pagination.js';
+import { writeChunks } from '../providers/write-operation.js';
 import { toApiError } from '../http/errors.js';
 import { registerAdvanced } from './helpers.js';
+import { createLegacyResolver } from './legacy-resolver.js';
 import { toolContext } from './context.js';
 import type { Logger } from 'pino';
 import { indexCanonicalTrack } from '../db/state.js';
@@ -22,8 +22,12 @@ import {
   type ReadResult,
   type ReadRoutingOptions,
 } from '../providers/read-services.js';
-import { SpotifyProviderAdapter } from '../spotify/provider-adapter.js';
 import { PlaylistGateway, type PlaylistWriteTarget } from '../providers/playlist-gateway.js';
+import type { ProviderHttpClient } from '../providers/http-client.js';
+import type { TrackResolutionService } from '../music/resolver-service.js';
+import { createLegacyProviderRegistry } from './legacy-provider-registry.js';
+import { isDraining } from '../runtime/lifecycle.js';
+import { getToolSecurityMetadata, type ToolExecutionClass } from './tool-manifest.js';
 import {
   exportPlaylist,
   parsePlaylistImport,
@@ -310,17 +314,22 @@ export function toolsetIncludes(profile: ToolsetProfile, name: string): boolean 
   const names = TOOLSET_PROFILES[profile] as readonly string[];
   return names.includes('*') || names.includes(name);
 }
+export function executionClassForTool(name: string, mutation: boolean): ToolExecutionClass {
+  const metadata = getToolSecurityMetadata(name);
+  if (!metadata) throw new Error(`TOOL_SECURITY_METADATA_MISSING:${name}`);
+  return metadata.executionClass;
+}
 export { PLAYLIST_AUTOMATION_TOOL_NAMES, PLAYLIST_PERSONALIZATION_TOOL_NAMES };
 export function registerTools(
   s: McpServer,
-  c: SpotifyClient,
+  c: ProviderHttpClient,
   logger?: Logger,
   includeStateTools = false,
   registry?: ProviderRegistry,
   toolset: ToolsetProfile = 'all',
+  resolver?: TrackResolutionService,
 ) {
-  const readRegistry = registry ?? new ProviderRegistry();
-  if (!registry) readRegistry.register(new SpotifyProviderAdapter(undefined as any, c));
+  const readRegistry = registry ?? createLegacyProviderRegistry(c);
   const reads = new ProviderReadServices(readRegistry);
   const playlists = new PlaylistGateway(readRegistry);
   const routing = (a: any): ReadRoutingOptions & Record<string, unknown> => ({
@@ -352,7 +361,7 @@ export function registerTools(
     ...(result.provenance.fallback ? { read_fallback: true } : {}),
   });
   const original = s.registerTool.bind(s);
-  const permissionForTool = (name: string) => {
+  /* const legacyPermissionForTool = (name: string) => {
     if (['get_connections', 'get_capabilities'].includes(name)) return 'diagnostics.read';
     if (
       [
@@ -420,6 +429,8 @@ export function registerTools(
       ].includes(name)
     )
       return 'diagnostics.read';
+    if (['create_bulk_job', 'resume_job', 'commit_job', 'cancel_job'].includes(name))
+      return 'playlist.write';
     if (
       [
         'create_playlist',
@@ -443,19 +454,23 @@ export function registerTools(
     if (['execute_playlist_transfer', 'sync_playlist_transfer'].includes(name))
       return 'transfer.execute';
     return undefined;
-  };
+  }; */
+  const permissionForTool = (name: string) => getToolSecurityMetadata(name)?.permission;
   const enforceAccess = (name: string, args: any) => {
     const access = toolContext.get()?.mcpAccess;
-    if (!access) return;
+    if (!access) return undefined;
     const permission = permissionForTool(name);
-    if (permission && !access.permissions?.includes(permission))
-      throw new Error('PERMISSION_NOT_GRANTED');
-    if (name === 'get_connections') return;
+    // Access-controlled requests must never treat missing metadata as public.
+    // This deliberately fails closed while a tool is being added to the catalog.
+    if (!permission) throw new Error('TOOL_SECURITY_METADATA_MISSING');
+    if (!access.permissions?.includes(permission)) throw new Error('PERMISSION_NOT_GRANTED');
+    if (name === 'get_connections') return undefined;
     const allowed = access.connectionIds ?? [];
     if (!allowed.length) throw new Error('CONNECTION_NOT_GRANTED');
     const requested =
       args?.connection_id ?? args?.source_connection_id ?? args?.destination_connection_id;
     if (requested && !allowed.includes(requested)) throw new Error('CONNECTION_NOT_GRANTED');
+    if (requested) return requested;
     const writePermission = [
       'library.write',
       'playlist.write',
@@ -468,10 +483,13 @@ export function registerTools(
       if (!preferred || !allowed.includes(preferred)) throw new Error('CONNECTION_NOT_GRANTED');
       args.connection_id = preferred;
       args.read_fallback = false;
+      return preferred;
     } else if (args && !requested) {
       args.connection_id = allowed[0];
       args.read_fallback = false;
+      return allowed[0];
     }
+    return undefined;
   };
   const validateTarget = (a: any) => {
     if (
@@ -481,71 +499,44 @@ export function registerTools(
     )
       throw new Error('provider_connection_conflict');
   };
-  const mutations = new Set([
-    'create_playlist',
-    'add_tracks_to_playlist',
-    'remove_tracks_from_playlist',
-    'reorder_playlist_tracks',
-    'replace_playlist_tracks',
-    'update_playlist_details',
-    'save_tracks',
-    'remove_saved_tracks',
-    'play',
-    'pause',
-    'next_track',
-    'previous_track',
-    'seek',
-    'set_volume',
-    'transfer_playback',
-    'play_playlist_chapter',
-    'resume_playlist_chapter',
-    'add_tracks_by_search',
-    'deduplicate_playlist',
-    'bulk_add_tracks',
-    'create_playlist_from_tracks',
-    'create_bulk_job',
-    'resume_job',
-    'commit_job',
-    'cancel_job',
-    'snapshot_playlist',
-    'restore_playlist_snapshot',
-    'undo_last_playlist_change',
-    'semantic_deduplicate_playlist',
-    'smart_shuffle_playlist',
-    'balance_artists',
-    'limit_artist_share',
-    'smart_insert_tracks',
-    'optimize_playlist',
-    ...PLAYLIST_AUTOMATION_TOOL_NAMES.filter(
-      (name) => !['playlist_rules_engine', 'estimate_operation_cost'].includes(name),
-    ),
-    ...PLAYLIST_PERSONALIZATION_TOOL_NAMES.filter(
-      (name) =>
-        ![
-          'session_history',
-          'rank_playlist_tracks',
-          'compare_playlists',
-          'build_session_queue',
-          'smart_next',
-          'skip_pattern_report',
-          'rediscover_old_tracks',
-          'deep_cuts_mode',
-          'find_missing_favorites',
-          'complete_artist_collection',
-        ].includes(name),
-    ),
-  ]);
   s = {
     registerTool: (name: any, config: any, callback: any) => {
+      const registrationMetadata = getToolSecurityMetadata(name);
+      if (!registrationMetadata) throw new Error(`TOOL_SECURITY_METADATA_MISSING:${name}`);
       const wrapped = async (...args: any[]) => {
         validateTarget(args[0]);
         const parentContext = toolContext.get();
         const requestId = parentContext?.requestId ?? `req_${globalThis.crypto.randomUUID()}`;
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 15000);
+        const metadata = registrationMetadata;
+        const classBudget = metadata.executionClass.startsWith('heavy') ? 5 * 60_000 : 15_000;
+        const deadlineAt = Math.min(
+          parentContext?.deadlineAt ?? Number.POSITIVE_INFINITY,
+          Date.now() + classBudget,
+        );
+        const timer = setTimeout(() => controller.abort(), Math.max(0, deadlineAt - Date.now()));
+        const signal = parentContext?.signal
+          ? AbortSignal.any([parentContext.signal, controller.signal])
+          : controller.signal;
         const started = Date.now();
+        let effectiveConnectionId: string | undefined;
+        if (isDraining() && !metadata.readOnly) {
+          clearTimeout(timer);
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify({
+                  error: 'SERVER_DRAINING',
+                  message: 'The server is shutting down.',
+                }),
+              },
+            ],
+          };
+        }
         try {
-          enforceAccess(name, args[0]);
+          effectiveConnectionId = enforceAccess(name, args[0]);
         } catch (error) {
           const normalized = toApiError(error);
           clearTimeout(timer);
@@ -567,16 +558,20 @@ export function registerTools(
           const result = await toolContext.run(
             {
               requestId,
-              signal: controller.signal,
-              deadlineAt: parentContext?.deadlineAt ?? Date.now() + 15000,
+              signal,
+              deadlineAt,
               operation: name,
-              mcpAccess: parentContext?.mcpAccess,
+              mcpAccess:
+                effectiveConnectionId && parentContext?.mcpAccess
+                  ? { ...parentContext.mcpAccess, connectionIds: [effectiveConnectionId] }
+                  : parentContext?.mcpAccess,
+              singleflight: parentContext?.singleflight,
             },
             async () =>
               await Promise.race([
                 callback(...args),
                 new Promise((_, reject) =>
-                  controller.signal.addEventListener(
+                  signal.addEventListener(
                     'abort',
                     () => reject(new Error('tool_execution_timeout')),
                     { once: true },
@@ -608,7 +603,9 @@ export function registerTools(
           );
           const details = {
             ...(normalized.details ?? {}),
-            ...(error instanceof SpotifyApiError ? { spotify_status: error.status } : {}),
+            ...(error instanceof ProviderApiError
+              ? { provider_status: error.status, spotify_status: error.status }
+              : {}),
             ...(normalized.retryAfter !== undefined ? { retry_after: normalized.retryAfter } : {}),
             request_id: requestId,
           };
@@ -647,36 +644,9 @@ export function registerTools(
           ...config,
           annotations: {
             ...config.annotations,
-            readOnlyHint: !mutations.has(name),
-            destructiveHint: [
-              'execute_playlist_transfer',
-              'sync_playlist_transfer',
-              'remove_tracks_from_playlist',
-              'replace_playlist_tracks',
-              'deduplicate_playlist',
-              'remove_saved_tracks',
-              'restore_playlist_snapshot',
-              'undo_last_playlist_change',
-              'semantic_deduplicate_playlist',
-              'smart_shuffle_playlist',
-              'balance_artists',
-              'limit_artist_share',
-              'smart_insert_tracks',
-              'optimize_playlist',
-              ...PLAYLIST_AUTOMATION_TOOL_NAMES.filter(
-                (name) =>
-                  !['playlist_rules_engine', 'estimate_operation_cost', 'playlist_recipe'].includes(
-                    name,
-                  ),
-              ),
-            ].includes(name),
-            idempotentHint: [
-              'get_track',
-              'get_artist',
-              'get_playlist',
-              'get_playback_state',
-              'get_devices',
-            ].includes(name),
+            readOnlyHint: registrationMetadata.readOnly,
+            destructiveHint: registrationMetadata.destructive,
+            idempotentHint: registrationMetadata.idempotent,
             openWorldHint: true,
           },
         },
@@ -1055,7 +1025,7 @@ export function registerTools(
       );
     },
   );
-  const pid = (a: any) => parseSpotifyIdentifier(a.playlist_id, 'playlist').id;
+  const pid = (a: any) => parseProviderIdentifier(a.playlist_id, 'spotify', 'playlist').id;
   s.registerTool(
     'get_playlist',
     {
@@ -1164,7 +1134,8 @@ export function registerTools(
       );
     },
   );
-  const uris = (a: any) => a.track_ids.map((x: string) => parseSpotifyIdentifier(x, 'track').uri);
+  const uris = (a: any) =>
+    a.track_ids.map((x: string) => parseProviderIdentifier(x, 'spotify', 'track').uri);
   s.registerTool(
     'add_tracks_to_playlist',
     {
@@ -1451,7 +1422,7 @@ export function registerTools(
     try {
       return out(await operation());
     } catch (error) {
-      if (error instanceof SpotifyApiError && error.status === 403) {
+      if (error instanceof ProviderApiError && error.status === 403) {
         try {
           const state: any = await c.request('/me/player');
           if (Boolean(state?.is_playing) === expectedPlaying)
@@ -1519,7 +1490,7 @@ export function registerTools(
       if (a.context_uri && a.uris) throw new Error('context_uri and uris cannot be combined');
       if (a.offset && !(a.context_uri || a.uris))
         throw new Error('offset requires context_uri or uris');
-      const ur = a.uris?.map((x: string) => parseSpotifyIdentifier(x, 'track').uri);
+      const ur = a.uris?.map((x: string) => parseProviderIdentifier(x, 'spotify', 'track').uri);
       const { device_id, ...b } = a;
       return verifyPlayerMutation(
         () =>
@@ -1579,5 +1550,5 @@ export function registerTools(
     async (a: any) =>
       out(await c.json('/me/player', { device_ids: [a.device_id], play: a.play }, 'PUT')),
   );
-  registerAdvanced(s, c, includeStateTools, reads, playlists);
+  registerAdvanced(s, c, includeStateTools, reads, playlists, resolver ?? createLegacyResolver(c));
 }

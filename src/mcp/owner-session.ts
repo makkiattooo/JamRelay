@@ -3,6 +3,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 export type OwnerSession = { token: string; csrf: string; expiresAt: number };
 export class OwnerSessionStore {
   private sessions = new Map<string, OwnerSession>();
+  private flashes = new Map<string, string>();
   constructor(private readonly ttlMs = 30 * 60_000) {}
   authenticate(secret: string, expected: string) {
     const a = Buffer.from(secret),
@@ -37,6 +38,18 @@ export class OwnerSessionStore {
     return session;
   }
   revoke(token: string | undefined) {
-    if (token) this.sessions.delete(token);
+    if (token) {
+      this.sessions.delete(token);
+      this.flashes.delete(token);
+    }
+  }
+  setFlash(token: string, message: string) {
+    if (this.sessions.has(token)) this.flashes.set(token, message.slice(0, 240));
+  }
+  consumeFlash(token: string | undefined) {
+    if (!token) return undefined;
+    const message = this.flashes.get(token);
+    this.flashes.delete(token);
+    return message;
   }
 }

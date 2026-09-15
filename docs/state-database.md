@@ -166,7 +166,13 @@ JamRelay detects an applied migration whose checksum changed, an applied migrati
 
 ## Backup, recovery, and security
 
-No automated backup command is implemented. Do not copy only `jamrelay.db` while the app may be writing its WAL; use an application-aware SQLite backup procedure or stop the app before making a filesystem-level backup that includes the database and its `-wal`/`-shm` files. Recovery requires restoring matching `/data` contents and environment configuration, then starting the app.
+Create an application-aware backup with `npm run backup -- --output ./backups/<name>`.
+The command uses SQLite `VACUUM INTO` for a consistent database copy and
+includes the encrypted provider credential store, MCP OAuth store, static OAuth
+client registry when present, and a manifest. It never includes
+`TOKEN_ENCRYPTION_KEY`; back up that key separately through a protected secret
+management process. Recovery requires restoring the matching files and
+environment configuration, then starting the app and validating schema status.
 
 The database must not contain Spotify access or refresh tokens, the Cloudflare tunnel token, client secrets, arbitrary `.env` values, raw authorization headers, full HTTP bodies, or full analytics request history. API error records are designed for normalized diagnostics and hashes rather than secret payloads.
 

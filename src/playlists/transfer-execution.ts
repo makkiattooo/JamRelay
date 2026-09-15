@@ -4,6 +4,7 @@ import { ProviderSelectionError } from '../providers/errors.js';
 import { PlaylistGateway } from '../providers/playlist-gateway.js';
 import type { TransferPlan, TransferItem } from './transfer-planner.js';
 import { saveOperation, saveSnapshot } from './snapshots.js';
+import { invalidatePlaylistStateCache, PlaylistStateReader } from './state-reader.js';
 
 export type { TransferPlan } from './transfer-planner.js';
 
@@ -49,8 +50,6 @@ export const transferPlanFingerprint = (plan: TransferPlan) =>
     .update(JSON.stringify(planCore(plan)))
     .digest('hex');
 
-const pageItems = (value: any): any[] =>
-  Array.isArray(value) ? value : (value?.data?.items ?? value?.items ?? []);
 const itemId = (value: any): string | null => {
   const x = value?.item ?? value?.track ?? value;
   return x?.id == null ? null : String(x.id);
@@ -70,9 +69,8 @@ const ensurePlan = (plan: TransferPlan, connectionId: string, provider: string) 
 };
 
 const destinationState = async (gateway: PlaylistGateway, playlistId: string, target: any) => {
-  const playlist = await gateway.get(playlistId, target);
-  const items = await gateway.items(playlistId, target);
-  return { playlist, items: pageItems(items) };
+  const state = await new PlaylistStateReader(gateway).read(playlistId, target);
+  return { playlist: state.playlist, items: state.items };
 };
 
 const snapshotDestination = (
@@ -133,6 +131,7 @@ export async function executePlaylistTransfer(input: {
     connection_id: plan.destination_connection_id,
     provider: plan.destination_provider,
   };
+  gateway.assertSupported('replace', target);
   const before = await destinationState(gateway, destinationPlaylistId, target);
   const beforeSnapshot = snapshotDestination(
     destinationPlaylistId,
@@ -152,6 +151,7 @@ export async function executePlaylistTransfer(input: {
   }));
   try {
     await gateway.replace(destinationPlaylistId, expected, target);
+    invalidatePlaylistStateCache(destinationPlaylistId, target);
     const after = await destinationState(gateway, destinationPlaylistId, target);
     const actual = after.items.map(itemId);
     if (JSON.stringify(actual) !== JSON.stringify(expected))
@@ -237,6 +237,7 @@ export async function syncPlaylistTransfer(input: {
     connection_id: plan.destination_connection_id,
     provider: plan.destination_provider,
   };
+  gateway.assertSupported('replace', target);
   const before = await destinationState(gateway, destinationPlaylistId, target);
   const beforeIds = before.items.map(itemId).filter((x): x is string => Boolean(x));
   const desired = plan.items.filter(eligible).map((x) => x.destination!.id);
