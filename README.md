@@ -19,7 +19,7 @@ Turn high-level requests into deterministic, inspectable and reversible music op
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.13.0-339933?style=flat-square&logo=node.js&logoColor=white)](package.json)
 [![MCP](https://img.shields.io/badge/MCP-Streamable%20HTTP-6f42c1?style=flat-square)](docs/mcp-client.md)
 [![Providers](https://img.shields.io/badge/providers-Spotify%20%7C%20SoundCloud%20%7C%20Apple%20Music%20%7C%20YouTube-6f42c1?style=flat-square)](docs/providers/)
-[![M8ven Score](https://m8ven.ai/badge/mcp/makkiattooo-jamrelay-1qzbwr?v=b3ba81fe35d9155d3007b610253e8a32)](https://m8ven.ai/mcp/makkiattooo-jamrelay-1qzbwr?s=readme)
+[![M8ven Score](https://m8ven.ai/badge/mcp/makkiattooo-jamrelay-1qzbwr)](https://m8ven.ai/mcp/makkiattooo-jamrelay-1qzbwr?s=readme)
 
 [Get started](docs/getting-started.md) Â·
 [Documentation](docs/index.md) Â·
