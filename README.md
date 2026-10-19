@@ -11,6 +11,10 @@
 [![Release](https://img.shields.io/github/v/release/makkiattooo/JamRelay?style=flat-square)](https://github.com/makkiattooo/JamRelay/releases)
 [![License](https://img.shields.io/badge/license-AGPL--3.0--only-blue?style=flat-square)](LICENSE)
 [![CI](https://github.com/makkiattooo/JamRelay/actions/workflows/ci.yml/badge.svg)](https://github.com/makkiattooo/JamRelay/actions/workflows/ci.yml)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.13.0-339933?style=flat-square&logo=node.js&logoColor=white)](package.json)
+[![MCP](https://img.shields.io/badge/MCP-Streamable%20HTTP-6f42c1?style=flat-square)](docs/mcp-client.md)
+[![Providers](https://img.shields.io/badge/providers-Spotify%20%7C%20SoundCloud%20%7C%20Apple%20Music%20%7C%20YouTube-6f42c1?style=flat-square)](docs/providers/)
+[![M8ven Score](https://m8ven.ai/badge/mcp/makkiattooo-jamrelay-1qzbwr)](https://m8ven.ai/mcp/makkiattooo-jamrelay-1qzbwr?s=readme)
 
 [Documentation](https://makkiattooo.github.io/JamRelay/) · [Quick start](docs/installation.md) · [Polski](docs/pl/index.md)
 
