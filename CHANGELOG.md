@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.3
+
+- Add guided local, tunnel, custom-domain and reverse-proxy connectivity with DNS, HTTPS, health and MCP-authentication checks.
+- Expand resumable multilingual onboarding for deployment, provider credentials and MCP clients while preserving existing data and OAuth protections.
+- Keep the production `proxy-addr` resolution patched at 2.0.8.
+
 ## 1.5.2
 
 - Shorten the project landing page and simplify documentation navigation, installation guidance and Polish entry points.

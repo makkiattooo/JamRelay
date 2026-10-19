@@ -13,6 +13,7 @@ ${t('Usage')}: jamrelay <command>
   config             ${t('Safely reconfigure existing installation')}
   onboard             ${t('Resume guided provider and AI client setup')}
   connect provider|client NAME  ${t('Configure a music provider or MCP client')}
+  connectivity [--json] ${t('Configure or verify local and public access')}
   start              ${t('Run the MCP HTTP server')}
   status | doctor    ${t('Installation status / configuration diagnostics')}
   connections list
@@ -67,7 +68,19 @@ export async function runCli(args: string[]) {
         console.error(help);
         return 2;
       }
+      const connectivity = await import('./cli/connectivity.js');
+      if (!connectivity.isConnectivityConfigured()) await connectivity.configureConnectivity();
       await (await import('./cli/guided.js')).onboard();
+      return 0;
+    }
+    if (command === 'connectivity') {
+      if (rest.some((arg) => arg !== '--json')) {
+        console.error(help);
+        return 2;
+      }
+      const connectivity = await import('./cli/connectivity.js');
+      if (rest.includes('--json')) return await connectivity.showConnectivityStatus(true);
+      await connectivity.configureConnectivity();
       return 0;
     }
     if (command === 'connect') {

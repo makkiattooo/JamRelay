@@ -56,7 +56,7 @@ Then run `npm install -g <archive-path-printed-by-npm>` followed by `jamrelay se
 
 The wizard uses XDG directories on Linux, Application Support on macOS and AppData on Windows. Existing `.env` deployments and environment path overrides are retained. `JAMRELAY_CONFIG_PATH` selects a private configuration file; run `jamrelay config` from the original deployment directory to preserve existing relative paths as absolute paths.
 
-Stop the server before reconfiguration or upgrades. Back up data **and** private configuration, preserve encryption keys, install the new package, run `jamrelay doctor`, then `jamrelay start`. Do not silently move data or replace keys. See [operations](/operations) for migration/recovery details and the [CLI reference](/cli-information) for update channels and offline notices.
+Stop the server before reconfiguration or upgrades. Back up data **and** private configuration, preserve encryption keys, install the new package, run `jamrelay doctor`, then `jamrelay start`. Do not silently move data or replace keys. See the [connectivity guide](/connectivity) for local-only access, tunnels, custom domains, HTTPS checks and recovery; see [operations](/operations) for migration/recovery details and the [CLI reference](/cli-information) for update channels and offline notices.
 
 ## Docker Compose (recommended)
 

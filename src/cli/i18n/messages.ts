@@ -136,6 +136,13 @@ const rows = [
   ],
   ['Usage', 'Użycie', 'Verwendung', 'Utilisation', 'Uso'],
   [
+    'Configure or verify local and public access',
+    'Skonfiguruj lub sprawdź dostęp lokalny i publiczny',
+    'Lokalen und öffentlichen Zugriff konfigurieren oder prüfen',
+    'Configurer ou vérifier l’accès local et public',
+    'Configurar o verificar el acceso local y público',
+  ],
+  [
     'Operator commands support --json. JAMRELAY_CONFIG_PATH selects a private env file.',
     'Polecenia operatora obsługują --json. JAMRELAY_CONFIG_PATH wskazuje prywatny plik konfiguracji.',
     'Operatorbefehle unterstützen --json. JAMRELAY_CONFIG_PATH wählt die private Konfigurationsdatei.',

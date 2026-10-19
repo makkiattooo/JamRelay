@@ -6,6 +6,37 @@ import { z } from 'zod';
 import { installationPaths, lockInstallation } from '../runtime/installation.js';
 
 export const channelSchema = z.enum(['stable', 'beta']);
+export const connectivityMethodSchema = z.enum([
+  'local',
+  'tailscale-funnel',
+  'ngrok',
+  'cloudflare-quick',
+  'cloudflare-tunnel',
+  'direct-proxy',
+  'existing-proxy',
+  'hosting',
+  'later',
+]);
+export const connectivityStateSchema = z
+  .object({
+    method: connectivityMethodSchema.nullable().default(null),
+    status: z.enum(['local', 'pending', 'verified']).default('pending'),
+    origin: z.string().url().nullable().default(null),
+    domain: z.string().nullable().default(null),
+    zone: z.string().nullable().default(null),
+    dnsProvider: z.string().nullable().default(null),
+    registrar: z.string().nullable().default(null),
+    checks: z
+      .object({
+        dns: z.boolean().default(false),
+        https: z.boolean().default(false),
+        health: z.boolean().default(false),
+        mcpProtected: z.boolean().default(false),
+      })
+      .default({ dns: false, https: false, health: false, mcpProtected: false }),
+    checkedAt: z.string().datetime().nullable().default(null),
+  })
+  .strict();
 export const cliStateSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -23,6 +54,17 @@ export const cliStateSchema = z
       )
       .default({}),
     guidedClients: z.enum(['chatgpt', 'claude', 'cursor', 'vscode', 'generic']).array().default([]),
+    connectivity: connectivityStateSchema.default({
+      method: null,
+      status: 'pending',
+      origin: null,
+      domain: null,
+      zone: null,
+      dnsProvider: null,
+      registrar: null,
+      checks: { dns: false, https: false, health: false, mcpProtected: false },
+      checkedAt: null,
+    }),
   })
   .strict();
 export type CliState = z.infer<typeof cliStateSchema>;
@@ -33,6 +75,7 @@ export const defaultState = (): CliState => ({
   lastPassiveAttempt: 0,
   notices: {},
   guidedClients: [],
+  connectivity: connectivityStateSchema.parse({}),
 });
 export function cliPaths() {
   const paths = installationPaths();

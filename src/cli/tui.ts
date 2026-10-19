@@ -78,14 +78,13 @@ export function welcome(languageNames: readonly string[], selected: number) {
     '│                                            │',
     '│                 JAMRELAY                   │',
     '│                                            │',
-    '│ Wybierz język / Choose language / Sprache  │',
-    '│ Choisir la langue / Elige tu idioma        │',
+    '│ Welcome to JamRelay                        │',
+    '│ Choose your language                      │',
     ...languageNames.map(
       (name, index) => `│  ${index === selected ? '›' : ' '} ${index + 1}  ${name.padEnd(35)}│`,
     ),
     '│                                            │',
-    '│  ↑↓   1–5: wybierz / select / wählen       │',
-    '│       choisir / elegir · Enter ↵           │',
+    '│  ↑↓ Navigate   1–5 Select   Enter Confirm  │',
     '╰────────────────────────────────────────────╯',
   ];
   return lines.join('\n');
