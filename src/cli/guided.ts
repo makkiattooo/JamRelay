@@ -1,12 +1,18 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { createInterface } from 'node:readline/promises';
-import { emitKeypressEvents } from 'node:readline';
-import { stdin, stdout } from 'node:process';
+import { stdin } from 'node:process';
 import { resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { currentLanguage, type Language } from './i18n/index.js';
-import { clearScreen, menuPanel, selectOption, terminalLink } from './tui.js';
+import {
+  menuPanel,
+  promptText,
+  selectOption,
+  setTuiContext,
+  showPanel,
+  terminalLink,
+} from './tui.js';
+import { effectiveBaseUrl, localBaseUrl } from '../config.js';
 import {
   installationPaths,
   loadInstallation,
@@ -169,6 +175,42 @@ const clientInstructions: Record<Language, Record<Client, string>> = {
 
 export const guidedTranslations = { requirements, clientInstructions };
 
+const clientLabels: Record<
+  Language,
+  { endpoint: string; transport: string; verified: string; pending: string }
+> = {
+  en: {
+    endpoint: 'MCP URL',
+    transport: 'Transport: Streamable HTTP',
+    verified: 'GET /health succeeded',
+    pending: 'not verified',
+  },
+  pl: {
+    endpoint: 'Adres MCP',
+    transport: 'Transport: Streamable HTTP',
+    verified: 'GET /health: serwer odpowiada',
+    pending: 'niezweryfikowane',
+  },
+  de: {
+    endpoint: 'MCP-URL',
+    transport: 'Transport: Streamable HTTP',
+    verified: 'GET /health erfolgreich',
+    pending: 'nicht überprüft',
+  },
+  fr: {
+    endpoint: 'URL MCP',
+    transport: 'Transport : Streamable HTTP',
+    verified: 'GET /health a réussi',
+    pending: 'non vérifié',
+  },
+  es: {
+    endpoint: 'URL MCP',
+    transport: 'Transporte: Streamable HTTP',
+    verified: 'GET /health respondió correctamente',
+    pending: 'sin verificar',
+  },
+};
+
 const copy: Record<Language, Record<string, string>> = {
   en: {
     welcome: 'Continue JamRelay setup',
@@ -221,6 +263,7 @@ const copy: Record<Language, Record<string, string>> = {
       'Apple Music uses a different flow: create a Music User Token in a trusted MusicKit app, then submit it to the owner-protected /auth/apple-music/user-token endpoint. JamRelay cannot generate this token.',
     genericClient: 'Another MCP-compatible application',
     offlineNext: 'Run docker compose up -d on the host, then run jamrelay onboard again.',
+    offlineStart: 'Start JamRelay with jamrelay start, then run jamrelay onboard again.',
     existingProvider: 'Application credentials already exist. What would you like to do?',
     useSaved: 'Keep existing credentials',
     replaceSaved: 'Update credentials',
@@ -283,6 +326,8 @@ const copy: Record<Language, Record<string, string>> = {
       'Apple Music korzysta z innego procesu: utwórz Music User Token w zaufanej aplikacji MusicKit, a następnie przekaż go do chronionego logowaniem właściciela endpointu /auth/apple-music/user-token. JamRelay nie może utworzyć tego tokenu.',
     genericClient: 'Inna aplikacja zgodna z MCP',
     offlineNext: 'Na hoście uruchom docker compose up -d, a potem ponownie jamrelay onboard.',
+    offlineStart:
+      'Uruchom JamRelay poleceniem jamrelay start, a potem ponownie wykonaj jamrelay onboard.',
     existingProvider: 'Dane aplikacji są już zapisane. Co chcesz zrobić?',
     useSaved: 'Zachowaj obecne dane',
     replaceSaved: 'Zmień dane aplikacji',
@@ -345,6 +390,8 @@ const copy: Record<Language, Record<string, string>> = {
       'Apple Music nutzt einen anderen Ablauf: Erstelle einen Music User Token in einer vertrauenswürdigen MusicKit-App und sende ihn an den eigentümergeschützten Endpunkt /auth/apple-music/user-token. JamRelay kann diesen Token nicht erstellen.',
     genericClient: 'Andere MCP-kompatible Anwendung',
     offlineNext: 'Auf dem Host docker compose up -d und danach erneut jamrelay onboard ausführen.',
+    offlineStart:
+      'Starte JamRelay mit jamrelay start und führe danach jamrelay onboard erneut aus.',
     existingProvider: 'Anwendungsdaten sind bereits gespeichert. Was möchtest du tun?',
     useSaved: 'Vorhandene Daten beibehalten',
     replaceSaved: 'Anwendungsdaten ändern',
@@ -408,6 +455,7 @@ const copy: Record<Language, Record<string, string>> = {
       'Apple Music suit un autre processus : créez un Music User Token dans une application MusicKit de confiance, puis envoyez-le à l’endpoint /auth/apple-music/user-token protégé par le propriétaire. JamRelay ne peut pas créer ce jeton.',
     genericClient: 'Autre application compatible MCP',
     offlineNext: 'Sur l’hôte, lancez docker compose up -d, puis relancez jamrelay onboard.',
+    offlineStart: 'Lancez JamRelay avec jamrelay start, puis relancez jamrelay onboard.',
     existingProvider: 'Les identifiants de l’application existent déjà. Que souhaitez-vous faire ?',
     useSaved: 'Conserver les identifiants',
     replaceSaved: 'Modifier les identifiants',
@@ -472,6 +520,7 @@ const copy: Record<Language, Record<string, string>> = {
     genericClient: 'Otra aplicación compatible con MCP',
     offlineNext:
       'En el host ejecuta docker compose up -d y después vuelve a ejecutar jamrelay onboard.',
+    offlineStart: 'Inicia JamRelay con jamrelay start y vuelve a ejecutar jamrelay onboard.',
     existingProvider: 'Ya hay credenciales de la aplicación. ¿Qué quieres hacer?',
     useSaved: 'Conservar las credenciales',
     replaceSaved: 'Cambiar las credenciales',
@@ -490,46 +539,14 @@ function tr(key: string, language = currentLanguage()) {
 }
 
 async function line(label: string, hidden = false) {
-  const terminal = createInterface({ input: stdin, output: stdout });
-  if (!hidden) {
-    try {
-      return (await terminal.question(`${label}: `)).trim();
-    } finally {
-      terminal.close();
-    }
-  }
-  terminal.close();
-  const prior = stdin.isRaw;
-  if (!stdin.isTTY || !stdin.setRawMode) throw new Error('Interactive setup requires a terminal.');
-  stdin.setRawMode(true);
-  stdin.resume();
-  stdout.write(`${label}: `);
-  return new Promise<string>((resolvePromise, reject) => {
-    let value = '';
-    const finish = (error?: Error) => {
-      stdin.off('keypress', onKey);
-      stdin.setRawMode(prior ?? false);
-      stdin.pause();
-      stdout.write('\n');
-      if (error) reject(error);
-      else resolvePromise(value);
-    };
-    emitKeypressEvents(stdin);
-    const onKey = (text: string | undefined, key: { name?: string; ctrl?: boolean }) => {
-      if (key.ctrl && key.name === 'c') finish(new Error('Setup cancelled.'));
-      else if (key.name === 'return' || key.name === 'enter') finish();
-      else if (key.name === 'backspace') value = value.slice(0, -1);
-      else if (text && !key.ctrl) value += text;
-    };
-    stdin.on('keypress', onKey);
-  });
+  return promptText(label, '', { secret: hidden });
 }
 
 async function requiredLine(label: string, hidden = false) {
   for (;;) {
     const value = await line(label, hidden);
     if (value.trim()) return value.trim();
-    console.log(tr('required'));
+    showPanel(tr('required'), tr('required'));
   }
 }
 
@@ -559,17 +576,23 @@ async function reachable(base: string) {
   const candidates = [
     base,
     `http://127.0.0.1:${process.env.PORT || '5267'}`,
+    localBaseUrl(),
     ...(process.env.JAMRELAY_INSTALL_MODE === 'docker' ? ['http://jamrelay:5267'] : []),
   ];
-  for (const origin of [...new Set(candidates)]) {
-    try {
-      const response = await fetch(new URL('/health', origin), {
-        signal: AbortSignal.timeout(1200),
-      });
-      if (response.ok) return true;
-    } catch {
-      /* try the next host-visible address */
+  const origins = [...new Set(candidates)];
+  const deadline = Date.now() + 6000;
+  while (Date.now() < deadline) {
+    for (const origin of origins) {
+      try {
+        const response = await fetch(new URL('/health', origin), {
+          signal: AbortSignal.timeout(350),
+        });
+        if (response.ok) return true;
+      } catch {
+        /* Retry boundedly while Compose or the local process finishes starting. */
+      }
     }
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 250));
   }
   return false;
 }
@@ -600,6 +623,7 @@ export async function connectProvider(provider: Provider) {
   if (!existsSync(paths.config) && !process.env.TOKEN_ENCRYPTION_KEY)
     throw new Error('Run jamrelay setup before onboarding.');
   const saved = readSettings(paths.config);
+  setTuiContext({ step: 5, total: 6, language: currentLanguage() });
   for (const [key, value] of Object.entries(process.env))
     if (
       value !== undefined &&
@@ -609,8 +633,10 @@ export async function connectProvider(provider: Provider) {
     )
       saved[key] = value;
   const p = providerRows[provider];
-  const origin = new URL(saved.PUBLIC_BASE_URL || `http://localhost:${saved.PORT || '5267'}`)
-    .origin;
+  const origin = effectiveBaseUrl(saved, {
+    ...process.env,
+    JAMRELAY_INSTALL_MODE: saved.JAMRELAY_INSTALL_MODE || process.env.JAMRELAY_INSTALL_MODE,
+  });
   const callbackOrigin =
     provider === 'spotify' && ['localhost', '[::1]'].includes(new URL(origin).hostname)
       ? `http://127.0.0.1:${new URL(origin).port || '80'}`
@@ -632,18 +658,20 @@ export async function connectProvider(provider: Provider) {
     }
   }
   if (replace && (await reachable(origin))) {
-    console.log(
+    showPanel(
+      tr('status'),
       `${tr('stopFirst')}\n${process.env.JAMRELAY_INSTALL_MODE === 'docker' ? tr('stopDocker') : tr('stopLocal')}`,
     );
     return;
   }
-  clearScreen();
   const callbackDetails =
     provider === 'apple-music' ? tr('callbackNotUsed') : `${tr('callback')}:\n${callback}`;
-  console.log(
+  showPanel(
+    p.name,
     `${p.name}\n\n${tr('requirements')}\n${requirements[currentLanguage()][provider]}\n\n${tr('create')} ${terminalLink(p.portal)}\n\n${callbackDetails}\n\n${tr('docs')}: ${p.docs}${p.rules ? `\n${p.rules}` : ''}`,
   );
-  if (provider === 'apple-music') console.log(`\n${tr('appleToken')}`);
+  if (provider === 'apple-music')
+    showPanel(p.name, `${requirements[currentLanguage()][provider]}\n\n${tr('appleToken')}`);
   if (replace && provider === 'apple-music') {
     saved.APPLE_MUSIC_TEAM_ID = await requiredLine(tr('team'));
     saved.APPLE_MUSIC_KEY_ID = await requiredLine(tr('keyId'));
@@ -668,17 +696,18 @@ export async function connectProvider(provider: Provider) {
   }
   const online = !replace && (await reachable(origin));
   const authorizationUrl = `${new URL(callback).origin}/auth/providers/${provider}/start`;
-  console.log(
+  showPanel(
+    tr('status'),
     `\n${tr('appConfigured')}\n\n${provider === 'apple-music' ? tr('appleNext') : tr('next')}\n${tr('saved')}`,
   );
-  if (replace) console.log(`\n${tr('restart')}\n`);
+  if (replace) showPanel(tr('restart'), tr('restart'));
   if (online && provider !== 'apple-music') {
-    console.log(`\n${tr('authLink')}\n${authorizationUrl}\n`);
+    showPanel(tr('authLink'), `${tr('authLink')}\n${authorizationUrl}`);
     const openLogin = await choose(tr('ownerLogin'), [tr('openBrowser'), tr('later')]);
     if (openLogin === tr('openBrowser')) {
       const loginUrl = `${new URL(callback).origin}/owner/login`;
-      if (!(await openBrowser(loginUrl))) console.log(loginUrl);
-      console.log(tr('openedLogin'));
+      if (!(await openBrowser(loginUrl))) showPanel(tr('ownerLogin'), loginUrl);
+      else showPanel(tr('ownerLogin'), tr('openedLogin'));
     }
   }
 }
@@ -687,9 +716,14 @@ export async function connectClient(client: Client) {
   if (!stdin.isTTY) throw new Error('Interactive setup requires a terminal.');
   loadInstallation();
   const language = currentLanguage();
-  const origin = new URL(
-    process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || '5267'}`,
-  ).origin;
+  setTuiContext({ step: 6, total: 6, language });
+  const origin = effectiveBaseUrl(
+    Object.fromEntries(
+      Object.entries(process.env).filter(
+        (entry): entry is [string, string] => entry[1] !== undefined,
+      ),
+    ),
+  );
   const mcp = `${origin}/mcp`;
   const online = await reachable(origin);
   const providerNames = Object.keys(providerRows) as Provider[];
@@ -699,30 +733,34 @@ export async function connectClient(client: Client) {
       : Boolean(process.env[`${p === 'soundcloud' ? 'SOUNDCLOUD' : p.toUpperCase()}_CLIENT_ID`]),
   );
   const authorized = await storeFor(process.env.PROVIDER_CREDENTIAL_STORE_PATH || '');
-  clearScreen();
-  console.log(
-    `${tr('status')}\n  ${online ? '✓' : '○'} ${online ? tr('online') : tr('offline')}\n  ${tr('providersLabel')}: ${configured.length ? configured.join(', ') : tr('notConfigured')}\n  ${tr('accountAuth')}: ${authorized.length ? authorized.join(', ') : tr('notConfigured')}\n`,
-  );
-  if (!online)
-    console.log(
-      `${tr('offline')}. ${process.env.JAMRELAY_INSTALL_MODE === 'docker' ? tr('offlineNext') : 'Start JamRelay with jamrelay start, then run jamrelay onboard again.'}\n`,
-    );
-  console.log(
-    `${client}\n${tr('addAt')}\n\n${clientInstructions[language][client]}\n\nMCP URL: ${mcp}\nTransport: Streamable HTTP\n${tr('auth')}\n`,
-  );
-  if (client === 'cursor')
-    console.log(
-      `.cursor/mcp.json\n${JSON.stringify({ mcpServers: { jamrelay: { url: mcp } } }, null, 2)}\n`,
-    );
-  if (client === 'vscode')
-    console.log(
-      `mcp.json\n${JSON.stringify({ servers: { jamrelay: { type: 'http', url: mcp } } }, null, 2)}\n`,
-    );
-  if (client === 'chatgpt') console.log(`${tr('chatgptLimit')}\n`);
-  if (new URL(origin).hostname === 'localhost' || new URL(origin).hostname === '127.0.0.1')
-    console.log(`${tr('localWarning')}\n`);
-  console.log(
-    `${tr('health')}: ${online ? 'GET /health succeeded' : 'not verified'}\n${tr('tools')}\n`,
+  const status = `${online ? '✓' : '○'} ${online ? tr('online') : tr('offline')}\n${tr('providersLabel')}: ${configured.length ? configured.join(', ') : tr('notConfigured')}\n${tr('accountAuth')}: ${authorized.length ? authorized.join(', ') : tr('notConfigured')}`;
+  const offline = !online
+    ? `${tr('offline')}. ${process.env.JAMRELAY_INSTALL_MODE === 'docker' ? tr('offlineNext') : tr('offlineStart')}`
+    : '';
+  const config =
+    client === 'cursor'
+      ? `.cursor/mcp.json\n${JSON.stringify({ mcpServers: { jamrelay: { url: mcp } } }, null, 2)}`
+      : client === 'vscode'
+        ? `mcp.json\n${JSON.stringify({ servers: { jamrelay: { type: 'http', url: mcp } } }, null, 2)}`
+        : '';
+  const localWarning = ['localhost', '127.0.0.1'].includes(new URL(origin).hostname)
+    ? tr('localWarning')
+    : '';
+  showPanel(
+    client,
+    [
+      status,
+      offline,
+      tr('addAt'),
+      clientInstructions[language][client],
+      `${clientLabels[language].endpoint}: ${mcp}\n${clientLabels[language].transport}\n${tr('auth')}`,
+      config,
+      client === 'chatgpt' ? tr('chatgptLimit') : '',
+      localWarning,
+      `${tr('health')}: ${online ? clientLabels[language].verified : clientLabels[language].pending}\n${tr('tools')}`,
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
   );
   const { changeState } = await import('./state.js');
   const previousConfig = process.env.JAMRELAY_CONFIG_PATH;
@@ -747,14 +785,15 @@ export async function connectClient(client: Client) {
             : client === 'vscode'
               ? 'https://code.visualstudio.com/docs/agent-customization/mcp-servers'
               : mcp;
-    if (!(await openBrowser(url))) console.log(url);
+    if (!(await openBrowser(url))) showPanel(tr('openClient'), url);
   }
-  console.log(`\n${tr('done')}`);
+  showPanel(tr('done'), tr('done'));
 }
 
 export async function onboard() {
   if (!stdin.isTTY) throw new Error('Interactive setup requires a terminal.');
   const paths = loadInstallation();
+  setTuiContext({ step: 5, total: 6, language: currentLanguage() });
   if (!existsSync(paths.config) && !process.env.TOKEN_ENCRYPTION_KEY)
     throw new Error('Run jamrelay setup before onboarding.');
   const providerChoice = await choose(tr('provider'), [
@@ -781,7 +820,7 @@ export async function onboard() {
       >
     )[clientChoice ?? ''] ?? (clientChoice === tr('genericClient') ? 'generic' : undefined);
   if (client) await connectClient(client);
-  console.log(tr('done'));
+  showPanel(tr('done'), tr('done'));
 }
 
 export async function guidedConnect(kind: 'provider' | 'client', name: string) {

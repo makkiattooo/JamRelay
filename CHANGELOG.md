@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.4
+
+- Replace setup, configuration and guided connection prompts with a shared keyboard-driven terminal UI.
+- Correct Docker host-facing URLs for custom published ports and provide bounded startup readiness checks.
+- Keep the container listener on port 5267 and preserve existing custom HTTPS origins and credentials.
+
 ## 1.5.3
 
 - Add guided local, tunnel, custom-domain and reverse-proxy connectivity with DNS, HTTPS, health and MCP-authentication checks.

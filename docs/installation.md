@@ -64,12 +64,12 @@ The repository's `compose.yml` builds locally and needs no tunnel, external netw
 
 ```bash
 docker compose run --rm jamrelay setup
-docker compose up -d
+docker compose up -d --wait
 docker compose ps
 docker compose logs -f jamrelay
 ```
 
-The named `jamrelay_data` volume persists `/data/jamrelay.env`, SQLite and credentials. Set `JAMRELAY_VOLUME_NAME` to an existing differently named volume when upgrading. Host binding defaults to `127.0.0.1:5267`; `JAMRELAY_PORT` changes the host port, while the container listener stays on 5267. Set the public URL to the actual host port during setup.
+The named `jamrelay_data` volume persists `/data/jamrelay.env`, SQLite and credentials. Set `JAMRELAY_VOLUME_NAME` to an existing differently named volume when upgrading. Host binding defaults to `127.0.0.1:5267`; `JAMRELAY_PORT` changes the host port while the container listener remains on 5267. Setup and connection instructions use the published host port automatically. `docker compose up -d --wait` waits for the health check; check `http://127.0.0.1:<JAMRELAY_PORT>/health` and `/mcp` from the host. A custom HTTPS `PUBLIC_BASE_URL` is preserved.
 
 `compose.legacy.yml` retains the existing app/tunnel topology used by `scripts/deploy.mjs`. It is for that established deployment workflow, not a second recommended installer. Root Compose aliases have been removed; use `docker compose` or `docker compose -f compose.yml`.
 

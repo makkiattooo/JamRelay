@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { randomBytes } from 'node:crypto';
 import { getConfig } from '../src/config.js';
+import { effectiveBaseUrl, hostFacingPort, localBaseUrl } from '../src/config.js';
 
 const original = { ...process.env };
 
@@ -36,6 +37,21 @@ afterEach(() => {
 });
 
 describe('configuration', () => {
+  it('keeps the Docker listener separate from the host-published address', () => {
+    const env = {
+      JAMRELAY_INSTALL_MODE: 'docker',
+      JAMRELAY_HOST_PORT: '15267',
+      PORT: '5267',
+    } as NodeJS.ProcessEnv;
+    expect(hostFacingPort(env)).toBe(15267);
+    expect(localBaseUrl(env)).toBe('http://127.0.0.1:15267');
+    expect(effectiveBaseUrl({ PUBLIC_BASE_URL: 'http://localhost:5267' }, env)).toBe(
+      'http://127.0.0.1:15267',
+    );
+    expect(effectiveBaseUrl({ PUBLIC_BASE_URL: 'https://music.example.org' }, env)).toBe(
+      'https://music.example.org',
+    );
+  });
   it('allows MCP OAuth to be completely disabled', () => {
     useEnv(baseEnv());
     const cfg = getConfig();

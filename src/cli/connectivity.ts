@@ -3,7 +3,6 @@ import { isIP } from 'node:net';
 import { domainToASCII } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { currentLanguage, type Language } from './i18n/index.js';
 import { changeState, readState, type connectivityMethodSchema } from './state.js';
@@ -14,7 +13,16 @@ import {
   readSettings,
   saveSettings,
 } from '../runtime/installation.js';
-import { clearScreen, menuPanel, selectOption, terminalLink } from './tui.js';
+import {
+  clearScreen,
+  menuPanel,
+  promptText,
+  selectOption,
+  setTuiContext,
+  showPanel,
+  terminalLink,
+} from './tui.js';
+import { localBaseUrl } from '../config.js';
 
 type Method = (typeof connectivityMethodSchema)['options'][number];
 type DomainMethod = 'cloudflare-tunnel' | 'direct-proxy' | 'existing-proxy';
@@ -639,6 +647,11 @@ const resumeCopy: Record<Language, Record<string, string>> = {
       'Stop the JamRelay server, run jamrelay connectivity and choose Apply saved public origin. Start JamRelay again, then run jamrelay connectivity and choose Verify saved endpoint.',
     startVerify:
       'Start JamRelay, then run jamrelay connectivity again and choose Verify saved endpoint.',
+    uuidError: 'The Cloudflare tunnel ID is invalid. Use the UUID shown in Cloudflare.',
+    cloudflareDns:
+      'Cloudflare creates this CNAME when you add the Published application route. For manual DNS, use the actual tunnel UUID.',
+    existingDns:
+      'Add only the DNS record specified by your existing proxy provider. Do not guess the target or overwrite an existing record.',
   },
   pl: {
     resumeTitle: 'Wznów zapisaną konfigurację łączności',
@@ -648,6 +661,12 @@ const resumeCopy: Record<Language, Record<string, string>> = {
       'Zatrzymaj serwer JamRelay, uruchom jamrelay connectivity i wybierz zastosowanie zapisanego adresu. Następnie uruchom JamRelay ponownie, wykonaj polecenie jeszcze raz i wybierz weryfikację endpointu.',
     startVerify:
       'Uruchom JamRelay, a potem ponownie wykonaj jamrelay connectivity i wybierz weryfikację endpointu.',
+    uuidError:
+      'Identyfikator tunelu Cloudflare jest nieprawidłowy. Użyj UUID widocznego w panelu Cloudflare.',
+    cloudflareDns:
+      'Cloudflare tworzy rekord CNAME po dodaniu trasy Published application. Przy ręcznej konfiguracji DNS użyj prawdziwego UUID tunelu.',
+    existingDns:
+      'Dodaj tylko rekord DNS wskazany przez używanego dostawcę proxy. Nie zgaduj celu ani nie zastępuj istniejących rekordów.',
   },
   de: {
     resumeTitle: 'Gespeicherte Verbindungseinrichtung fortsetzen',
@@ -657,6 +676,11 @@ const resumeCopy: Record<Language, Record<string, string>> = {
       'Stoppe JamRelay, starte jamrelay connectivity und wähle „Ursprung übernehmen“. Starte JamRelay erneut und wähle danach „Endpunkt prüfen“.',
     startVerify:
       'Starte JamRelay und führe jamrelay connectivity erneut aus. Wähle danach „Endpunkt prüfen“.',
+    uuidError: 'Die Cloudflare-Tunnel-ID ist ungültig. Verwende die in Cloudflare angezeigte UUID.',
+    cloudflareDns:
+      'Cloudflare erstellt diesen CNAME beim Hinzufügen der Published application-Route. Für manuelles DNS nutze die echte Tunnel-UUID.',
+    existingDns:
+      'Füge nur den DNS-Eintrag hinzu, den dein vorhandener Proxy-Anbieter vorgibt. Rate das Ziel nicht und überschreibe keine bestehenden Einträge.',
   },
   fr: {
     resumeTitle: 'Reprendre la configuration enregistrée',
@@ -666,6 +690,12 @@ const resumeCopy: Record<Language, Record<string, string>> = {
       'Arrêtez JamRelay, lancez jamrelay connectivity et choisissez Appliquer l’origine. Redémarrez JamRelay, relancez la commande et choisissez Vérifier cet endpoint.',
     startVerify:
       'Redémarrez JamRelay, relancez jamrelay connectivity et choisissez Vérifier cet endpoint.',
+    uuidError:
+      'L’identifiant du tunnel Cloudflare est invalide. Utilisez l’UUID affiché dans Cloudflare.',
+    cloudflareDns:
+      'Cloudflare crée ce CNAME lors de l’ajout de la route Published application. Pour un DNS manuel, utilisez le véritable UUID du tunnel.',
+    existingDns:
+      'Ajoutez uniquement l’enregistrement DNS indiqué par votre fournisseur de proxy existant. Ne devinez pas la cible et ne remplacez aucun enregistrement existant.',
   },
   es: {
     resumeTitle: 'Reanudar la configuración guardada',
@@ -675,6 +705,12 @@ const resumeCopy: Record<Language, Record<string, string>> = {
       'Detén JamRelay, ejecuta jamrelay connectivity y elige Aplicar origen. Reinicia JamRelay, repite el comando y elige Verificar endpoint.',
     startVerify:
       'Inicia JamRelay, vuelve a ejecutar jamrelay connectivity y elige Verificar endpoint.',
+    uuidError:
+      'El identificador del túnel de Cloudflare no es válido. Usa el UUID que aparece en Cloudflare.',
+    cloudflareDns:
+      'Cloudflare crea este CNAME al añadir la ruta Published application. Para configurar DNS manualmente, usa el UUID real del túnel.',
+    existingDns:
+      'Añade solo el registro DNS que indique tu proveedor de proxy actual. No inventes el destino ni sobrescribas otros registros.',
   },
 };
 const t = (key: string, language = currentLanguage()) =>
@@ -703,18 +739,7 @@ async function choose(title: string, options: readonly { label: string; value: s
 }
 
 async function ask(prompt: string, fallback = '') {
-  const line = createInterface({ input: stdin, output: stdout });
-  try {
-    return (
-      (await line.question(`${prompt}${fallback ? ` [${fallback}]` : ''}: `)).trim() || fallback
-    ).trim();
-  } finally {
-    try {
-      line.close();
-    } catch {
-      stdin.pause();
-    }
-  }
+  return (await promptText(prompt, fallback)).trim();
 }
 
 async function confirm(prompt: string, language: Language) {
@@ -917,23 +942,30 @@ async function openUrl(url: string) {
 }
 
 async function maybeOpen(url: string, language: Language) {
-  console.log(`${t('offerBrowser', language)}\n${terminalLink(url)}`);
+  showPanel(t('offerBrowser', language), `${t('offerBrowser', language)}\n${terminalLink(url)}`);
   const action = await choose(t('offerBrowser', language), [
     { value: 'open', label: t('open', language) },
     { value: 'show', label: t('show', language) },
   ]);
-  if (action === 'open' && !(await openUrl(url))) console.log(url);
+  if (action === 'open' && !(await openUrl(url))) showPanel(t('offerBrowser', language), url);
 }
 
 function printReadyChecks(checks: Checks, language: Language) {
-  console.log(`\n${t('checkTitle', language)}`);
-  for (const [condition, okKey, badKey] of [
+  const rows = [
     [checks.dns, 'dnsOk', 'dnsBad'],
     [checks.https, 'httpsOk', 'httpsBad'],
     [checks.health, 'healthOk', 'healthBad'],
     [checks.mcpProtected, 'mcpOk', 'mcpBad'],
-  ] as const)
-    console.log(`${condition ? '✓' : '✗'} ${t(condition ? okKey : badKey, language)}`);
+  ] as const;
+  showPanel(
+    t('checkTitle', language),
+    rows
+      .map(
+        ([condition, okKey, badKey]) =>
+          `${condition ? '✓' : '✗'} ${t(condition ? okKey : badKey, language)}`,
+      )
+      .join('\n'),
+  );
 }
 
 async function verifyAndSave(
@@ -960,7 +992,7 @@ async function verifyAndSave(
     zone,
   );
   if (!verified) {
-    console.log(`\n${t('recovery', language)}\n${t('errors', language)}\n`);
+    showPanel(t('pending', language), `${t('recovery', language)}\n\n${t('errors', language)}`);
     return false;
   }
   try {
@@ -968,21 +1000,19 @@ async function verifyAndSave(
   } catch (error) {
     if (!(error instanceof Error) || !error.message.includes('JamRelay is running')) throw error;
     await persist(method, origin, 'pending', domain, dnsProvider, registrar, checks, zone);
-    console.log(
-      `\n${t('saved', language)}\nStop the JamRelay server, apply the saved origin with jamrelay config, then start it and run jamrelay connectivity again to verify.`,
+    showPanel(
+      t('saved', language),
+      `${t('saved', language)}\nStop the JamRelay server, apply the saved origin with jamrelay config, then start it and run jamrelay connectivity again to verify.`,
     );
     return false;
   }
-  console.log(
-    `\n✓ ${t(local ? 'localReady' : 'ready', language)}\n${t('mcpEndpoint', language)}: ${origin}/mcp`,
-  );
+  let result = `✓ ${t(local ? 'localReady' : 'ready', language)}\n${t('mcpEndpoint', language)}: ${origin}/mcp`;
   if (!local) {
     const cb = providerRedirectUris(origin);
-    console.log(
-      `\n${t('callbacks', language)}\nSpotify: ${cb.spotify}\nSoundCloud: ${cb.soundcloud}\nYouTube: ${cb.youtube}\n${t('apple', language)}`,
-    );
+    result += `\n\n${t('callbacks', language)}\nSpotify: ${cb.spotify}\nSoundCloud: ${cb.soundcloud}\nYouTube: ${cb.youtube}\n${t('apple', language)}`;
   }
-  console.log(`\n${t('ownerCosts', language)}`);
+  result += `\n\n${t('ownerCosts', language)}`;
+  showPanel(t('ready', language), result);
   return true;
 }
 
@@ -990,22 +1020,24 @@ async function domainInfo(language: Language) {
   let domain = '';
   while (!domain) {
     domain = normalizeDomain(await ask(t('askDomain', language))) ?? '';
-    if (!domain) console.log(t('invalidDomain', language));
+    if (!domain) showPanel(t('invalidDomain', language), t('invalidDomain', language));
   }
   let zone = '';
   while (!recordNameForHost(domain, zone)) {
     zone = normalizeDomain(await ask(zonePrompt[language])) ?? '';
-    if (!recordNameForHost(domain, zone)) console.log(t('invalidDomain', language));
+    if (!recordNameForHost(domain, zone))
+      showPanel(t('invalidDomain', language), t('invalidDomain', language));
   }
-  console.log(`\n${t('dnsExplain', language)}\n`);
+  showPanel(t('dnsExplain', language), t('dnsExplain', language));
   const dnsProvider = await ask(t('dnsProvider', language), '');
   const registrar = await ask(t('registrar', language), 'unknown');
   return { domain, zone, dnsProvider: dnsProvider || null, registrar: registrar || null };
 }
 
 async function printRecord(name: string, type: string, value: string, language: Language) {
-  console.log(
-    `\n${t('proposed', language)}\n${t('type', language)}: ${type}\n${t('name', language)}: ${name}\n${t('value', language)}: ${value}`,
+  showPanel(
+    t('proposed', language),
+    `${t('type', language)}: ${type}\n${t('name', language)}: ${name}\n${t('value', language)}: ${value}`,
   );
 }
 
@@ -1018,35 +1050,37 @@ async function configureCloudflareTunnel(
 ) {
   const host = domain;
   const subdomain = recordNameForHost(host, zone)!;
-  if (subdomain === '@') console.log(t('cfDomain', language));
-  console.log(`\n${t('cloudflareIntro', language)}\n`);
+  showPanel(
+    t('cloudflareIntro', language),
+    `${subdomain === '@' ? `${t('cfDomain', language)}\n\n` : ''}${t('cloudflareIntro', language)}`,
+  );
   const ns1 = await ask(t('nameserverOne', language));
   const ns2 = await ask(t('nameserverTwo', language));
   if (ns1 && ns2) {
-    console.log(`${t('cfNameServers', language)}\nNS 1: ${ns1}\nNS 2: ${ns2}`);
+    showPanel(
+      t('cfNameServers', language),
+      `${t('cfNameServers', language)}\nNS 1: ${ns1}\nNS 2: ${ns2}`,
+    );
   } else {
-    console.log(`${t('cfDomain', language)}\nCloudflare: ${terminalLink(PORTAL.cloudflare)}`);
+    showPanel(
+      t('cfDomain', language),
+      `${t('cfDomain', language)}\nCloudflare: ${terminalLink(PORTAL.cloudflare)}`,
+    );
   }
   const placement = await choose(t('dockerNetwork', language), [
     { value: 'host', label: t('host', language) },
     { value: 'docker', label: t('sameDocker', language) },
   ]);
-  const origin =
-    placement === 'docker'
-      ? 'http://jamrelay:5267'
-      : `http://127.0.0.1:${process.env.PORT || '5267'}`;
-  console.log(
-    `\n${t('cloudflareSteps', language)}\n${t(placement === 'docker' ? 'dockerOrigin' : 'hostOrigin', language)}: ${origin}`,
+  const origin = placement === 'docker' ? 'http://jamrelay:5267' : localBaseUrl();
+  showPanel(
+    t('cloudflareSteps', language),
+    `${t('cloudflareSteps', language)}\n${t(placement === 'docker' ? 'dockerOrigin' : 'hostOrigin', language)}: ${origin}`,
   );
   const uuid = await ask(t('tunnelUuid', language));
   const target = uuid ? tunnelDnsTarget(uuid) : undefined;
-  if (uuid && !target)
-    console.log('UUID format is invalid; use the 36-character tunnel UUID shown in Cloudflare.');
+  if (uuid && !target) showPanel(t('uuidError', language), t('uuidError', language));
   if (target) await printRecord(subdomain, 'CNAME', target, language);
-  else
-    console.log(
-      'DNS record: Cloudflare dashboard creates the CNAME when you add the Published application route. Copy the actual target shown there; it uses your tunnel UUID.',
-    );
+  else showPanel(t('proposed', language), t('cloudflareDns', language));
   await maybeOpen(PORTAL.cloudflareTunnels, language);
   return {
     method: 'cloudflare-tunnel' as const,
@@ -1071,28 +1105,29 @@ async function configureDirectProxy(
   const label = recordNameForHost(domain, zone)!;
   if (valid4) await printRecord(label, 'A', valid4, language);
   if (valid6) await printRecord(label, 'AAAA', valid6, language);
-  if (!valid4 && !valid6) console.log(t('noIp', language));
-  console.log(`\n${t('directDns', language)}\n${t('errors', language)}\n`);
+  showPanel(
+    t('directDns', language),
+    `${!valid4 && !valid6 ? `${t('noIp', language)}\n\n` : ''}${t('directDns', language)}\n\n${t('errors', language)}`,
+  );
   const placement = await choose(t('dockerNetwork', language), [
     { value: 'host', label: t('host', language) },
     { value: 'docker', label: t('sameDocker', language) },
   ]);
-  const upstream =
-    placement === 'docker'
-      ? 'jamrelay:5267'
-      : `127.0.0.1:${process.env.JAMRELAY_PORT || process.env.PORT || '5267'}`;
+  const upstream = placement === 'docker' ? 'jamrelay:5267' : new URL(localBaseUrl()).host;
   const proxy = await choose(t('domainMethod', language), [
     { value: 'caddy', label: 'Caddy' },
     { value: 'nginx', label: 'Nginx' },
   ]);
   if (proxy === 'caddy') {
-    console.log(
-      `\n${t('caddyConfig', language)}\n\n${domain} {\n    reverse_proxy ${upstream}\n}\n\n${t('caddyPorts', language)}`,
+    showPanel(
+      'Caddy',
+      `${t('caddyConfig', language)}\n\n${domain} {\n    reverse_proxy ${upstream}\n}\n\n${t('caddyPorts', language)}`,
     );
     await maybeOpen(PORTAL.caddy, language);
   } else {
-    console.log(
-      `\n${t('nginxConfig', language)}\n\nserver {\n    listen 443 ssl;\n    server_name ${domain};\n\n    location / {\n        proxy_pass http://${upstream};\n        proxy_http_version 1.1;\n        proxy_set_header Host $host;\n        proxy_set_header X-Forwarded-Host $host;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_buffering off;\n        proxy_read_timeout 3600s;\n    }\n}\n\n${t('nginxPorts', language)}`,
+    showPanel(
+      'Nginx',
+      `${t('nginxConfig', language)}\n\nserver {\n    listen 443 ssl;\n    server_name ${domain};\n\n    location / {\n        proxy_pass http://${upstream};\n        proxy_http_version 1.1;\n        proxy_set_header Host $host;\n        proxy_set_header X-Forwarded-Host $host;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_buffering off;\n        proxy_read_timeout 3600s;\n    }\n}\n\n${t('nginxPorts', language)}`,
     );
     await maybeOpen(PORTAL.nginx, language);
   }
@@ -1115,10 +1150,14 @@ async function configureExistingProxy(
   const target = await ask(t('cnameTarget', language));
   if (target) await printRecord(recordNameForHost(domain, zone)!, 'CNAME', target, language);
   else
-    console.log(
-      `${t('directDns', language)}\nAdd only the DNS record your existing proxy provider specifies. Do not guess a target or overwrite an existing record.`,
+    showPanel(
+      t('directDns', language),
+      `${t('directDns', language)}\n${t('existingDns', language)}`,
     );
-  console.log(`\n${t('existingSteps', language)}\n${t('errors', language)}`);
+  showPanel(
+    t('existingSteps', language),
+    `${t('existingSteps', language)}\n\n${t('errors', language)}`,
+  );
   return {
     method: 'existing-proxy' as const,
     origin: `https://${domain}`,
@@ -1141,7 +1180,7 @@ async function enterAndVerify(
   let origin = '';
   while (!origin) {
     origin = safeOrigin(await ask(t('enterOrigin', language), hint), !local) ?? '';
-    if (!origin) console.log(t('invalidOrigin', language));
+    if (!origin) showPanel(t('invalidOrigin', language), t('invalidOrigin', language));
   }
   const ok = await verifyAndSave(
     method,
@@ -1160,31 +1199,36 @@ async function enterAndVerify(
 
 async function methodInstructions(method: Method, language: Language) {
   const details = copy[language];
+  const localPort = new URL(localBaseUrl()).port || '80';
   if (method === 'tailscale-funnel') {
-    console.log(
-      `${details.tailscaleHelp}\n\n1. ${terminalLink(PORTAL.tailscale)}\n2. Install Tailscale on the machine running JamRelay and sign in. Funnel on a machine running Tailscale is public internet exposure; Serve alone is private to your tailnet.\n3. Start JamRelay. On the host run:\n\n   tailscale funnel --bg --https=443 http://127.0.0.1:${process.env.JAMRELAY_PORT || process.env.PORT || '5267'}\n   tailscale funnel status\n\n4. Approve Funnel if prompted. The hostname is assigned by your tailnet; do not invent it. Funnel requires MagicDNS, HTTPS certificates and policy permission. Allowed public listener ports are 443, 8443 and 10000.`,
+    showPanel(
+      t('funnel', language),
+      `${details.tailscaleHelp}\n\n1. ${terminalLink(PORTAL.tailscale)}\n2. Install Tailscale on the machine running JamRelay and sign in. Funnel on a machine running Tailscale is public internet exposure; Serve alone is private to your tailnet.\n3. Start JamRelay. On the host run:\n\n   tailscale funnel --bg --https=443 http://127.0.0.1:${localPort}\n   tailscale funnel status\n\n4. Approve Funnel if prompted. The hostname is assigned by your tailnet; do not invent it. Funnel requires MagicDNS, HTTPS certificates and policy permission. Allowed public listener ports are 443, 8443 and 10000.`,
     );
     await maybeOpen(PORTAL.tailscale, language);
     return;
   }
   if (method === 'ngrok') {
-    console.log(
-      `${details.ngrokHelp}\n\n1. ${terminalLink(PORTAL.ngrok)}\n2. Install the agent from ${PORTAL.ngrokInstall} and add your own token locally with ngrok config add-authtoken (never paste the token into JamRelay or logs).\n3. Start JamRelay, then run on the host: ngrok http ${process.env.JAMRELAY_PORT || process.env.PORT || '5267'}.\n4. Copy the assigned HTTPS URL from the agent output. The free plan interstitial may block OAuth/MCP clients; verify before relying on it.`,
+    showPanel(
+      'ngrok',
+      `${details.ngrokHelp}\n\n1. ${terminalLink(PORTAL.ngrok)}\n2. Install the agent from ${PORTAL.ngrokInstall} and add your own token locally with ngrok config add-authtoken (never paste the token into JamRelay or logs).\n3. Start JamRelay, then run on the host: ngrok http ${localPort}.\n4. Copy the assigned HTTPS URL from the agent output. The free plan interstitial may block OAuth/MCP clients; verify before relying on it.`,
     );
     await maybeOpen(PORTAL.ngrok, language);
     return;
   }
   if (method === 'cloudflare-quick') {
-    const port = process.env.JAMRELAY_PORT || process.env.PORT || '5267';
+    const port = localPort;
     const upstream =
       process.env.JAMRELAY_INSTALL_MODE === 'docker' ? `127.0.0.1:${port}` : `127.0.0.1:${port}`;
-    console.log(
+    showPanel(
+      t('quick', language),
       `${details.quickHelp}\n\nStart JamRelay, then run cloudflared on the host (not inside the JamRelay container):\n\n  cloudflared tunnel --url http://${upstream}\n\nCopy the random https://…trycloudflare.com URL from cloudflared. Keep that process running. It changes when restarted and is not a persistent OAuth address.`,
     );
     return;
   }
   if (method === 'hosting')
-    console.log(
+    showPanel(
+      t('hosting', language),
       `${details.hostingHelp}\n\n${details.ownerCosts}\nUse your host provider's persistent service/container manager. Keep /data (Docker) or the JamRelay data directory on persistent storage. Check provider-specific port and storage behavior before deploying.`,
     );
 }
@@ -1197,16 +1241,19 @@ function currentMethodLabel(method: string | null, language: Language) {
 export async function showConnectivityStatus(json = false) {
   loadInstallation();
   const language = currentLanguage();
+  setTuiContext({ step: 4, total: 6, language });
   const state = readState().connectivity;
   if (json) {
     console.log(JSON.stringify({ ...state, method: state.method }, null, 2));
     return state.status === 'verified' || state.status === 'local' ? 0 : 1;
   }
-  console.log(
-    `${t('status', language)}\n  ${t('method', language)}: ${currentMethodLabel(state.method, language)}\n  ${t('origin', language)}: ${state.origin ?? t('unknown', language)}\n  ${t('lastCheck', language)}: ${state.checkedAt ?? t('unknown', language)}\n  ${t('mcpEndpoint', language)}: ${state.origin ? `${state.origin}/mcp` : t('unknown', language)}\n`,
+  const origin = state.method === 'local' ? localBaseUrl() : state.origin;
+  showPanel(
+    t('status', language),
+    `${t('status', language)}\n  ${t('method', language)}: ${currentMethodLabel(state.method, language)}\n  ${t('origin', language)}: ${origin ?? t('unknown', language)}\n  ${t('lastCheck', language)}: ${state.checkedAt ?? t('unknown', language)}\n  ${t('mcpEndpoint', language)}: ${origin ? `${origin}/mcp` : t('unknown', language)}\n`,
   );
-  if (state.origin && state.status !== 'pending') {
-    const checks = await verifyEndpoint(state.origin, state.status === 'local');
+  if (origin && state.status !== 'pending') {
+    const checks = await verifyEndpoint(origin, state.status === 'local');
     printReadyChecks(checks, language);
     return Object.values(checks).every(Boolean) ? 0 : 1;
   }
@@ -1224,8 +1271,10 @@ export async function configureConnectivity() {
   const language = currentLanguage();
   clearScreen();
   const current = readState().connectivity;
+  setTuiContext({ step: 4, total: 6, language });
   if (current.method)
-    console.log(
+    showPanel(
+      t('status', language),
       `${t('status', language)}: ${currentMethodLabel(current.method, language)} — ${current.status}\n`,
     );
   if (current.status === 'pending' && current.origin) {
@@ -1236,7 +1285,7 @@ export async function configureConnectivity() {
     ]);
     if (resume === 'apply') {
       await saveOrigin(current.origin);
-      console.log(`${t('saved', language)}\n${t('startVerify', language)}`);
+      showPanel(t('saved', language), `${t('saved', language)}\n${t('startVerify', language)}`);
       return;
     }
     if (resume === 'verify') {
@@ -1277,17 +1326,20 @@ export async function configureConnectivity() {
       undefined,
       current.zone,
     );
-    console.log(t('saved', language));
+    showPanel(t('saved', language), t('saved', language));
     return;
   }
   if (method === 'local') {
-    const origin = `http://127.0.0.1:${process.env.JAMRELAY_PORT || process.env.PORT || '5267'}`;
-    console.log(`${t('localHelp', language)}\n${t('mcpEndpoint', language)}: ${origin}/mcp`);
+    const origin = localBaseUrl();
+    showPanel(
+      t('localHelp', language),
+      `${t('localHelp', language)}\n${t('mcpEndpoint', language)}: ${origin}/mcp`,
+    );
     await verifyAndSave('local', origin, null, null, null, language, true);
     return;
   }
   if (method === 'own-domain') {
-    console.log(`${t('domainHelp', language)}\n`);
+    showPanel(t('domainHelp', language), t('domainHelp', language));
     const domain = await domainInfo(language);
     const domainMethod = (await choose(t('domainMethod', language), [
       { value: 'cloudflare-tunnel', label: t('cf', language) },
@@ -1334,7 +1386,7 @@ export async function configureConnectivity() {
         undefined,
         domain.zone,
       );
-      console.log(t('saved', language));
+      showPanel(t('saved', language), t('saved', language));
       return;
     }
     await enterAndVerify(
@@ -1350,7 +1402,7 @@ export async function configureConnectivity() {
     return;
   }
   const helpKey = methodHelp[method];
-  if (helpKey) console.log(`${t(helpKey, language)}\n`);
+  if (helpKey) showPanel(t(helpKey, language), t(helpKey, language));
   await methodInstructions(method, language);
   const action = await choose(t('continue', language), [
     { value: 'verify', label: t('continue', language) },
@@ -1358,7 +1410,7 @@ export async function configureConnectivity() {
   ]);
   if (action !== 'verify') {
     await persist(method, null, 'pending', null, null, null);
-    console.log(t('saved', language));
+    showPanel(t('saved', language), t('saved', language));
     return;
   }
   await enterAndVerify(method, '', null, null, null, language, false);
