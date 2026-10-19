@@ -110,7 +110,15 @@ export class SoundCloudAuth {
           : controller.signal,
       });
       const value: any = await response.json().catch(() => ({}));
-      if (!response.ok || !value.access_token || !value.refresh_token)
+      if (
+        !response.ok ||
+        typeof value.access_token !== 'string' ||
+        !value.access_token ||
+        typeof value.refresh_token !== 'string' ||
+        !value.refresh_token ||
+        !Number.isFinite(Number(value.expires_in ?? 3600)) ||
+        Number(value.expires_in ?? 3600) <= 0
+      )
         throw new ProviderApiError(
           response.status,
           'SoundCloud token exchange failed',

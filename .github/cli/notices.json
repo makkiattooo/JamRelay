@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-19T00:00:00Z",
+  "notices": [
+    {
+      "id": "jamrelay-cli-151-candidate",
+      "severity": "info",
+      "title": "CLI information service — development candidate",
+      "message": "This installation includes update checks, offline release information and project notices. A development build is not an npm or Docker release. Official distribution availability is checked separately.",
+      "publishedAt": "2026-10-19T00:00:00Z",
+      "expiresAt": null,
+      "channels": ["stable", "beta"],
+      "minVersion": "1.5.1",
+      "maxVersion": null,
+      "url": "https://github.com/makkiattooo/JamRelay"
+    }
+  ]
+}

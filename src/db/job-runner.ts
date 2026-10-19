@@ -1,209 +1,280 @@
+import { getDatabase } from './database.js';
 import { toolContext } from '../mcp/context.js';
-import { mapLimit } from '../utils/concurrency.js';
-import { getRateLimit } from './state.js';
+import { getRateLimit, recordRateLimit } from './state.js';
 import {
   claimEligibleJob,
   getJob,
   getNextJobItems,
   hasRemainingJobItems,
+  isJobCancelled,
   noteJobFailure,
+  recordJobError,
   setJobStatus,
   updateJobItem,
   updateJobPayload,
 } from './jobs.js';
+import type { ProviderRegistry } from '../providers/registry.js';
+import { resolveCandidates } from '../music/normalize.js';
+import { parseProviderIdentifier } from '../providers/identifiers.js';
+
+export const JOB_TYPES = [
+  'bulk_add_tracks',
+  'add_tracks_by_search',
+  'create_playlist_from_tracks',
+] as const;
+export type JobType = (typeof JOB_TYPES)[number];
+export type TrackJobPayload = {
+  provider: string;
+  connection_id: string;
+  phase?: 'created' | 'resolving' | 'ready_to_commit' | 'committing' | 'completed' | 'failed';
+  playlist_id?: string;
+  name?: string;
+  strict?: boolean;
+  dry_run?: boolean;
+  skip_duplicates?: boolean;
+  skip_existing?: boolean;
+};
+export type TrackJobItem = {
+  id?: string;
+  uri?: string;
+  title?: string;
+  artist?: string;
+  album?: string;
+  year?: number;
+};
+export type JobDefinition = { type: JobType; payload: TrackJobPayload; items: TrackJobItem[] };
 
 export type JobResolver = {
-  resolve(input: {
-    title: string;
-    artist: string;
-    album?: string;
-    year?: number;
-  }): Promise<unknown>;
+  resolve(
+    input: { title: string; artist: string; album?: string; year?: number },
+    target?: { provider: string; connectionId: string },
+  ): Promise<unknown>;
   hasConnection?: (connectionId: string, provider?: string) => boolean;
 };
+export function providerJobResolver(registry: ProviderRegistry, spotify: JobResolver): JobResolver {
+  return {
+    hasConnection: (id, provider) => {
+      const c = registry.getConnection(id);
+      return Boolean(c && c.summary.provider === provider && c.summary.connected !== false);
+    },
+    async resolve(input, target) {
+      if (!target) throw new Error('JOB_TARGET_REQUIRED');
+      const c = registry.getConnection(target.connectionId);
+      if (!c || c.summary.provider !== target.provider || c.summary.connected === false)
+        throw Object.assign(new Error('CONNECTION_UNAVAILABLE'), { permanent: true });
+      if (!c.catalog || !c.summary.capabilities.catalog)
+        throw Object.assign(new Error('CAPABILITY_UNSUPPORTED'), { permanent: true });
+      if (target.provider === 'spotify' && target.connectionId === 'spotify-default')
+        return spotify.resolve(input);
+      const candidates = await c.catalog.searchTracks(`${input.title} ${input.artist}`);
+      const match = resolveCandidates(
+        candidates,
+        input.title,
+        input.artist,
+        input.album,
+        input.year,
+      );
+      if (match.status !== 'matched') return match;
+      const id = match.match?.id;
+      if (!id) throw Object.assign(new Error('INVALID_PROVIDER_RESOLUTION'), { permanent: true });
+      return {
+        ...match,
+        id,
+        uri: id,
+        provider: target.provider,
+        connection_id: target.connectionId,
+      };
+    },
+  };
+}
+export type JobExecution = {
+  id: number;
+  provider: string;
+  connectionId: string;
+  signal: AbortSignal;
+};
+export type JobExecutor = (execution: JobExecution) => Promise<void>;
 export class JobRunner {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private stopped = true;
   private activeWork: Promise<void> | undefined;
-  private activeController: AbortController | undefined;
+  private controller: AbortController | undefined;
+  readonly executors = new Map<string, JobExecutor>();
   constructor(
     private resolver: JobResolver,
     private logger?: {
       info?: (x: unknown, message: string) => void;
       warn?: (x: unknown, message: string) => void;
     },
-  ) {}
+  ) {
+    for (const type of JOB_TYPES)
+      this.executors.set(type, (execution) => this.resolveItems(execution));
+  }
   start() {
-    if (!this.stopped) return;
+    if (!this.stopped || this.activeWork) return;
     this.stopped = false;
     void this.tick();
   }
   async stop() {
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
-    this.timer = undefined;
-    this.activeController?.abort();
-    try {
-      await this.activeWork;
-    } catch (error) {
-      this.logger?.warn?.({ error }, 'State DB job stopped with an in-flight error');
-    }
+    this.controller?.abort();
+    await this.activeWork;
   }
   private async tick() {
     if (this.stopped) return;
     try {
       const id = claimEligibleJob();
       if (id) {
-        this.activeController = new AbortController();
-        const work = this.process(id, this.activeController.signal);
-        this.activeWork = work;
-        try {
-          await work;
-        } finally {
-          if (this.activeWork === work) this.activeWork = undefined;
-          this.activeController = undefined;
-        }
+        this.controller = new AbortController();
+        this.activeWork = this.process(id, this.controller.signal);
+        await this.activeWork;
+        this.activeWork = undefined;
+        this.controller = undefined;
       }
-    } catch (error) {
-      this.logger?.warn?.({ error }, 'State DB job tick failed');
+    } catch {
+      this.logger?.warn?.({ event: 'job_tick_failed' }, 'Queue tick failed');
     }
     if (!this.stopped) this.timer = setTimeout(() => void this.tick(), 250);
   }
   private async process(id: number, signal: AbortSignal) {
     const job = getJob(id, 0, 1);
-    if (!job || job.status === 'cancelled') return;
-    const payload = job.payload as Record<string, unknown>;
-    const targetProvider = String(payload.provider ?? 'spotify');
-    const targetConnection = String(payload.connection_id ?? 'spotify-default');
+    if (!job || isJobCancelled(id)) return;
+    const provider = job.provider;
+    const connectionId = job.connectionId;
     if (
-      'hasConnection' in this.resolver &&
-      this.resolver.hasConnection &&
-      !this.resolver.hasConnection(targetConnection, targetProvider)
+      job.ownerClientId &&
+      getDatabase()
+        .prepare('SELECT 1 FROM operator_client_revocations WHERE client_id=? AND revoked_at>=?')
+        .get(job.ownerClientId, job.createdAt)
     ) {
+      recordJobError(id, 'CLIENT_REVOKED');
+      setJobStatus(id, 'failed');
+      return;
+    }
+    const executor = this.executors.get(job.type);
+    if (!executor) {
+      recordJobError(id, 'UNKNOWN_JOB_TYPE');
+      setJobStatus(id, 'failed');
+      return;
+    }
+    if (this.resolver.hasConnection && !this.resolver.hasConnection(connectionId, provider)) {
+      recordJobError(id, 'CONNECTION_UNAVAILABLE');
       updateJobPayload(id, {
-        ...payload,
+        ...job.payload,
         phase: 'failed',
         manual_review: true,
         manual_review_reason: 'original_provider_connection_unavailable',
-        provider: targetProvider,
-        connection_id: targetConnection,
       });
       setJobStatus(id, 'failed');
       return;
     }
-    if (!payload.provider || !payload.connection_id)
-      updateJobPayload(id, {
-        ...payload,
-        provider: targetProvider,
-        connection_id: targetConnection,
-      });
-    const items = getNextJobItems(id, 25);
-    const limit = 25;
-    updateJobPayload(id, { ...payload, phase: 'resolving' });
-    let providerRateLimited = false;
-    const outcomes = await mapLimit(
-      items.slice(0, limit),
-      { concurrency: 4, signal },
-      async (item) => {
-        const input = item.payload ? (JSON.parse(item.payload) as Record<string, unknown>) : {};
-        if (providerRateLimited) return { item, input, waiting: true as const };
-        try {
-          let resolution: unknown;
-          if (typeof input.id === 'string' || typeof input.uri === 'string') {
-            const reference = String(input.id ?? input.uri);
-            resolution = {
-              status: 'matched',
-              source: 'direct',
-              provider: targetProvider,
-              connection_id: targetConnection,
-              provider_track_id: reference,
-              provider_uri: reference,
-              id: reference,
-              uri: reference,
-            };
-          } else {
-            resolution = await toolContext.run(
-              {
-                requestId: `job_${id}`,
-                signal,
-                deadlineAt: Date.now() + 60_000,
-                operation: `job:${String(job.type)}`,
-              },
-              () =>
-                this.resolver.resolve({
-                  title: String(input.title),
-                  artist: String(input.artist),
-                  album: typeof input.album === 'string' ? input.album : undefined,
-                  year: typeof input.year === 'number' ? input.year : undefined,
-                }),
-            );
-          }
-          return { item, input, resolution };
-        } catch (error) {
-          if ((error as { status?: number }).status === 429) providerRateLimited = true;
-          return { item, input, error };
-        }
-      },
-    );
-    for (const outcome of outcomes) {
-      const { item, input } = outcome;
-      try {
-        if ('waiting' in outcome && outcome.waiting) {
-          const state = getRateLimit(targetProvider, 'search', targetConnection);
-          setJobStatus(id, 'waiting', state?.blockedUntil ?? Date.now() + 60000);
-          updateJobItem(item.id, 'waiting', input);
-          return;
-        }
-        if ('error' in outcome) throw outcome.error;
-        const resolution = outcome.resolution;
-        const r = resolution as { status: string; uri?: string; id?: string };
-        if (r.status === 'waiting') {
-          const state = getRateLimit(targetProvider, 'search', targetConnection);
-          setJobStatus(id, 'waiting', state?.blockedUntil ?? Date.now() + 60000);
-          updateJobItem(item.id, 'waiting', { ...input, resolution });
-          return;
-        }
-        updateJobItem(item.id, r.status === 'matched' ? 'completed' : 'failed', {
-          ...input,
-          resolution,
-        });
-      } catch (error) {
-        if (
-          (error as { status?: number }).status === 429 ||
-          (error as { name?: string }).name === 'ProviderApiError'
-        ) {
-          const providerError = error as {
-            status?: number;
-            scope?: string;
-            retryAfter?: number;
-            provider?: string;
-            connectionId?: string;
-          };
-          if (providerError.status !== 429) throw error;
-          const state = getRateLimit(
-            providerError.provider ?? targetProvider,
-            providerError.scope ?? 'search',
-            providerError.connectionId ?? targetConnection,
-          );
-          setJobStatus(
-            id,
-            'waiting',
-            state?.blockedUntil ?? Date.now() + (providerError.retryAfter ?? 60) * 1000,
-          );
-          updateJobItem(item.id, 'waiting', input);
-          return;
-        }
-        const exhausted = noteJobFailure(id, (error as { apiErrorId?: number }).apiErrorId);
-        updateJobItem(item.id, exhausted ? 'failed' : 'pending', {
-          ...input,
-          error: 'resolution_failed',
-        });
-        return;
+    const cooldown = getRateLimit(provider, 'search', connectionId);
+    if (cooldown && (cooldown.blockedUntil ?? 0) > Date.now()) {
+      setJobStatus(id, 'waiting', cooldown.blockedUntil ?? undefined);
+      return;
+    }
+    try {
+      await executor({ id, provider, connectionId, signal });
+    } catch (error) {
+      if (signal.aborted || isJobCancelled(id)) return;
+      const e = error as {
+        status?: number;
+        retryAfter?: number;
+        scope?: string;
+        permanent?: boolean;
+        message?: string;
+      };
+      if (e.status === 429) {
+        const previous = getRateLimit(provider, e.scope ?? 'search', connectionId);
+        const seconds = Math.max(
+          Number.isFinite(e.retryAfter) ? Math.max(1, e.retryAfter!) : 60,
+          Math.ceil(((previous?.blockedUntil ?? 0) - Date.now()) / 1000),
+        );
+        recordRateLimit(provider, e.scope ?? 'search', seconds, 'rate_limited', connectionId);
+        const state = getRateLimit(provider, e.scope ?? 'search', connectionId);
+        setJobStatus(
+          id,
+          'waiting',
+          Math.max(Date.now() + seconds * 1000, state?.blockedUntil ?? 0),
+        );
+      } else {
+        recordJobError(
+          id,
+          e.permanent
+            ? 'CAPABILITY_OR_CONNECTION_UNAVAILABLE'
+            : e.status && e.status >= 400 && e.status < 500
+              ? 'PROVIDER_PERMANENT_ERROR'
+              : 'EXECUTION_FAILED',
+        );
+        if (e.permanent || (e.status && e.status >= 400 && e.status < 500 && e.status !== 408))
+          setJobStatus(id, 'failed');
+        else noteJobFailure(id);
       }
     }
-    const remaining = hasRemainingJobItems(id);
-    setJobStatus(id, remaining ? 'pending' : 'running');
-    if (!remaining) updateJobPayload(id, { ...payload, phase: 'ready_to_commit' });
-    this.logger?.info?.({ job_id: id }, 'State DB job progress updated');
+  }
+  private async resolveItems({ id, provider, connectionId, signal }: JobExecution) {
+    const job = getJob(id, 0, 1);
+    updateJobPayload(id, { ...job.payload, phase: 'resolving' });
+    for (const item of getNextJobItems(id, 25)) {
+      if (signal.aborted || isJobCancelled(id)) return;
+      const input = JSON.parse(item.payload) as Record<string, unknown>;
+      const resolution = await toolContext.run(
+        {
+          requestId: `job_${id}`,
+          queueJobId: id,
+          signal,
+          deadlineAt: Date.now() + 60_000,
+          operation: `job:${job.type}`,
+        },
+        async () => {
+          if (typeof input.id === 'string' || typeof input.uri === 'string') {
+            const reference = String(input.id ?? input.uri);
+            const identifier =
+              provider === 'spotify'
+                ? parseProviderIdentifier(reference, provider, 'track')
+                : /^[A-Za-z0-9_.-]+$/.test(reference)
+                  ? { id: reference }
+                  : (() => {
+                      throw Object.assign(new Error('INVALID_PROVIDER_IDENTIFIER'), {
+                        permanent: true,
+                      });
+                    })();
+            return {
+              status: 'matched',
+              source: 'direct',
+              provider,
+              connection_id: connectionId,
+              id: identifier.id,
+              uri: provider === 'spotify' ? `spotify:track:${identifier.id}` : identifier.id,
+            };
+          }
+          return this.resolver.resolve(
+            {
+              title: String(input.title),
+              artist: String(input.artist),
+              album: typeof input.album === 'string' ? input.album : undefined,
+              year: typeof input.year === 'number' ? input.year : undefined,
+            },
+            { provider, connectionId },
+          );
+        },
+      );
+      if (signal.aborted || isJobCancelled(id)) return;
+      const r = resolution as { status: string };
+      if (r.status === 'waiting') {
+        const state = getRateLimit(provider, 'search', connectionId);
+        updateJobItem(item.id, 'waiting', { ...input, resolution });
+        setJobStatus(id, 'waiting', state?.blockedUntil ?? Date.now() + 60_000);
+        return;
+      }
+      updateJobItem(item.id, r.status === 'matched' ? 'completed' : 'failed', {
+        ...input,
+        resolution,
+      });
+    }
+    if (signal.aborted || isJobCancelled(id)) return;
+    if (hasRemainingJobItems(id)) setJobStatus(id, 'pending', Date.now());
+    else updateJobPayload(id, { ...job.payload, phase: 'ready_to_commit' });
   }
 }

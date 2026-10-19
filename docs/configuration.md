@@ -5,7 +5,7 @@ description: Configure provider connections, the HTTP server, token storage and 
 
 # Configuration
 
-Copy `.env.example` to `.env`. Never commit `.env` or runtime token stores.
+Use `jamrelay setup` or `jamrelay config` for managed installations; source deployments may still copy `.env.example` to `.env`. Never commit private configuration or runtime token stores.
 
 The complete variable table is **generated from `.env.example`**:
 
@@ -26,7 +26,7 @@ When adding a variable, update the runtime schema and `.env.example`; do not han
 
 ## Storage defaults
 
-Local development:
+Managed installations use platform-specific directories chosen by setup; see [installation](/installation). Existing `.env` source deployments retain their paths. Legacy local development defaults:
 
 ```text
 ./data/mcp-oauth.json
@@ -114,8 +114,6 @@ MCP_OAUTH_OWNER_SECRET=<STRONG_RANDOM_SECRET>
 MCP_OAUTH_DCR_ENABLED=true
 ```
 
-### Static MCP clients
-
 ### Several pre-registered clients
 
 Use:
@@ -172,3 +170,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 Use separate random values for the encryption key, API key, OAuth client secret, and owner secret. `TOKEN_ENCRYPTION_KEY` must decode from base64 to exactly 32 bytes.
 `PLAYLIST_READ_CONCURRENCY` controls the bounded worker count used for safe
 offset-based playlist pagination. Cursor-based providers remain sequential.
+
+## Provider authorization
+
+Follow the [owner consent flow](/oauth#secure-provider-oauth-without-a-dashboard) before connecting or replacing a provider account. Configure all required values in a provider group or leave the entire group empty. [Operations](/operations) describes local administration; no web management panel is required.

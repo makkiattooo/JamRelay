@@ -207,3 +207,9 @@ description: Generated reference for variables documented in .env.example.
 - **Sensitive:** no
 - **Example/default in `.env.example`:** `true`
 - **Notes:** Dynamic Client Registration (RFC 7591). true is recommended for Claude, Gemini CLI, VS Code and other clients that automatically register localhost callbacks. Set false to allow only pre-registered clients.
+
+### `JAMRELAY_LANGUAGE`
+
+- **Sensitive:** no
+- **Example/default in `.env.example`:** _empty_
+- **Notes:** CLI-only language preference: pl, en, de, fr, es. Empty uses the saved preference or terminal/system locale (English fallback). Interactive setup asks first and persists the selection. Environment overrides saved settings.

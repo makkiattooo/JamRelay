@@ -4,6 +4,8 @@ translationReviewed: 2026-09-12
 sourceHash: 3035042a0b24
 ---
 
+> Translation freshness notice: this older translation has not been fully reviewed against the current owner authorization and installation model. Follow the [canonical English oauth](/oauth) and [upgrade guide](/operations) for current, secure instructions.
+
 # MCP OAuth
 
 JamRelay possède deux couches d’autorisation indépendantes : **client IA → JamRelay** et **JamRelay → Spotify**. MCP OAuth ne remplace pas Spotify OAuth.

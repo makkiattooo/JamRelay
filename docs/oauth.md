@@ -26,8 +26,7 @@ Provider credentials are stored through the encrypted connection store.
 - owner approval protected by `MCP_OAUTH_OWNER_SECRET`.
 
 After approval, the consent screen records the selected provider connections and
-operation permissions in the MCP grant. The owner can review, replace, or
-revoke grants through the Connection Hub. Tokens without a current grant are
+operation permissions in the MCP grant. Use the local CLI to inspect clients/grants (`clients list`) or revoke a client (`clients revoke CLIENT_ID`). Repeat owner consent to change a grant. Tokens without a current grant are
 rejected and must be authorized again.
 
 ## Authorization screen
@@ -144,3 +143,11 @@ See [MCP OAuth registration](/clients/oauth-compatibility) for client-specific b
 
 See [Provider connections](/provider-connections) and [Security](/security) for
 owner-session and grant-enforcement details.
+
+## Secure provider OAuth without a dashboard
+
+Provider OAuth does not accept an MCP access token as owner consent. First visit `/owner/login` and submit the owner secret with the form nonce. Then open `/auth/providers/<provider>/start` and approve the exact connection/replacement. The consent POST includes session CSRF and binds a one-time initiation to the provider's state, connection and owner session. Complete the provider redirect in that same browser within ten minutes. Logging out or restarting invalidates pending browser authorization. Existing provider state and SoundCloud/YouTube PKCE verification remain mandatory.
+
+If the callback fails, old credentials are preserved. A fresh owner approval is required to retry; replaying a callback cannot update credentials. New authorization cannot use an old account's refresh token. Apple Music remains a separate Developer Token/Music User Token workflow described in [configuration](/configuration).
+
+MCP clients still connect to `/mcp`, discover OAuth metadata, register with DCR or the static registry, and obtain explicit owner consent for selected connection IDs and permissions. The owner secret is entered only in the consent form; never share it with an AI client. Repeat consent to change a grant. Local client revocation immediately blocks existing access tokens; successful new owner consent creates a replacement grant.

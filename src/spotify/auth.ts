@@ -75,10 +75,11 @@ export class SpotifyAuth {
       refresh_token?: string;
       expires_in: number;
     };
-    const old = await this.store.load();
+    if (!b.access_token || !b.refresh_token || !Number.isFinite(b.expires_in) || b.expires_in <= 0)
+      throw new Error('Invalid provider token response');
     await this.store.save({
       accessToken: b.access_token,
-      refreshToken: b.refresh_token ?? old?.refreshToken ?? '',
+      refreshToken: b.refresh_token!,
       expiresAt: Date.now() + b.expires_in * 1000,
     });
   }

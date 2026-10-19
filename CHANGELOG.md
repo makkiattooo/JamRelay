@@ -1,5 +1,45 @@
 # Changelog
 
+## 1.5.3
+
+- Add guided local, tunnel, custom-domain and reverse-proxy connectivity with DNS, HTTPS, health and MCP-authentication checks.
+- Expand resumable multilingual onboarding for deployment, provider credentials and MCP clients while preserving existing data and OAuth protections.
+- Keep the production `proxy-addr` resolution patched at 2.0.8.
+
+## 1.5.2
+
+- Shorten the project landing page and simplify documentation navigation, installation guidance and Polish entry points.
+- Repair corrupted Unicode and add lightweight documentation encoding/link checks.
+- Keep package metadata authoritative for versioning; remove version-dependent test expectations and redundant release text.
+- Remove obsolete root reports and Compose aliases; retain the deployment script’s legacy configuration and historical documentation URLs.
+- No MCP, OAuth, provider, queue or SQLite behavior changes.
+
+## 1.5.1 — Development candidate
+
+- Add `info`, update checks/channels, changelog, project notices and notification preferences to the existing CLI without opening SQLite.
+- Discover actual official npm/GitHub/GHCR publication using SemVer; show manual upgrade instructions only after verifying distribution metadata.
+- Add strict static GitHub notice feed, bundled offline fallback, local read/dismiss state, atomic caches, ETags and bounded HTTPS requests.
+- Offer optional passive checks during interactive setup; preserve OAuth/encryption configuration and default existing/noninteractive installations to disabled.
+- Include notice feed and changelog in npm/Docker artifacts. No schema, MCP or provider changes; publication remains pending.
+
+## 1.5.0 — Development candidate
+
+- Prepare installable npm archive with unified `jamrelay` executable and package-relative runtime resources.
+- Add terminal setup/reconfiguration, private platform paths, preserved encryption material, environment automation and offline doctor diagnostics.
+- Reuse operator commands and the existing server/OAuth/SQLite migration system; no new schema migration.
+- Simplify Docker Compose to one persistent service and prepare explicit-release multi-architecture GHCR builds.
+- Publication pending; no npm/GHCR release or deployment.
+
+## 1.4.0 — Development candidate
+
+- Require owner authentication, CSRF-protected explicit provider/replacement consent, one-time session-bound initiation and validated callbacks; retain MCP OAuth and all four providers.
+- Extend the existing SQLite durable queue with atomic claims, typed executor registration, provider routing, bounded retry/cooldown, client/connection ACLs, cancellation protection and at-most-once automatic commit reservation.
+- Add forward migration 0012, retaining existing data; uncertain commits require local reconciliation and cannot be automatically resumed.
+- Remove the complete web management application and its assets/routes. Add local `operator` commands for status, connections, client revocation, jobs, diagnostics and backups.
+- Public health retains non-personal database readiness but no account inventory. Removed connection/status/grant JSON routes return 404. Legacy unowned jobs are operator-only. See `docs/operations.md` before upgrading or rolling back.
+- Use `node --import tsx` for repository scripts to avoid unnecessary CLI IPC, and cap test worker concurrency without changing assertions or timeouts.
+- Candidate only: no release publication, tag or deployment.
+
 All notable changes to JamRelay are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
@@ -321,7 +361,7 @@ v1.1.0 ships:
 
 High-level lifecycle:
 
-`ANALYZE â†’ PLAN â†’ DRY RUN â†’ SNAPSHOT â†’ EXECUTE â†’ VERIFY â†’ RECORD`
+`ANALYZE → PLAN → DRY RUN → SNAPSHOT → EXECUTE → VERIFY → RECORD`
 
 #### Rules and recipes
 

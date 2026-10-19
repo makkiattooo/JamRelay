@@ -5,6 +5,8 @@ description: Final audit of the provider-neutral runtime and safe transfer gates
 
 # Multi-provider release audit
 
+> Historical audit snapshot, retained at its established URL. It is not evidence that the current checkout has been verified or deployed. For current procedures use [development](/development), [operations](/operations) and the repository CI results.
+
 ## Release-candidate status
 
 Automated release gates are green. This is not a claim that real provider

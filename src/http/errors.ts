@@ -59,6 +59,10 @@ export function toApiError(error: unknown): ApiError {
       'CONNECTION_NOT_GRANTED',
       'The MCP grant does not include this connection.',
     );
+  if (error instanceof Error && ['JOB_ACCESS_DENIED', 'CLIENT_REVOKED'].includes(error.message))
+    return new ApiError(403, error.message, 'The MCP client cannot access this job.');
+  if (error instanceof Error && error.message === 'CONNECTION_UNAVAILABLE')
+    return new ApiError(409, 'CONNECTION_UNAVAILABLE', 'The selected connection is unavailable.');
   if (error instanceof CapabilityUnavailableError)
     return new ApiError(501, 'CAPABILITY_UNAVAILABLE', error.message, {
       capability: error.capability,

@@ -1,22 +1,25 @@
-FROM node:22-bookworm-slim AS build
+FROM node:22.22.0-bookworm-slim AS build
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --ignore-scripts
 COPY tsconfig.json ./
 COPY src ./src
-COPY db ./db
-RUN npm run build && npm prune --omit=dev
-FROM node:22-bookworm-slim
+RUN npm run build && npm prune --omit=dev --ignore-scripts
+
+FROM node:22.22.0-bookworm-slim
 WORKDIR /app
-ENV NODE_ENV=production
+ENV NODE_ENV=production JAMRELAY_INSTALL_MODE=docker JAMRELAY_CONFIG_PATH=/data/jamrelay.env JAMRELAY_DATA_DIR=/data
 COPY --from=build /app/package*.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/db ./db
+COPY db/migrations ./db/migrations
 COPY assets ./assets
+COPY CHANGELOG.md ./CHANGELOG.md
+COPY .github/cli/notices.json ./.github/cli/notices.json
 RUN mkdir /data && chown node:node /data
 USER node
 EXPOSE 5267
 VOLUME ["/data"]
-HEALTHCHECK --interval=30s --timeout=5s CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 5267) + '/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-CMD ["node","dist/index.js"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 5267) + '/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+ENTRYPOINT ["node", "dist/cli.js"]
+CMD ["start"]

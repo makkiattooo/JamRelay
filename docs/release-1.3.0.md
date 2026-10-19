@@ -1,13 +1,14 @@
+> Historical release information. For 1.4.0 use the [upgrade and operations guide](/operations); web management routes and anonymous provider authorization are no longer available.
+
 # JamRelay 1.3.0
 
 JamRelay 1.3.0 is a production-hardening and operations release.
 
-It builds on the provider-neutral architecture introduced in 1.2.0 and focuses on making JamRelay safer and more predictable under concurrency, easier to operate, faster on large playlist workflows, and substantially more useful to administer through the built-in web console.
+It builds on the provider-neutral architecture introduced in 1.2.0 and focuses on making JamRelay safer and more predictable under concurrency, easier to operate, faster on large playlist workflows.
 
 ## Highlights
 
 - production hardening across credentials, request lifecycle, jobs and provider I/O;
-- a substantially expanded Admin Console;
 - provider-neutral playlist state acquisition;
 - revision-aware playlist caching and request-scoped singleflight;
 - bounded concurrency for large operations;
@@ -60,15 +61,15 @@ A shared playlist mutation service now provides a clearer execution lifecycle fo
 
 ```text
 READ
-  â†“
+  ↓
 PLAN
-  â†“
+  ↓
 SNAPSHOT
-  â†“
+  ↓
 EXECUTE
-  â†“
+  ↓
 VERIFY
-  â†“
+  ↓
 RECORD
 ```
 
@@ -133,28 +134,6 @@ The backup flow is designed around SQLite consistency rather than blindly copyin
 
 The `TOKEN_ENCRYPTION_KEY` must still be protected separately.
 
-## Admin Console
-
-JamRelay 1.3.0 substantially expands the owner administration interface.
-
-The console now provides an operator-oriented application shell instead of only a few basic configuration pages. The administration surface includes views for:
-
-- overview and system state;
-- provider connections;
-- MCP clients and grants;
-- durable jobs;
-- job details and operational actions;
-- diagnostics;
-- provider API errors;
-- rate-limit state;
-- MCP tool information;
-- safe runtime/system information;
-- backup-related operations where supported.
-
-The admin interface uses self-hosted assets and a dedicated security policy.
-
-Sensitive values such as provider tokens, MCP credentials, owner secrets and encryption keys are never intended to be rendered by the console.
-
 ## Security regression coverage
 
 1.3.0 adds dedicated regression tests for several important trust boundaries, including:
@@ -190,9 +169,8 @@ Before upgrading:
 5. upgrade the application code/image;
 6. run the release checks;
 7. verify `/health`;
-8. verify owner login and Admin Console access;
-9. verify configured provider connections;
-10. perform a read-only MCP smoke test before testing writes.
+8. verify configured provider connections;
+9. perform a read-only MCP smoke test before testing writes.
 
 Recommended validation:
 
@@ -222,7 +200,6 @@ Real provider OAuth, quota behavior, playback devices and hosted MCP-client comp
 This release deliberately does not:
 
 - add TIDAL;
-- expose provider credentials through the Admin Console;
 - turn JamRelay into a distributed worker platform;
 - replace SQLite with an external database;
 - introduce unsafe parallel playlist ordering writes.

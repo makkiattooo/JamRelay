@@ -58,7 +58,9 @@ export class YouTubeAuth {
         code_verifier: verifier,
       }),
     );
-    await this.save(response, await this.store.load<YouTubeToken>(this.connectionId));
+    if (typeof response.refresh_token !== 'string' || !response.refresh_token)
+      throw new Error('YouTube authorization requires a refresh token');
+    await this.save(response, null);
   }
   async accessToken() {
     const token = await this.store.load<YouTubeToken>(this.connectionId);
@@ -117,7 +119,13 @@ export class YouTubeAuth {
       ]),
     });
     const value: any = await response.json().catch(() => ({}));
-    if (!response.ok || !value.access_token)
+    if (
+      !response.ok ||
+      typeof value.access_token !== 'string' ||
+      !value.access_token ||
+      !Number.isFinite(Number(value.expires_in ?? 3600)) ||
+      Number(value.expires_in ?? 3600) <= 0
+    )
       throw new ProviderApiError(
         response.status,
         'YouTube OAuth token exchange failed',

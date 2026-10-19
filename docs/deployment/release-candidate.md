@@ -1,4 +1,7 @@
+> Historical release information. For 1.4.0 use the [upgrade and operations guide](/operations); web management routes and anonymous provider authorization are no longer available.
+
 ---
+
 title: Release candidate checklist
 ---
 
@@ -49,15 +52,12 @@ If the documentation build fails only because of a known local sandbox or filesy
 4. Allow startup to apply forward migrations.
 5. Confirm `/health`.
 6. Confirm database schema state is `current`.
-7. Open the Admin Console.
-8. Verify provider connection status.
-9. Verify MCP client grants.
-10. Perform a read-only MCP smoke test.
-11. Only then test provider writes.
+7. Verify provider connection status.
+8. Verify MCP client grants.
+9. Perform a read-only MCP smoke test.
+10. Only then test provider writes.
 
 SQLite migrations remain forward-only; application rollback does not automatically reverse an already-applied database migration.
-
-## 4. Admin Console verification
 
 Verify:
 
@@ -85,15 +85,12 @@ Inspect page source during at least one production-like check and confirm no pro
 | Spotify     | Large playlist read             | Full playlist is returned and pagination does not truncate after the first page.         |
 | Spotify     | Playlist writes                 | Explicitly targeted writes succeed and ambiguous writes fail closed.                     |
 | Spotify     | Playback                        | Playback works only when account, device and provider capability allow it.               |
-| SoundCloud  | Auth and identity               | OAuth completes and the expected account appears in the Connection Hub.                  |
 | SoundCloud  | Catalog and playlist operations | Supported operations succeed and unsupported operations fail with a capability error.    |
 | Apple Music | Developer/User Token flow       | Tokens remain separate and supported library operations work.                            |
 | Apple Music | Unsupported playlist operations | Unsupported granular operations fail before unsafe provider I/O.                         |
 | YouTube     | OAuth                           | OAuth persists encrypted credentials and concurrent reads do not create a refresh storm. |
 | YouTube     | Owned playlists                 | Playlist/video operations respect provider capabilities and quota behavior.              |
 | YouTube     | Bulk playlist work              | Concurrency remains bounded and ordering behavior remains correct.                       |
-
-For every provider also verify disconnect/revocation behavior, grant isolation and that credential material does not appear in logs or Admin Console HTML.
 
 ## 6. Playlist workflow verification
 
@@ -123,8 +120,6 @@ Verify read-only grants cannot mutate providers, destructive operations require 
 
 ## 10. Deployment checks
 
-Verify reverse proxy HTTPS, `PUBLIC_BASE_URL`, forwarded headers, `TRUST_PROXY`, Cloudflare Tunnel where used, `/health`, Admin Console, MCP endpoint, database schema state, persistent `/data`, graceful shutdown, container restart, backup creation, restore procedure and rollback behavior.
-
 ## Rollback
 
 Application rollback is not database rollback.
@@ -143,6 +138,5 @@ A v1.3.0 release candidate is ready for tagging only when:
 - `npm run check` succeeds in a normal release environment;
 - required live-provider checks are complete;
 - production-like MCP authentication is verified;
-- Admin Console security checks are complete;
 - backup and restore procedures are verified;
 - no unresolved release-blocking regression remains.

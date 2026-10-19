@@ -33,3 +33,9 @@ Example request: “What is currently playing?” → `get_currently_playing`.
 Normal progress and rate-limit waiting do not consume retry attempts. Actual retryable failures increment `attempts`; `max_attempts` stops automatic processing. `commit_job` preserves strict/dry-run/skip options, re-checks `skip_existing`, preserves duplicate removal and ordering, and performs no Spotify mutation for dry runs. Strict jobs cannot commit unresolved items. External writes have no exactly-once guarantee; uncertain outcomes require manual review rather than blind retry.
 
 `get_state_diagnostics`, `get_rate_limit_status`, and `get_recent_api_errors` expose bounded authenticated diagnostics only. API error history contains normalized fields and no raw request/response bodies or secrets. Resolver alias conflicts are not silently overwritten.
+
+## Durable queue tools (1.4.0)
+
+The names `create_bulk_job`, `get_job_status`, `list_jobs`, `resume_job`, `commit_job` and `cancel_job` are retained. Bulk types are explicitly registered: `bulk_add_tracks`, `add_tracks_by_search`, `create_playlist_from_tracks`. Set `payload.provider` and `payload.connection_id` to the authorized target; an unambiguous granted target may be filled by routing. Unsupported types fail clearly. New jobs persist the calling client and connection authorization; list and access are restricted to that owner and current connection grants. Pagination remains bounded to 100 rows/items.
+
+`commit_job` atomically reserves a ready job before any external work. Concurrent duplicate calls cannot write twice; completed calls return stored results. Interrupted or uncertain commits require operator reconciliation and cannot be resumed automatically. `cancel_job` preserves history and prevents late completion from overwriting cancellation. Non-interruptible external requests may still finish; inspect manual-review flags. See [operations](/operations) for CLI commands and recovery.

@@ -1,3 +1,5 @@
+import { toolContext } from '../mcp/context.js';
+import { isJobCancelled } from '../db/jobs.js';
 import { chunks } from '../utils/chunks.js';
 
 export type WriteResult = {
@@ -21,11 +23,11 @@ export async function writeChunks<T>(
   playlist_id: string,
   items: T[],
   write: (part: T[], index: number) => Promise<{ snapshot_id?: string } | null>,
-  options: { rollback?: () => Promise<void>; writeEmpty?: boolean } = {},
+  options: { rollback?: () => Promise<void>; writeEmpty?: boolean; chunkSize?: number } = {},
 ): Promise<WriteResult> {
   let written = 0;
   let last_snapshot_id: string | undefined;
-  const parts = chunks(items);
+  const parts = chunks(items, options.chunkSize ?? 100);
   if (!parts.length && !options.writeEmpty)
     return {
       ok: true,
@@ -41,6 +43,9 @@ export async function writeChunks<T>(
   if (!parts.length) parts.push([]);
   for (let i = 0; i < parts.length; i++) {
     try {
+      const context = toolContext.get();
+      if (context?.signal.aborted || (context?.queueJobId && isJobCancelled(context.queueJobId)))
+        throw new Error('OPERATION_CANCELLED');
       const result = await write(parts[i], i);
       written += parts[i].length;
       last_snapshot_id = result?.snapshot_id ?? last_snapshot_id;
@@ -54,7 +59,7 @@ export async function writeChunks<T>(
           await options.rollback();
           rollback_succeeded = true;
         } catch (rollbackError) {
-          rollback_error = String(rollbackError);
+          rollback_error = 'ROLLBACK_FAILED';
         }
       }
       return {
@@ -70,7 +75,7 @@ export async function writeChunks<T>(
         rollback_attempted,
         rollback_succeeded,
         rollback_error,
-        error: String(error),
+        error: 'PROVIDER_WRITE_FAILED',
       };
     }
   }

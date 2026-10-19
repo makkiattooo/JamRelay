@@ -1,3 +1,5 @@
+import { assertQueueJobActive } from '../db/jobs.js';
+import { retryAfterSeconds } from '../providers/retry-after.js';
 import { ProviderApiError } from '../providers/errors.js';
 import type { YouTubeAuth } from './auth.js';
 import { toolContext } from '../mcp/context.js';
@@ -41,6 +43,7 @@ export class YouTubeClient {
           : 'POST';
     const timeoutSignal = AbortSignal.timeout(15_000);
     const parentSignal = toolContext.get()?.signal;
+    assertQueueJobActive();
     const response = await fetch(url, {
       method: httpMethod,
       headers: {
@@ -58,7 +61,11 @@ export class YouTubeClient {
         'YouTube Data API request failed',
         'youtube',
         'youtube-default',
-        { providerCode: value.error?.errors?.[0]?.reason },
+        {
+          providerCode: value.error?.errors?.[0]?.reason,
+          retryAfter: retryAfterSeconds(response.headers.get('retry-after')),
+          scope: 'search',
+        },
       );
     return { value: value as T, quotaCost: YOUTUBE_QUOTA_COST[method] ?? 1 };
   }

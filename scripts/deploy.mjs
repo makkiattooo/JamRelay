@@ -258,7 +258,7 @@ function assertLocalLayout() {
     'package-lock.json',
     'Dockerfile',
     '.dockerignore',
-    'compose.yml',
+    'compose.legacy.yml',
     'tsconfig.json',
     'src',
     'db',
@@ -302,8 +302,8 @@ function buildTarball(tarballPath) {
     '--exclude=.git',
     '--exclude=.git/**',
 
-    '--exclude=.github',
-    '--exclude=.github/**',
+    '--exclude=.github/workflows',
+    '--exclude=.github/ISSUE_TEMPLATE',
 
     '--exclude=.vscode',
     '--exclude=.vscode/**',
@@ -322,8 +322,6 @@ function buildTarball(tarballPath) {
 
     '--exclude=.env',
     '--exclude=.env.*',
-
-    '--exclude=docker-compose.yml',
 
     '--exclude=scripts/deploy.mjs',
 
@@ -477,7 +475,7 @@ compose() {
     CLOUDFLARE_TUNNEL_TOKEN="$cloudflare_token" \\
     docker compose \\
       -p "$project_name" \\
-      -f "$app_dir/compose.yml" \\
+      -f "$app_dir/compose.legacy.yml" \\
       "$@"
 }
 
@@ -953,8 +951,8 @@ if [ "$assets_changed" -eq 1 ]; then
 fi
 
 
-if [ ! -f "$app_dir/compose.yml" ]; then
-  echo "compose.yml missing after extraction." >&2
+if [ ! -f "$app_dir/compose.legacy.yml" ]; then
+  echo "compose.legacy.yml missing after extraction." >&2
   exit 1
 fi
 

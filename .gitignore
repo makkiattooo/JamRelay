@@ -28,3 +28,6 @@ diff.diff
 docs/.vitepress/.temp/
 npm-audit.*
 .release-prep-backup
+cli-state.json
+cli-state.json.lock/
+*.tgz

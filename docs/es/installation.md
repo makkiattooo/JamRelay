@@ -1,5 +1,7 @@
-# Instalación y despliegue
+# Instalación
 
-En local: `npm ci`, configura `.env` y ejecuta `npm run dev`. En producción Node: `npm ci`, `npm run build`, `npm start`. Con Docker: `docker build -t jamrelay .` y `docker compose up -d --build`.
+La guía inglesa es la fuente canónica para npm, archivos de desarrollo, Docker y datos persistentes.
 
-Mantén el puerto en localhost o una red privada, persiste `/data`, usa un usuario sin privilegios y termina TLS en Caddy/nginx. Configura `PUBLIC_BASE_URL=https://mcp.example.com` y usa `TRUST_PROXY=true` solo detrás de un proxy de confianza. Cloudflare Tunnel sigue Internet → Cloudflare → `cloudflared` → aplicación.
+[Installation & deployment (English)](/installation) · [Polski](/pl/installation)
+
+Use `jamrelay setup` and `jamrelay start` after installation. Provider accounts are optional. Public npm/GHCR commands require actual official publication; a development commit is not a published package. The canonical guide explains candidate archives and Docker setup.

@@ -1,37 +1,62 @@
-# Instalacja i wdrożenie
+# Instalacja
 
-## Lokalny development
+Pełne, kanoniczne instrukcje dla npm, archiwów deweloperskich, Dockera,
+przechowywania danych i reverse proxy znajdują się w [angielskiej instrukcji instalacji](/installation).
 
-```bash
-npm ci
-cp .env.example .env
-npm run dev
-```
+## npm
 
-Użyj `http://127.0.0.1:5267` w `PUBLIC_BASE_URL` i zarejestruj identyczny `SPOTIFY_REDIRECT_URI`.
-
-## Lokalna produkcja
+Wymagany jest Node.js 22.13 lub nowszy. Po oficjalnej publikacji paczki:
 
 ```bash
-npm ci
-npm run build
-npm start
+npm install -g jamrelay
+jamrelay setup
+jamrelay start
 ```
 
-## Docker i Compose
+**Publikacja publiczna jest jeszcze w przygotowaniu.** Commit na GitHubie nie
+jest paczką npm ani obrazem GHCR. Przed publikacją zbuduj archiwum poleceniem
+`npm pack` z checkoutu i zainstaluj plik wypisany przez npm — bez ręcznego
+wpisywania numeru wersji. Szczegóły i wariant Docker Compose są w
+[kanonicznej instrukcji](/installation).
+
+## Konfiguracja i dane
+
+Kreator generuje sekrety tylko przy pierwszej konfiguracji. Konta dostawców są
+opcjonalne i wymagają osobnej zgody właściciela. Domyślne katalogi odpowiadają
+platformie: XDG na Linuksie, Application Support na macOS i AppData na Windows;
+Docker zachowuje dane w trwałym `/data`.
+
+Istniejące `.env`, ścieżki i klucze są zachowywane. `JAMRELAY_CONFIG_PATH`
+wybiera plik konfiguracji, a `jamrelay config` umożliwia ponowną konfigurację.
+Przed aktualizacją zatrzymaj serwer i zabezpiecz dane **oraz** prywatną
+konfigurację z kluczem szyfrowania. Nie generuj nowego klucza nad istniejącymi
+zaszyfrowanymi danymi.
+
+Pierwszy ekran kreatora pokazuje instrukcje we wszystkich pięciu językach.
+Wybór działa klawiszami 1–5 bez dodatkowego Entera; można też użyć strzałek i
+Enter. Domyślny język wynika
+z ustawień regionalnych, a przy braku obsługiwanego języka jest to angielski.
+`JAMRELAY_LANGUAGE` pozwala ustawić język dla kolejnych poleceń.
+`jamrelay config` zachowuje ustawienia sieciowe, chyba że wybierzesz opcje
+zaawansowane. Dostęp zdalny wymaga osiągalnego adresu HTTPS i kontrolowanego
+reverse proxy; zaufanie do nagłówków proxy włączaj wyłącznie w takim układzie.
+
+Ustaw dane aplikacji usługi przed uruchomieniem serwera, a potem autoryzuj
+własne konto i skonfiguruj klienta:
 
 ```bash
-docker build -t jamrelay .
-docker run --env-file .env -p 127.0.0.1:5267:5267 -v jamrelay-data:/data jamrelay
-docker compose up -d --build
+jamrelay connect provider spotify
+jamrelay start
+jamrelay onboard
 ```
 
-Obraz działa jako użytkownik nieuprzywilejowany, a `/data` musi być trwałym prywatnym wolumenem. Przykład Compose ogranicza port do localhost, zrzuca capabilities i włącza `no-new-privileges`.
+W Docker Compose użyj `docker compose run --rm jamrelay connect provider spotify`,
+a potem `docker compose up -d`. Polecenie `jamrelay onboard` można uruchamiać
+ponownie, aby kontynuować. Dane aplikacji i zgoda na dostęp do własnego konta
+to osobne kroki OAuth. Polecenie `jamrelay connect client chatgpt|claude|cursor|vscode|generic`
+wyświetla instrukcje dla wybranego klienta i dokładny adres `/mcp`.
+Zdalny asystent w chmurze nie połączy się z prywatnym adresem `localhost`;
+potrzebuje obsługiwanego tunelu albo dostępnego adresu HTTPS.
 
-## VPS, serwer domowy i NAS
-
-Na Ubuntu/Debian lub NAS użyj Node.js 22+ albo Dockera. Ogranicz port aplikacji do localhost/prywatnej sieci, zakończ HTTPS w reverse proxy i zachowaj `/data`. Ogólny szkic usługi systemd znajduje się w [wersji angielskiej](/installation); użytkownik usługi powinien mieć dostęp wyłącznie do aplikacji i `/data`.
-
-## Reverse proxy i Cloudflare Tunnel
-
-Użyj domeny `mcp.example.com`, ustaw `PUBLIC_BASE_URL=https://mcp.example.com` i `TRUST_PROXY=true` tylko za zaufanym proxy. Przepływ tunelu: Internet → Cloudflare → `cloudflared` → aplikacja MCP. Tokeny Cloudflare przechowuj poza repozytorium.
+`jamrelay doctor` pomaga sprawdzić konfigurację. Zobacz
+[szybki start](/pl/getting-started) i [informacje CLI](/cli-information).

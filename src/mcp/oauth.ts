@@ -1,3 +1,4 @@
+import { getDatabase, isDatabaseInitialized } from '../db/database.js';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
@@ -22,12 +23,14 @@ type Code = {
 };
 
 type Access = {
+  issuedAt?: number;
   clientId?: string;
   expiresAt: number;
   resource?: string;
 };
 
 type Refresh = {
+  issuedAt?: number;
   clientId: string;
   expiresAt: number;
   resource?: string;
@@ -291,17 +294,30 @@ export class McpOAuthStore {
     return true;
   }
 
+  private revoked(clientId: string, issuedAt?: number) {
+    if (!isDatabaseInitialized()) return false;
+    const row = getDatabase()
+      .prepare('SELECT revoked_at FROM operator_client_revocations WHERE client_id=?')
+      .get(clientId) as { revoked_at: number } | undefined;
+    return Boolean(
+      row &&
+      ((issuedAt ?? 0) <= row.revoked_at ||
+        (this.state.grants[clientId]?.updatedAt ?? 0) <= row.revoked_at),
+    );
+  }
   async issueTokens(clientId: string, resource?: string) {
     await this.load();
     this.pruneExpired();
     const access = token();
     const refresh = token();
     this.state.access[digest(access)] = {
+      issuedAt: Math.max(Date.now(), this.state.grants[clientId]?.updatedAt ?? 0),
       clientId,
       expiresAt: Date.now() + 60 * 60_000,
       resource,
     };
     this.state.refresh[digest(refresh)] = {
+      issuedAt: Math.max(Date.now(), this.state.grants[clientId]?.updatedAt ?? 0),
       clientId,
       expiresAt: Date.now() + 30 * 24 * 60 * 60_000,
       resource,
@@ -322,8 +338,10 @@ export class McpOAuthStore {
       return undefined;
     const grant = record.clientId ? this.state.grants[record.clientId] : undefined;
     if (!grant || grant.revokedAt) return undefined;
+    if (this.revoked(record.clientId!, record.issuedAt)) return undefined;
     return {
       clientId: record.clientId!,
+      issuedAt: record.issuedAt,
       connectionIds: grant.connectionIds,
       permissions: grant.permissions,
     };
@@ -331,11 +349,18 @@ export class McpOAuthStore {
 
   async setGrant(clientId: string, connectionIds: string[], permissions: string[]) {
     await this.load();
+    const revokedAt = isDatabaseInitialized()
+      ? Number(
+          getDatabase()
+            .prepare('SELECT revoked_at FROM operator_client_revocations WHERE client_id=?')
+            .get(clientId)?.revoked_at ?? 0,
+        )
+      : 0;
     this.state.grants[clientId] = {
       clientId,
       connectionIds: [...new Set(connectionIds)],
       permissions: [...new Set(permissions)],
-      updatedAt: Date.now(),
+      updatedAt: Math.max(Date.now(), revokedAt + 1),
     };
     await this.save();
   }
@@ -346,6 +371,16 @@ export class McpOAuthStore {
   async listGrants() {
     await this.load();
     return Object.values(this.state.grants).map((grant) => ({ ...grant }));
+  }
+  async listClients() {
+    await this.load();
+    return Object.values(this.state.clients).map((c) => ({
+      clientId: c.clientId,
+      clientName: c.clientName,
+      source: 'dynamic',
+      createdAt: c.createdAt,
+      authorizedAt: c.authorizedAt,
+    }));
   }
   async revokeGrant(clientId: string) {
     await this.load();
@@ -368,6 +403,8 @@ export class McpOAuthStore {
       !record ||
       record.expiresAt <= Date.now() ||
       record.clientId !== clientId ||
+      this.revoked(clientId, record.issuedAt) ||
+      Boolean(this.state.grants[clientId]?.revokedAt) ||
       (resource && record.resource && record.resource !== resource)
     ) {
       return undefined;

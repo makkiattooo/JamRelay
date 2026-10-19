@@ -1,3 +1,5 @@
+import { assertQueueJobActive } from '../db/jobs.js';
+import { retryAfterSeconds } from '../providers/retry-after.js';
 import { ProviderApiError } from '../providers/errors.js';
 import type { AppleMusicAuth } from './auth.js';
 import { toolContext } from '../mcp/context.js';
@@ -26,6 +28,7 @@ export class AppleMusicClient {
     }
     const parentSignal = toolContext.get()?.signal;
     const timeoutSignal = AbortSignal.timeout(15_000);
+    assertQueueJobActive();
     const response = await fetch(`https://api.music.apple.com/v1${path}`, {
       ...init,
       headers: { ...headers, ...(init.headers as any) },
@@ -42,7 +45,11 @@ export class AppleMusicClient {
         'Apple Music API request failed',
         'apple-music',
         'apple-music-default',
-        { providerCode: value.errors?.[0]?.code },
+        {
+          providerCode: value.errors?.[0]?.code,
+          retryAfter: retryAfterSeconds(response.headers.get('retry-after')),
+          scope: 'search',
+        },
       );
     return value as T;
   }
