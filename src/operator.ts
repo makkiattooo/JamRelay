@@ -1,4 +1,5 @@
 import { installationPaths } from './runtime/installation.js';
+import { knownMessage, translator, currentLanguage } from './cli/i18n/index.js';
 import { APP_VERSION } from './version.js';
 import { pathToFileURL } from 'node:url';
 import { resolve, join } from 'node:path';
@@ -150,7 +151,13 @@ export async function runOperator(
         });
       else throw new Error('USAGE');
     } else throw new Error('USAGE');
-    output(JSON.stringify(result, null, json ? 0 : 2));
+    if (!json && group === 'status') {
+      const t = translator(currentLanguage());
+      const status = result as any;
+      output(
+        `JamRelay\n${t('Version')}: ${status.version}\n${t('Configuration')}: ${status.configuration}\n${t('Runtime')}: ${status.runtime}\n${t('Database')}: ${JSON.stringify(status.database)}\n${t('Providers')}: ${status.providers_configured.join(', ') || t('none')}`,
+      );
+    } else output(JSON.stringify(result, null, json ? 0 : 2));
     return 0;
   } catch (error) {
     const code =
@@ -163,10 +170,11 @@ export async function runOperator(
     output(
       JSON.stringify({
         error: code,
-        message:
+        message: (json ? (s: string) => s : knownMessage)(
           code === 'USAGE'
             ? 'Usage: operator status | connections list | clients list/revoke ID | jobs list/inspect/cancel/resume ID | diagnostics | backup create/list [--json]'
             : 'Operation failed; verify configuration and local file permissions. No secrets are printed.',
+        ),
       }),
     );
     return code === 'USAGE' ? 2 : 1;

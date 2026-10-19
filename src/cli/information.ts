@@ -1,4 +1,5 @@
 import semver from 'semver';
+import { translator, currentLanguage, knownMessage } from './i18n/index.js';
 import { APP_VERSION } from '../version.js';
 import { updateSummary, changelog, installationInfo } from './releases.js';
 import { notices } from './notices.js';
@@ -11,36 +12,55 @@ const usage =
 function ensure(condition: boolean): asserts condition {
   if (!condition) throw new Error('USAGE');
 }
-function format(result: any, command: string) {
+export function format(result: any, command: string) {
+  const t = translator(currentLanguage());
+  const prose = (s: string) => knownMessage(s);
+  const guidance = (value: string) => {
+    const prefix =
+      /^(For Compose, explicitly set image: ghcr\.io\/makkiattooo\/jamrelay:)([^,]+),.*configuration\. /.exec(
+        value,
+      );
+    return (
+      (prefix
+        ? t(
+            'For Compose, explicitly set image: ghcr.io/makkiattooo/jamrelay:{0}, remove the local build entry if switching from source, then manually run docker compose up -d --no-deps jamrelay. Keep the same persistent volume and configuration.',
+            prefix[2],
+          ) + ' '
+        : '') + prose(prefix ? value.slice(prefix[0].length) : value)
+    );
+  };
   if (command === 'info')
-    return `JamRelay — System Information\n\nApplication\n  Version:        ${result.application.version}\n  Channel:        ${result.application.channel}\n  Runtime:        Node.js ${result.application.runtime}\n  Platform:       ${result.application.platform}\n  Installation:   ${result.application.installation}\n\nConfiguration\n  Config file:    ${result.configuration.file}\n  Data directory: ${result.configuration.dataDirectory}\n  MCP endpoint:   ${result.configuration.mcpEndpoint ?? 'not configured'}\n  Database:       ${result.configuration.database}\n\nUpdates\n  Last check:     ${result.updates.checkedAt ?? 'never'}\n  Latest known:   ${result.updates.latest ?? 'unavailable'}\n  Source:         ${result.updates.source} (not verified-current)\n  Notices:        ${result.notices.count}\n\nCommands\n  jamrelay doctor\n  jamrelay update check\n  jamrelay notices`;
+    return `JamRelay — ${t('System Information')}\n\n${t('Application')}\n  ${t('Version')}:        ${result.application.version}\n  ${t('Channel')}:        ${result.application.channel}\n  ${t('Runtime')}:        Node.js ${result.application.runtime}\n  ${t('Platform')}:       ${result.application.platform}\n  ${t('Installation')}:   ${result.application.installation}\n\n${t('Configuration')}\n  ${t('Config file')}:    ${result.configuration.file}\n  ${t('Data directory')}: ${result.configuration.dataDirectory}\n  ${t('MCP endpoint')}:   ${result.configuration.mcpEndpoint ?? t('not configured')}\n  ${t('Database')}:       ${prose(result.configuration.database)}\n\n${t('Updates')}\n  ${t('Last check')}:     ${result.updates.checkedAt ?? t('never')}\n  ${t('Latest known')}:   ${result.updates.latest ?? t('unavailable')}\n  ${t('Source')}:         ${result.updates.source} (${t('not verified-current')})\n  ${t('Notices')}:        ${result.notices.count}\n\n${t('Commands')}\n  jamrelay doctor\n  jamrelay update check\n  jamrelay notices`;
   if (command === 'update' && 'installed' in result)
-    return `JamRelay Update Manager\n\nInstalled version: ${result.installed}\nChannel:           ${result.channel}\nInstallation:      ${result.installation}\nLatest published:  ${result.latest ?? 'unavailable'}\nState:             ${result.state}\nSource:            ${result.source}${result.fresh ? ' (verified this request)' : ' (not verified-current)'}\nLast check:        ${result.checkedAt ?? 'never'}\n\n${result.message}\n${result.releaseUrl ? '\nRelease notes: ' + result.releaseUrl + '\n' : ''}${result.command ? '\nSuggested command:\n' + result.command + '\n' : ''}\n${result.guidance ?? ''}`;
+    return `JamRelay ${t('Update Manager')}\n\n${t('Installed version')}: ${result.installed}\n${t('Channel')}:           ${result.channel}\n${t('Installation')}:      ${result.installation}\n${t('Latest published')}:  ${result.latest ?? t('unavailable')}\n${t('State')}:             ${result.state}\n${t('Source')}:            ${result.source}${result.fresh ? ' (' + t('verified this request') + ')' : ' (' + t('not verified-current') + ')'}\n${t('Last check')}:        ${result.checkedAt ?? t('never')}\n\n${prose(result.message)}\n${result.releaseUrl ? '\n' + t('Release notes') + ': ' + result.releaseUrl + '\n' : ''}${result.command ? '\n' + t('Suggested command') + ':\n' + result.command + '\n' : ''}\n${guidance(result.guidance ?? '')}`;
   if (command === 'changelog')
     return (
-      `JamRelay Release Information\nSource: ${result.source}; ${result.fresh ? 'checked now' : 'offline/cached/bundled; not verified-current'}\n\n` +
+      `JamRelay ${t('Release Information')}\n${t('Source')}: ${result.source}; ${result.fresh ? t('checked now') : t('offline/cached/bundled; not verified-current')}\n\n` +
       (result.entries.length
         ? result.entries
             .map(
               (r: any) =>
-                `${r.version} — ${r.source}${r.published ? '' : ' (local release information; publication unconfirmed)'}\n${r.title}\n${r.body}\n${r.url ?? ''}`,
+                `${r.version} — ${r.source}${r.published ? '' : ' (' + t('local release information; publication unconfirmed') + ')'}\n${r.title}\n${r.body}\n${r.url ?? ''}`,
             )
             .join('\n\n')
-        : 'No matching release information found.')
+        : t('No matching release information found.'))
     );
   if (command === 'notices' && Array.isArray(result.notices))
     return (
-      `JamRelay Project Notices\nSource: ${result.source}; last successful refresh: ${result.checkedAt ?? 'never'}\n${result.message}\n\n` +
+      `JamRelay ${t('Project Notices')}\n${t('Source')}: ${result.source}; ${t('last successful refresh')}: ${result.checkedAt ?? t('never')}\n${prose(result.message)}\n\n` +
       (result.notices.length
         ? result.notices
             .map(
               (n: any) =>
-                `[${n.severity}] ${n.id}${n.expired ? ' [expired]' : ''}${n.dismissed ? ' [dismissed]' : ''}${n.readAt ? ' [read]' : ''}\n${n.title}\n${n.message}\n${n.url ?? ''}`,
+                `[${n.severity}] ${n.id}${n.expired ? ' [' + t('expired') + ']' : ''}${n.dismissed ? ' [' + t('dismissed') + ']' : ''}${n.readAt ? ' [' + t('read') + ']' : ''}\n${n.title}\n${n.message}\n${n.url ?? ''}`,
             )
             .join('\n\n')
-        : 'No applicable notices.')
+        : t('No applicable notices.'))
     );
-  return JSON.stringify(result, null, 2);
+  if (command === 'notifications')
+    return `${t('Notifications')}: ${prose(result.preference)}\n${result.stateFile}\n${prose(result.privacy)}`;
+  if (command === 'update' && 'channel' in result) return `${t('Channel')}: ${result.channel}`;
+  return `${result.id}: ${result.dismissed ? t('dismissed') : t('read')}`;
 }
 export async function runInformation(args: string[]): Promise<number> {
   const [command, ...rest] = args;
@@ -157,7 +177,7 @@ export async function runInformation(args: string[]): Promise<number> {
           ? 'No release information found for the requested version.'
           : 'CLI information could not be read or saved. Check local state/cache permissions; no secrets are printed.';
     if (json) console.log(JSON.stringify({ error: message }));
-    else console.error(message);
+    else console.error(knownMessage(message));
     return message === usage ? 2 : 1;
   }
 }
@@ -184,7 +204,13 @@ export async function passiveHint(args: string[]) {
       (n) => !n.dismissed && !n.readAt && !state.notices[n.id]?.seenAt,
     );
     if (notice) {
-      console.error(`Notice [${notice.severity}]: ${notice.title} — run jamrelay notices`);
+      console.error(
+        translator(currentLanguage())(
+          'Notice [{0}]: {1} — run jamrelay notices',
+          notice.severity,
+          notice.title,
+        ),
+      );
       await changeState((s) => {
         s.notices[notice.id] = {
           ...(s.notices[notice.id] ?? { readAt: null, dismissed: false }),
@@ -193,7 +219,11 @@ export async function passiveHint(args: string[]) {
       });
     } else if (update.state === 'update_available')
       console.error(
-        `Update: JamRelay ${update.latest} is available${update.fresh ? '' : ' (cached)'} — run jamrelay update check --refresh`,
+        translator(currentLanguage())(
+          'Update: JamRelay {0} is available{1} — run jamrelay update check --refresh',
+          update.latest,
+          update.fresh ? '' : ' (' + knownMessage('cached') + ')',
+        ),
       );
   } catch {
     /* optional hints can never break operational commands */

@@ -6,6 +6,17 @@ import { createInterface } from 'node:readline/promises';
 import { emitKeypressEvents } from 'node:readline';
 import { DatabaseSync } from 'node:sqlite';
 import { getConfig } from '../config.js';
+import {
+  currentLanguage,
+  translator,
+  knownMessage,
+  languages,
+  languageMenu,
+  languagePrompt,
+  selectLanguage,
+  yesNo,
+  rememberErrorLanguage,
+} from '../cli/i18n/index.js';
 import { initializeDatabase, closeDatabase, checksumMigration } from '../db/database.js';
 import {
   installationPaths,
@@ -74,23 +85,29 @@ function assets() {
   if (!readdirSync(runtimePath('db', 'migrations')).includes('0012_durable_queue.sql'))
     throw new Error('Runtime migration 0012 is missing; reinstall the package.');
 }
-function hiddenQuestion(label: string): Promise<string> {
-  process.stdout.write(`${label} (hidden; Enter keeps existing): `);
+function hiddenQuestion(label: string, hiddenLabel: string): Promise<string> {
+  process.stdout.write(`${label} (${hiddenLabel}): `);
   emitKeypressEvents(process.stdin);
+  const wasRaw = process.stdin.isRaw;
   process.stdin.setRawMode(true);
   process.stdin.resume();
   return new Promise((resolve, reject) => {
     let value = '';
     const done = () => {
       process.stdin.off('keypress', onKey);
-      process.stdin.setRawMode(false);
+      process.stdin.off('end', cancelled);
+      process.stdin.off('error', cancelled);
+      process.stdin.setRawMode(wasRaw);
       process.stdin.pause();
       process.stdout.write('\n');
     };
+    const cancelled = () => {
+      done();
+      reject(new Error('Setup cancelled.'));
+    };
     const onKey = (text: string | undefined, key: { name?: string; ctrl?: boolean }) => {
-      if (key.ctrl && key.name === 'c') {
-        done();
-        reject(new Error('Setup cancelled.'));
+      if (key.ctrl && (key.name === 'c' || key.name === 'd')) {
+        cancelled();
       } else if (key.name === 'return' || key.name === 'enter') {
         done();
         resolve(value);
@@ -98,9 +115,13 @@ function hiddenQuestion(label: string): Promise<string> {
       else if (text && !key.ctrl) value += text;
     };
     process.stdin.on('keypress', onKey);
+    process.stdin.once('end', cancelled);
+    process.stdin.once('error', cancelled);
   });
 }
 export async function setup(nonInteractive = false) {
+  let language = currentLanguage();
+  let t = translator(language);
   if (!supportedNode()) throw new Error('Node.js >=22.13.0 is required.');
   if (!nonInteractive && !process.stdin.isTTY)
     throw new Error(
@@ -110,26 +131,68 @@ export async function setup(nonInteractive = false) {
   const paths = installationPaths();
   let unlock = () => {};
   let terminal: ReturnType<typeof createInterface> | undefined;
+  let inputAbort: AbortController;
   const ask = async (label: string, fallback: string) => {
-    terminal ||= createInterface({ input: process.stdin, output: process.stdout });
-    return (await terminal.question(`${label} [${fallback}]: `)).trim() || fallback;
+    if (!terminal) {
+      inputAbort = new AbortController();
+      terminal = createInterface({ input: process.stdin, output: process.stdout });
+      terminal.once('SIGINT', () => inputAbort.abort());
+      terminal.once('close', () => inputAbort.abort());
+    }
+    try {
+      return (
+        (
+          await terminal.question(`${label} [${fallback}]: `, { signal: inputAbort.signal })
+        ).trim() || fallback
+      );
+    } catch {
+      throw new Error('Setup cancelled.');
+    }
   };
   const secret = async (label: string, fallback: string | undefined) => {
     terminal?.close();
     terminal = undefined;
-    const value = await hiddenQuestion(label);
+    const value = await hiddenQuestion(label, t('hidden; Enter keeps existing'));
     return value || fallback || '';
   };
   try {
+    if (!nonInteractive) {
+      console.log(languageMenu);
+      let chosen;
+      do {
+        chosen = selectLanguage(
+          await ask(languagePrompt, String(languages.indexOf(language) + 1)),
+          language,
+        );
+      } while (!chosen);
+      language = chosen;
+      t = translator(language);
+    }
+    const confirm = async (label: string, fallback: boolean) => {
+      for (;;) {
+        const answer = yesNo(
+          await ask(`${label} (${t('yes/no')})`, t(fallback ? 'yes' : 'no')),
+          language,
+        );
+        if (answer !== undefined) return answer;
+        console.log(t('Please answer yes or no.'));
+      }
+    };
     const initial = readSettings(paths.config);
     let mode = process.env.JAMRELAY_INSTALL_MODE || initial.JAMRELAY_INSTALL_MODE || 'local';
-    if (!nonInteractive) mode = await ask('Installation mode (local/docker)', mode);
+    if (!nonInteractive) mode = await ask(t('Installation mode (local/docker)'), mode);
     if (!['local', 'docker'].includes(mode))
       throw new Error('Choose local or docker installation mode.');
     if (mode === 'docker' && !existsSync(paths.config) && !process.env.JAMRELAY_CONFIG_PATH)
       paths.config = '/data/jamrelay.env';
-    if (!nonInteractive)
-      paths.config = resolve(await ask('Private configuration file', paths.config));
+    if (!nonInteractive) {
+      console.log(
+        t(
+          'This private env file stores credentials and encryption keys. Keep it outside public/shared directories.',
+        ),
+      );
+      paths.config = resolve(await ask(t('Private configuration file'), paths.config));
+    }
     paths.legacy = paths.config === resolve('.env') && existsSync(paths.config);
     writable(paths.config);
     unlock = await lockInstallation(paths.config);
@@ -144,6 +207,7 @@ export async function setup(nonInteractive = false) {
         'Existing encrypted credentials: configured key differs from environment; resolve the conflict without rotating the key.',
       );
     const settings: Record<string, string> = { ...saved };
+    settings.JAMRELAY_LANGUAGE = language;
     for (const [key, value] of Object.entries(process.env))
       if (
         value !== undefined &&
@@ -153,7 +217,7 @@ export async function setup(nonInteractive = false) {
       )
         settings[key] = value;
     console.log(
-      `JamRelay ${existsSync(paths.config) ? 'Reconfiguration' : 'Setup'} — ${process.platform}, Node ${process.versions.node}\nConfiguration: ${paths.config}`,
+      `JamRelay ${t(existsSync(paths.config) ? 'Reconfiguration' : 'Setup')} — ${process.platform}, Node ${process.versions.node}\n${t('Configuration')}: ${paths.config}`,
     );
     settings.JAMRELAY_INSTALL_MODE = mode;
     const legacyProduction = paths.legacy && process.env.NODE_ENV === 'production';
@@ -161,7 +225,7 @@ export async function setup(nonInteractive = false) {
       settings.JAMRELAY_INSTALL_MODE === 'docker' ? '/data' : paths.data;
     if (!nonInteractive)
       settings.JAMRELAY_DATA_DIR = await ask(
-        'Data directory (existing data is never moved)',
+        t('Data directory (existing data is never moved)'),
         settings.JAMRELAY_DATA_DIR,
       );
     settings.JAMRELAY_DATA_DIR = resolve(settings.JAMRELAY_DATA_DIR);
@@ -184,22 +248,36 @@ export async function setup(nonInteractive = false) {
     settings.HOST ||= settings.JAMRELAY_INSTALL_MODE === 'docker' ? '0.0.0.0' : '127.0.0.1';
     settings.PORT ||= '5267';
     if (!nonInteractive) {
-      settings.HOST = await ask('Bind address', settings.HOST);
-      settings.PORT = await ask('Port', settings.PORT);
+      console.log(
+        t(
+          'Bind address selects local interfaces: 127.0.0.1 is local only; 0.0.0.0 listens on all IPv4 interfaces (usual inside Docker).',
+        ),
+      );
+      settings.HOST = await ask(t('Bind address'), settings.HOST);
+      settings.PORT = await ask(t('Port'), settings.PORT);
     }
     settings.PUBLIC_BASE_URL ||= `http://localhost:${settings.PORT}`;
     console.log(
-      'Local HTTP needs no domain. Remote MCP needs a reachable HTTPS origin and a reverse proxy; setup does not expose the server.',
+      t(
+        'Local HTTP needs no domain. Remote MCP needs a reachable HTTPS origin and a reverse proxy; setup does not expose the server.',
+      ),
     );
     if (!nonInteractive) {
-      settings.PUBLIC_BASE_URL = await ask('Public base URL', settings.PUBLIC_BASE_URL);
+      console.log(
+        t(
+          'Public base URL is the origin clients reach, without a path. A reverse proxy forwards HTTPS to JamRelay; do not enable trust on a directly exposed server.',
+        ),
+      );
+      settings.PUBLIC_BASE_URL = await ask(t('Public base URL'), settings.PUBLIC_BASE_URL);
       settings.TRUST_PROXY = await ask(
-        'Trust reverse proxy (false or explicit hop count/IP; never trust arbitrary proxies)',
+        t(
+          'Trust reverse proxy (false or true; true trusts every proxy, use only behind a controlled reverse proxy)',
+        ),
         settings.TRUST_PROXY || 'false',
       );
-      if ((await ask('Update owner login secret? (yes/no)', 'no')) === 'yes')
+      if (await confirm(t('Update owner login secret?'), false))
         settings.MCP_OAUTH_OWNER_SECRET = await secret(
-          'New owner secret (minimum 32 characters)',
+          t('New owner secret (minimum 32 characters)'),
           settings.MCP_OAUTH_OWNER_SECRET,
         );
     }
@@ -209,7 +287,7 @@ export async function setup(nonInteractive = false) {
       ? []
       : (
           await ask(
-            'Providers to configure (comma-separated; none skips and preserves existing)',
+            t('Providers to configure (comma-separated; none skips and preserves existing)'),
             'none',
           )
         )
@@ -222,7 +300,9 @@ export async function setup(nonInteractive = false) {
     for (const provider of selected) {
       if (provider === 'apple-music') {
         console.log(
-          'Apple Developer: create a MusicKit key. Keep its .p8 file at a persistent readable local path (inside /data for Docker). User authorization still requires a MusicKit user token.',
+          t(
+            'Apple Developer: create a MusicKit key. Keep its .p8 file at a persistent readable local path (inside /data for Docker). User authorization still requires a MusicKit user token.',
+          ),
         );
         for (const key of [
           'APPLE_MUSIC_TEAM_ID',
@@ -234,25 +314,33 @@ export async function setup(nonInteractive = false) {
       } else {
         const prefix = provider === 'soundcloud' ? 'SOUNDCLOUD' : provider.toUpperCase();
         console.log(
-          `${provider}: obtain an OAuth client ID/secret in the provider developer console${provider === 'youtube' ? ' and enable YouTube Data API v3' : ''}. JamRelay cannot create them for you.`,
+          t(
+            '{0}: obtain an OAuth client ID/secret in the provider developer console. JamRelay cannot create them for you.',
+            provider,
+          ),
         );
+        if (provider === 'youtube')
+          console.log(t('Enable YouTube Data API v3 in the developer console.'));
         settings[`${prefix}_CLIENT_ID`] = await ask(
-          `${provider} client ID`,
+          t('{0} client ID', provider),
           settings[`${prefix}_CLIENT_ID`] || '',
         );
         settings[`${prefix}_CLIENT_SECRET`] = await secret(
-          `${provider} client secret`,
+          t('{0} client secret', provider),
           settings[`${prefix}_CLIENT_SECRET`],
         );
         settings[`${prefix}_REDIRECT_URI`] = `${origin}/auth/providers/${provider}/callback`;
-        console.log(`Register redirect URI: ${settings[`${prefix}_REDIRECT_URI`]}`);
+        console.log(t('Register redirect URI: {0}', settings[`${prefix}_REDIRECT_URI`]));
       }
     }
     for (const provider of ['spotify', 'soundcloud', 'youtube']) {
       const key = `${provider.toUpperCase()}_REDIRECT_URI`;
       if (settings[key] && new URL(settings[key]).origin !== new URL(origin).origin) {
         console.log(
-          `Warning: ${provider} redirect origin differs from public URL. Register and configure the matching redirect URI before authorization.`,
+          t(
+            'Warning: {0} redirect origin differs from public URL. Register and configure the matching redirect URI before authorization.',
+            provider,
+          ),
         );
       }
     }
@@ -276,18 +364,21 @@ export async function setup(nonInteractive = false) {
     if (!nonInteractive) {
       const { readState, changeState } = await import('../cli/state.js');
       console.log(
-        '\nJamRelay updates: optional occasional public HTTPS checks for official releases and project notices. No credentials, installation IDs or telemetry are sent. Disable later with jamrelay notifications disable.',
+        '\n' +
+          t(
+            'JamRelay updates: optional occasional public HTTPS checks for official releases and project notices. No credentials, installation IDs or telemetry are sent. Disable later with jamrelay notifications disable.',
+          ),
       );
-      const enabled = await ask(
-        'Enable occasional CLI update/notice checks? (Y/n)',
-        readState().notifications === false ? 'n' : 'y',
+      const enabled = await confirm(
+        t('Enable occasional CLI update/notice checks?'),
+        readState().notifications !== false,
       );
       // Follow a custom configuration path selected in this wizard without touching OAuth settings.
       const priorConfig = process.env.JAMRELAY_CONFIG_PATH;
       process.env.JAMRELAY_CONFIG_PATH = paths.config;
       try {
         await changeState((s) => {
-          s.notifications = ['y', 'yes'].includes(enabled.toLowerCase());
+          s.notifications = enabled;
         });
       } finally {
         if (priorConfig === undefined) delete process.env.JAMRELAY_CONFIG_PATH;
@@ -300,15 +391,18 @@ export async function setup(nonInteractive = false) {
       ),
     );
     console.log(
-      `\nJamRelay Setup Complete\n\nConfiguration: ${paths.config}\nDatabase:      ${settings.JAMRELAY_DB_PATH}\nMCP endpoint:  ${origin}/mcp\nProviders:     ${configured.length ? configured.join(', ') + ' (configured; run connections list to check account authorization)' : 'none'}\n\nNext:\n  jamrelay start\n  jamrelay doctor\n\nOwner login: ${origin}/owner/login\nProvider authorization: ${origin}/auth/providers/PROVIDER/start\nUse the owner secret from your private configuration at login. Back up that configuration separately: it contains your encryption key and owner secret. Keep it private.\nAdd ${origin}/mcp to your remote MCP client, complete owner OAuth consent, then request tools/list to verify the connection.`,
+      `\n${t('JamRelay Setup Complete')}\n\n${t('Configuration')}: ${paths.config}\n${t('Database')}: ${settings.JAMRELAY_DB_PATH}\n${t('MCP endpoint')}: ${origin}/mcp\n${t('Providers')}: ${configured.length ? configured.join(', ') + ' (' + t('configured; run connections list to check account authorization') + ')' : t('none')}\n\n${t('Next')}:\n  jamrelay start\n  jamrelay doctor\n\n${t('Owner login')}: ${origin}/owner/login\n${t('Provider authorization')}: ${origin}/auth/providers/PROVIDER/start\n${t('Use the owner secret from your private configuration at login. Back up that configuration separately: it contains your encryption key and owner secret. Keep it private.')}\n${t('Add {0}/mcp to your remote MCP client, complete owner OAuth consent, then request tools/list to verify the connection.', origin)}`,
     );
+  } catch (error) {
+    rememberErrorLanguage(error, language);
+    throw error;
   } finally {
     terminal?.close();
     closeDatabase();
     unlock();
   }
 }
-export async function doctor() {
+export async function doctor(json = false) {
   const paths = installationPaths();
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -383,12 +477,16 @@ export async function doctor() {
         : 'Configuration/path/database validation failed. Check owner secret, encryption key, absolute storage paths, provider fields, public URL and file permissions.',
     );
   }
+  const result = JSON.stringify(
+    { configuration: paths.config, errors, warnings, ok: errors.length === 0 },
+    null,
+    2,
+  );
+  const t = translator(currentLanguage());
   console.log(
-    JSON.stringify(
-      { configuration: paths.config, errors, warnings, ok: errors.length === 0 },
-      null,
-      2,
-    ),
+    json
+      ? result
+      : `${t('Configuration')}: ${paths.config}\n${t('Errors')}:\n${errors.map((e) => '  ' + knownMessage(e)).join('\n') || '  0'}\n${t('Warnings')}:\n${warnings.map((e) => '  ' + knownMessage(e)).join('\n') || '  0'}\n${t('State')}: ${errors.length ? t('Errors') : t('OK')}`,
   );
   return errors.length ? 1 : 0;
 }

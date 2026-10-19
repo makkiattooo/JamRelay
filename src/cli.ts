@@ -2,14 +2,17 @@
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { APP_VERSION } from './version.js';
+import { translator, currentLanguage, knownMessage, errorLanguage } from './cli/i18n/index.js';
 import { loadInstallation, lockInstallation } from './runtime/installation.js';
 
-export const help = `JamRelay — self-hosted music MCP server
-Usage: jamrelay <command>
-  setup [--yes]       Configure installation (interactive; --yes uses environment)
-  config             Safely reconfigure existing installation
-  start              Run the MCP HTTP server
-  status | doctor    Installation status / configuration diagnostics
+export function cliHelp() {
+  const t = translator(currentLanguage());
+  return `JamRelay — ${t('self-hosted music MCP server')}
+${t('Usage')}: jamrelay <command>
+  setup [--yes]       ${t('Configure installation (interactive; --yes uses environment)')}
+  config             ${t('Safely reconfigure existing installation')}
+  start              ${t('Run the MCP HTTP server')}
+  status | doctor    ${t('Installation status / configuration diagnostics')}
   connections list
   clients list | clients revoke ID
   jobs list | jobs inspect/cancel/resume ID
@@ -21,8 +24,11 @@ Usage: jamrelay <command>
   notices [--refresh|--offline] [--all] | notices read/dismiss ID
   notifications status/enable/disable
   --help | --version
-Operator commands support --json. JAMRELAY_CONFIG_PATH selects a private env file.`;
+${t('Operator commands support --json. JAMRELAY_CONFIG_PATH selects a private env file.')}`;
+}
+export const help = cliHelp();
 export async function runCli(args: string[]) {
+  const help = cliHelp();
   const [command, ...rest] = args;
   if (!command || command === '--help' || command === '-h') {
     console.log(help);
@@ -34,7 +40,7 @@ export async function runCli(args: string[]) {
   }
   const [major, minor] = process.versions.node.split('.').map(Number);
   if (major < 22 || (major === 22 && minor < 13)) {
-    console.error('JamRelay requires Node.js >=22.13.0.');
+    console.error(knownMessage('Node.js >=22.13.0 is required.'));
     return 1;
   }
   try {
@@ -73,7 +79,7 @@ export async function runCli(args: string[]) {
         console.error(help);
         return 2;
       }
-      const code = await (await import('./runtime/setup.js')).doctor();
+      const code = await (await import('./runtime/setup.js')).doctor(rest.includes('--json'));
       if (code === 0) await (await import('./cli/information.js')).passiveHint(args);
       return code;
     }
@@ -97,6 +103,8 @@ export async function runCli(args: string[]) {
       await (await import('./cli/information.js')).passiveHint(args);
     return code;
   } catch (error) {
+    const language = args.includes('--json') ? 'en' : errorLanguage(error);
+    const t = translator(language);
     // Never print validator input, env values, provider responses or stacks.
     const safe =
       error instanceof Error &&
@@ -105,16 +113,19 @@ export async function runCli(args: string[]) {
       );
     if (error && typeof error === 'object' && 'issues' in error && Array.isArray(error.issues)) {
       console.error(
-        'Invalid configuration fields: ' +
-          error.issues.map((issue: any) => issue.path.join('.')).join(', ') +
-          '. Run jamrelay config to correct them.',
+        t(
+          'Invalid configuration fields: {0}. Run jamrelay config to correct them.',
+          error.issues.map((issue: any) => issue.path.join('.')).join(', '),
+        ),
       );
       return 1;
     }
     console.error(
       safe
-        ? error.message
-        : 'JamRelay failed. Check configuration, provider fields and local file permissions; run jamrelay doctor.',
+        ? knownMessage(error.message, language)
+        : t(
+            'JamRelay failed. Check configuration, provider fields and local file permissions; run jamrelay doctor.',
+          ),
     );
     return 1;
   }

@@ -14,6 +14,19 @@ jamrelay start
 
 **Publication is pending.** A GitHub commit or development version does not imply that npm or GHCR artifacts exist. `jamrelay update check` inspects actual official distribution metadata.
 
+## CLI language
+
+The first interactive setup question is a numbered language menu: Polski (`pl`), English (`en`), Deutsch (`de`), Français (`fr`), Español (`es`). Enter a number or press Enter for the suggested language. The default follows `LC_ALL`, `LC_MESSAGES`, `LANG`, then the system locale; unsupported locales use English.
+
+Setup saves `JAMRELAY_LANGUAGE` in the selected private configuration. Subsequent commands reuse it, and `jamrelay config` offers the language menu again while preserving credentials, encryption keys, paths and provider settings. `JAMRELAY_LANGUAGE` in the environment overrides the saved preference; `JAMRELAY_CONFIG_PATH` selects which installation to read, including for `--help`.
+
+```bash
+JAMRELAY_LANGUAGE=pl jamrelay --help
+JAMRELAY_LANGUAGE=de jamrelay setup --yes
+```
+
+PowerShell: `$env:JAMRELAY_LANGUAGE = 'pl'`, then `jamrelay --help`. For Docker Compose, pass `-e JAMRELAY_LANGUAGE=fr` to `docker compose run --rm`. `setup --yes` never asks questions and saves the environment/saved/locale default. Localized confirmations also accept English `yes/no`. Command names, flags, provider IDs, URLs, JSON keys and machine-readable values remain unchanged; `--json` preserves the English interface. Provider data and release/notice content retain their original language.
+
 ## Development candidate archive
 
 From a checkout with development dependencies installed, build and install the actual archive reported by npm, without hardcoding a package version:
