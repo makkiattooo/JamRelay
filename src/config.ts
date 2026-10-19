@@ -42,7 +42,7 @@ const schema = z.object({
   PROVIDER_CREDENTIAL_STORE_PATH: dataPath('provider-credentials.json'),
   JAMRELAY_DATA_DIR: optionalNonEmpty,
   JAMRELAY_DB_PATH: optionalNonEmpty,
-  PORT: z.coerce.number().int().positive().default(DEFAULT_PORT),
+  PORT: z.coerce.number().int().min(1).max(65535).default(DEFAULT_PORT),
   HOST: z.string().default('0.0.0.0'),
   PUBLIC_BASE_URL: z.string().url(),
   LOG_LEVEL: z.string().default('info'),
@@ -90,8 +90,8 @@ const schema = z.object({
 
 export type Config = z.infer<typeof schema>;
 
-export function getConfig(): Config {
-  const c = schema.parse(process.env);
+export function getConfig(env: NodeJS.ProcessEnv = process.env): Config {
+  const c = schema.parse(env);
 
   const spotifyKeys = [
     'SPOTIFY_CLIENT_ID',
@@ -146,7 +146,7 @@ export function getConfig(): Config {
     configuredSoundCloudValues.length === soundCloudKeys.length ||
     configuredAppleMusicValues.length === appleMusicKeys.length ||
     configuredYoutubeValues.length === youtubeKeys.length ||
-    Boolean(process.env.PROVIDER_CREDENTIAL_STORE_PATH?.trim());
+    Boolean(env.PROVIDER_CREDENTIAL_STORE_PATH?.trim());
   if (encryptedStorageEnabled && !c.TOKEN_ENCRYPTION_KEY)
     throw new Error(
       'TOKEN_ENCRYPTION_KEY is required when encrypted credential storage is enabled',

@@ -1,3 +1,5 @@
+import { installationPaths } from './runtime/installation.js';
+import { APP_VERSION } from './version.js';
 import { pathToFileURL } from 'node:url';
 import { resolve, join } from 'node:path';
 import { readFile } from 'node:fs/promises';
@@ -45,7 +47,13 @@ export async function runOperator(
     let result: unknown;
     if (group === 'status')
       result = {
-        version: '1.4.0',
+        version: APP_VERSION,
+        configuration: installationPaths().config,
+        runtime: await fetch(`http://127.0.0.1:${process.env.PORT || 5267}/health`, {
+          signal: AbortSignal.timeout(500),
+        })
+          .then((r) => (r.ok ? 'reachable' : 'unhealthy'))
+          .catch(() => 'not reachable on loopback'),
         database: getDatabaseStatus(),
         providers_configured: [
           'SPOTIFY_CLIENT_ID',

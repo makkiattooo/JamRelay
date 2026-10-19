@@ -1,3 +1,4 @@
+import { APP_VERSION } from '../src/version.js';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -67,7 +68,7 @@ try {
   let base = await listening(server);
   const health = await fetch(base + '/health');
   assert.equal(health.status, 200);
-  assert.equal((await health.json()).version, '1.4.0');
+  assert.equal((await health.json()).version, APP_VERSION);
   assert.equal(
     (
       await fetch(base + '/mcp', {
@@ -88,7 +89,7 @@ try {
         clientInfo: { name: 'isolated-smoke', version: '1' },
       })
     ).serverInfo.version,
-    '1.4.0',
+    APP_VERSION,
   );
   const discovery = await rpc(base, 'tools/list');
   assert(discovery.tools.some((t: any) => t.name === 'commit_job'));

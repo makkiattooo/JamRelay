@@ -1,3 +1,4 @@
+import { APP_VERSION } from '../src/version.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/index.js';
 
@@ -28,7 +29,7 @@ describe('provider-neutral bootstrap', () => {
     const base = `http://127.0.0.1:${address.port}`;
     const health = await fetch(base + '/health');
     const healthBody: any = await health.json();
-    expect(healthBody.version).toBe('1.4.0');
+    expect(healthBody.version).toBe(APP_VERSION);
     expect((await fetch(base + '/auth/providers/spotify/start')).status).toBe(401);
     for (const path of [
       '/admin',

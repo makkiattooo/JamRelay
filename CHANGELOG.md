@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.0 — Development candidate
+
+- Prepare installable npm archive with unified `jamrelay` executable and package-relative runtime resources.
+- Add terminal setup/reconfiguration, private platform paths, preserved encryption material, environment automation and offline doctor diagnostics.
+- Reuse operator commands and the existing server/OAuth/SQLite migration system; no new schema migration.
+- Simplify Docker Compose to one persistent service and prepare explicit-release multi-architecture GHCR builds.
+- Publication pending; no npm/GHCR release or deployment.
+
 ## 1.4.0 — Development candidate
 
 - Require owner authentication, CSRF-protected explicit provider/replacement consent, one-time session-bound initiation and validated callbacks; retain MCP OAuth and all four providers.

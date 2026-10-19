@@ -30,6 +30,68 @@ Turn high-level requests into deterministic, inspectable and reversible music op
 
 ---
 
+## Install and run (1.5.0 candidate)
+
+Node.js **22.13+** is required. npm/GHCR publication is pending; the commands below apply after publication. Until then install the candidate tarball built with `npm pack`:
+
+```bash
+npm install -g ./jamrelay-1.5.0.tgz
+# After publication: npm install -g jamrelay
+jamrelay setup
+jamrelay start
+```
+
+After publication, `npx jamrelay setup`, `pnpm dlx jamrelay setup` and `bunx jamrelay setup` use the same package. The executable needs **Node.js**, including when a package manager is Bun. No source checkout or TypeScript compilation is needed by installed users.
+
+The terminal wizard creates private configuration, generates owner/encryption secrets, optionally configures any of the four providers, and initializes SQLite without resetting data. Providers need developer credentials and separate owner-approved account authorization. A zero-provider installation works. Keep your private configuration backed up: losing its encryption key makes encrypted credentials unrecoverable.
+
+```bash
+jamrelay --help
+jamrelay doctor
+jamrelay config
+jamrelay connections list
+jamrelay clients list
+jamrelay clients revoke CLIENT_ID
+jamrelay jobs list
+jamrelay jobs inspect JOB_ID
+jamrelay jobs cancel JOB_ID
+jamrelay jobs resume JOB_ID
+jamrelay diagnostics
+jamrelay backup create
+jamrelay backup list
+```
+
+Configuration uses platform user directories (XDG on Linux, Application Support on macOS, AppData on Windows). Existing `.env` deployments and environment path overrides are retained. `JAMRELAY_CONFIG_PATH` selects another private env file. `setup --yes` uses environment variables without prompts, through the same validation/persistence logic; do not put secrets in command arguments. After an interrupted process, installation locks expire within 30 seconds.
+
+### Docker
+
+The repository's `compose.yml` builds the candidate locally; it needs no tunnel, external network or pre-created volume:
+
+```bash
+docker compose run --rm jamrelay setup
+docker compose up -d
+docker compose ps
+docker compose logs -f jamrelay
+```
+
+SQLite, credentials and generated configuration persist in the `jamrelay_data` volume mounted at `/data`. The container runs as an unprivileged user. The host listener defaults to `127.0.0.1:5267`; set `JAMRELAY_PORT` for a different host port and use that port in the wizard's public URL. The internal listener stays on port 5267. Remote clients need an HTTPS reverse proxy and an appropriate `PUBLIC_BASE_URL`/trusted proxy configuration.
+
+Standalone image use after `docker build -t jamrelay:local .`:
+
+```bash
+docker run --rm jamrelay:local --version
+docker run --rm -it -v jamrelay_data:/data jamrelay:local setup
+docker run --rm -p 127.0.0.1:5267:5267 -v jamrelay_data:/data jamrelay:local start
+```
+
+GHCR is prepared at `ghcr.io/makkiattooo/jamrelay:1.5.0`; the image is **not published yet**. The container workflow builds amd64/arm64 and publishes only on an intentional matching version tag or explicit workflow publish action; branch pushes do not trigger it.
+
+### Connect an MCP client / upgrade
+
+Setup displays the actual remote endpoint (default `http://localhost:5267/mcp`). Enter it in a remote MCP client, complete owner OAuth consent, and request `tools/list` to verify. Provider authorization starts at `/auth/providers/PROVIDER/start` after `/owner/login`; there is no web admin console. Read the owner secret locally from the private configuration when logging in; never share it with agents.
+
+Upgrade from 1.4.0: stop the server, back up data plus private configuration, install the new package, then run `jamrelay doctor` and `jamrelay start`. Run from the old deployment directory once with `jamrelay config` to retain `.env` and make existing paths absolute; use `JAMRELAY_CONFIG_PATH` thereafter. Do not move data or regenerate keys. No new SQLite migration is required beyond 0012. Operator commands still work via `npm run operator -- ...` in a source checkout.
+
 ## What is JamRelay?
 
 JamRelay is a **self-hosted, provider-neutral music automation engine** that connects MCP clients to independent music-provider connections through a stateful automation layer.
@@ -293,7 +355,7 @@ See [State Database](docs/state-database.md).
 
 ---
 
-## Quick start
+## Source checkout (development)
 
 ### Requirements
 
@@ -421,7 +483,7 @@ Persistent state lives under:
 /data
 ```
 
-Production Compose deployments use the external `jamrelay_data` volume so recreating the application container does not destroy state.
+The recommended Compose file reuses the named `jamrelay_data` volume (override `JAMRELAY_VOLUME_NAME` when upgrading a differently named volume). The legacy VPS deployment script retains its existing app/tunnel topology via `compose.legacy.yml`; it is separate from the one-service installer and was not run for this candidate.
 
 The production container is designed around:
 
@@ -430,7 +492,7 @@ The production container is designed around:
 - dropped Linux capabilities,
 - `no-new-privileges`,
 - writable `/tmp`,
-- explicit internal networking.
+- persistent named storage.
 
 The VPS deployment workflow includes local checks, build verification, tarball upload, Compose validation, image build, controlled replacement, schema verification, health-gated rollout, public endpoint checks and rollback support.
 

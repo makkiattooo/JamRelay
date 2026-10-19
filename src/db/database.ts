@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { runtimePath } from '../runtime/installation.js';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
@@ -30,7 +31,7 @@ const defaultDataDir = () =>
   process.env.JAMRELAY_DATA_DIR?.trim() || path.resolve(process.cwd(), 'data');
 const defaultDbPath = (dataDir: string) =>
   process.env.JAMRELAY_DB_PATH?.trim() || path.join(dataDir, 'jamrelay.db');
-const defaultMigrationsDir = () => path.resolve(process.cwd(), 'db', 'migrations');
+const defaultMigrationsDir = () => runtimePath('db', 'migrations');
 
 function parseMigrationVersion(version: string): number {
   const match = migrationPattern.exec(version);

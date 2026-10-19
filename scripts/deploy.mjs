@@ -258,7 +258,7 @@ function assertLocalLayout() {
     'package-lock.json',
     'Dockerfile',
     '.dockerignore',
-    'compose.yml',
+    'compose.legacy.yml',
     'tsconfig.json',
     'src',
     'db',
@@ -477,7 +477,7 @@ compose() {
     CLOUDFLARE_TUNNEL_TOKEN="$cloudflare_token" \\
     docker compose \\
       -p "$project_name" \\
-      -f "$app_dir/compose.yml" \\
+      -f "$app_dir/compose.legacy.yml" \\
       "$@"
 }
 
@@ -953,8 +953,8 @@ if [ "$assets_changed" -eq 1 ]; then
 fi
 
 
-if [ ! -f "$app_dir/compose.yml" ]; then
-  echo "compose.yml missing after extraction." >&2
+if [ ! -f "$app_dir/compose.legacy.yml" ]; then
+  echo "compose.legacy.yml missing after extraction." >&2
   exit 1
 fi
 

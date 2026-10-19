@@ -1,5 +1,34 @@
 # Installation and deployment
 
+## Packaged installation (1.5.0)
+
+The npm package and GHCR image are prepared but not published yet. Build a candidate with `npm pack`, then install its archive:
+
+```bash
+npm install -g ./jamrelay-1.5.0.tgz
+jamrelay setup
+jamrelay start
+jamrelay doctor
+```
+
+After publication use `npm install -g jamrelay` or `npx jamrelay setup` (also `pnpm dlx` / `bunx`, with Node.js installed). The unified CLI retains all local operator commands. `jamrelay config` safely reopens setup; `setup --yes` reads environment variables for automation.
+
+Private configuration/data defaults follow XDG, macOS Application Support, or Windows AppData. Environment overrides and existing `.env` deployments are retained. Set `JAMRELAY_CONFIG_PATH` for an explicit private file; run reconfiguration from the original deployment directory to retain relative paths. Back up the encryption key separately from application backups. Stop the service before setup/reconfiguration.
+
+Recommended Docker flow (no tunnel or external network required):
+
+```bash
+docker compose run --rm jamrelay setup
+docker compose up -d
+docker compose logs -f jamrelay
+```
+
+The named `jamrelay_data` volume (override `JAMRELAY_VOLUME_NAME` for existing differently named volumes) persists `/data/jamrelay.env`, SQLite and credentials. Localhost port mapping is configurable with `JAMRELAY_PORT`; use the actual host port in the public URL. Images run `jamrelay start` using the same configuration model as npm.
+
+For remote MCP use reachable HTTPS plus a reverse proxy. Setup prints the actual `/mcp` endpoint; add it to your client, complete owner consent and verify with `tools/list`. Provider developer credentials are optional and never automatically provisioned.
+
+Upgrade 1.4.0 by stopping the server, backing up private configuration and data, installing the package and starting with the same paths/keys. Migration 0012 is preserved; no 1.5.0 migration is needed.
+
 ## Local development
 
 ```bash

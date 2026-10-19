@@ -1,7 +1,6 @@
 {
   "name": "jamrelay",
-  "version": "1.4.0",
-  "private": true,
+  "version": "1.5.0",
   "description": "Self-hosted provider-neutral MCP server for music automation across multiple providers.",
   "type": "module",
   "license": "AGPL-3.0-only",
@@ -10,9 +9,9 @@
   },
   "scripts": {
     "dev": "node --env-file=.env --watch --import tsx src/index.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "node -e \"require('node:fs').rmSync('dist', {recursive:true, force:true})\" && tsc -p tsconfig.json",
     "backup": "node --import tsx scripts/backup.ts",
-    "start": "node --env-file=.env dist/index.js",
+    "start": "node dist/cli.js start",
     "test": "vitest run --maxWorkers=1",
     "db:migration:new": "node --import tsx scripts/create-migration.ts",
     "deploy:vps": "node ./scripts/deploy.mjs",
@@ -30,13 +29,15 @@
     "docs:sync-translations": "node --import tsx scripts/sync-translation-hashes.ts",
     "prepare": "husky",
     "operator": "node --env-file-if-exists=.env --import tsx src/operator.ts",
-    "smoke:local": "node --import tsx scripts/smoke-local.ts"
+    "smoke:local": "node --import tsx scripts/smoke-local.ts",
+    "prepack": "npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/node": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",
     "express": "5.2.1",
     "pino": "9.14.0",
+    "proper-lockfile": "4.1.2",
     "zod": "4.6.2"
   },
   "devDependencies": {
@@ -51,5 +52,19 @@
     "typescript": "5.9.3",
     "vitepress": "1.6.4",
     "vitest": "3.2.7"
+  },
+  "bin": {
+    "jamrelay": "dist/cli.js"
+  },
+  "files": [
+    "dist/",
+    "db/migrations/*.sql",
+    "assets/",
+    "LICENSE",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/makkiattooo/JamRelay.git"
   }
 }
