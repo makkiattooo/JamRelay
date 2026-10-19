@@ -1,6 +1,6 @@
 {
   "name": "jamrelay",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "Self-hosted provider-neutral MCP server for music automation across multiple providers.",
   "type": "module",
   "license": "AGPL-3.0-only",
@@ -23,7 +23,7 @@
     "docs:build": "npm run docs:generate && vitepress build docs",
     "docs:preview": "vitepress preview docs",
     "check": "npm run docs:generate && npm run docs:check && npm run format:check && npm run lint && npm run typecheck && npm test && npm run build && npm run docs:build",
-    "docs:generate": "node --import tsx scripts/generate-docs.ts && prettier --write docs/environment-reference.md docs/tools-reference.md docs/pl/environment-reference.md docs/pl/tools-reference.md docs/de/environment-reference.md docs/de/tools-reference.md docs/fr/environment-reference.md docs/fr/tools-reference.md docs/es/environment-reference.md docs/es/tools-reference.md",
+    "docs:generate": "node --import tsx scripts/generate-docs.ts",
     "docs:check": "node --import tsx scripts/check-docs.ts",
     "release:check": "npm run check",
     "docs:sync-translations": "node --import tsx scripts/sync-translation-hashes.ts",

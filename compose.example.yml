@@ -1,3 +1,0 @@
-# The canonical, standalone configuration is compose.yml (Docker Compose >=2.20).
-include:
-  - compose.yml

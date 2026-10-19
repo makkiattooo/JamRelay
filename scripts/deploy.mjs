@@ -323,8 +323,6 @@ function buildTarball(tarballPath) {
     '--exclude=.env',
     '--exclude=.env.*',
 
-    '--exclude=docker-compose.yml',
-
     '--exclude=scripts/deploy.mjs',
 
     '--exclude=assets',

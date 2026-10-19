@@ -1,3 +1,4 @@
+import { APP_VERSION } from '../src/version.js';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -18,7 +19,7 @@ it('dispatches help/version without starting a server or requiring configuration
   expect(await runCli(['--help'])).toBe(0);
   expect(out.mock.calls.flat().join('')).toContain('setup');
   expect(await runCli(['--version'])).toBe(0);
-  expect(out.mock.calls.at(-1)?.[0]).toBe('1.5.1');
+  expect(out.mock.calls.at(-1)?.[0]).toBe(APP_VERSION);
   vi.spyOn(console, 'error').mockImplementation(() => {});
   expect(await runCli(['unknown'])).toBe(2);
 });

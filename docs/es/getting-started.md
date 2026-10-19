@@ -1,3 +1,11 @@
-# Inicio rápido
+# Primeros pasos
 
-Necesitas Node.js 22+ o Docker y una aplicación de Spotify Developer. Copia `.env.example` a `.env`, completa tus valores y ejecuta `npm ci` y `npm run dev`. Abre `/auth/spotify/login`, autoriza Spotify y conecta el cliente MCP a `/mcp`. Lee [instalación](/es/installation), [OAuth](/es/oauth) y [seguridad](/es/security) antes de exponerlo públicamente.
+Un servidor MCP autoalojado para Spotify, SoundCloud, Apple Music y YouTube.
+
+La guía inglesa es la fuente canónica para npm, archivos de desarrollo, Docker y datos persistentes.
+
+1. [Installation](/es/installation)
+2. [Music provider setup and owner authorization](/provider-connections)
+3. [Connect an MCP client](/clients/)
+
+English is canonical; these entry points link to maintained technical instructions. No provider account is required to start the server. Never share the owner secret with an AI agent.

@@ -1,56 +1,39 @@
 ---
 title: Konfiguracja
-translationReviewed: 2026-09-12
-sourceHash: 61ec5392803b
+translationReviewed: 2026-10-19
+sourceHash: 622a2cfce905
 ---
-
-> Translation freshness notice: provider authorization and operations changed in 1.4.0. Follow the [canonical English configuration](/configuration) and [upgrade guide](/operations) for current, secure instructions.
 
 # Konfiguracja
 
-Skopiuj `.env.example` do `.env`. Nie commituj `.env` ani runtime token stores. Kanoniczna tabela zmiennych jest generowana z `.env.example`, więc nie utrzymujemy pięciu ręcznych kopii.
+To aktualne polskie streszczenie. Pełny opis ustawień, przykładów i ograniczeń
+jest w [kanonicznej konfiguracji](/configuration), a tabela zmiennych jest
+[generowana z `.env.example`](/environment-reference).
 
-## Storage
+- Nową instalację konfiguruje `jamrelay setup`; istniejącą — `jamrelay config`.
+  Dla checkoutu developerskiego można nadal używać `.env`.
+- Katalogi zarządzanej instalacji są zależne od platformy; starsze wdrożenia
+  `.env` zachowują ścieżki. Docker przechowuje konfigurację i dane w `/data`.
+  Jawne ścieżki mają pierwszeństwo. Zobacz [instalację](/installation).
+- Poświadczenia dostawców trafiają do `provider-credentials.json`, osobno od
+  `mcp-oauth.json` i statycznego rejestru `mcp-oauth-clients.json`.
+  Nie commituj prywatnej konfiguracji ani magazynów tokenów.
+- `TOKEN_ENCRYPTION_KEY` koduje w base64 dokładnie 32 bajty. Właściciel używa
+  osobnego `MCP_OAUTH_OWNER_SECRET`. Kreator zachowuje istniejący klucz;
+  jego utrata uniemożliwia odczyt zaszyfrowanych danych.
+- Konfiguracja dostawców jest opcjonalna. Uzupełnij cały zestaw wymaganych pól
+  wybranego dostawcy albo pozostaw cały zestaw pusty. Apple Music wymaga
+  klucza Media Services i osobnego Music User Token; YouTube korzysta z
+  oficjalnego Data API, nie z API biblioteki YouTube Music.
+- `PUBLIC_BASE_URL` wskazuje rzeczywisty adres serwera. Zdalny dostęp wymaga
+  HTTPS. `TRUST_PROXY` ustaw tylko zgodnie z faktycznie zaufanym proxy.
+- `MCP_AUTH_MODE=none` wyłącza wyłącznie statyczny klucz API; nie otwiera
+  chronionego endpointu `/mcp`. `bearer` dodaje uwierzytelnianie `MCP_API_KEY`.
+- `MCP_OAUTH_DCR_ENABLED` kontroluje rejestrację klientów, a
+  `MCP_OAUTH_CLIENTS_PATH` wskazuje statyczny rejestr. Przykładem jest
+  `examples/mcp-oauth-clients.example.json`; rejestracja nie zastępuje zgody właściciela.
 
-Lokalnie:
-
-```text
-./data/spotify-token.json
-./data/mcp-oauth.json
-./data/mcp-oauth-clients.json
-```
-
-Docker production:
-
-```text
-/data/spotify-token.json
-/data/mcp-oauth.json
-/data/mcp-oauth-clients.json
-```
-
-## MCP authentication
-
-OAuth i opcjonalny Bearer mogą działać równolegle. `MCP_AUTH_MODE=bearer` włącza `MCP_API_KEY`; `MCP_AUTH_MODE=none` wyłącza tylko statyczny API key i **nie** otwiera chronionego przez OAuth `/mcp`. `.env.example` używa `none`, aby świeża konfiguracja nie wymagała pustego Bearer key.
-
-Owner approval:
-
-```dotenv
-MCP_OAUTH_OWNER_SECRET=<STRONG_RANDOM_SECRET>
-```
-
-DCR:
-
-```dotenv
-MCP_OAUTH_DCR_ENABLED=true
-```
-
-Klientów statycznych używa się przez `MCP_OAUTH_CLIENTS_PATH` i plik
-`examples/mcp-oauth-clients.example.json`.
-
-## Generowanie sekretów
-
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-```
-
-Używaj osobnych wartości dla encryption key, API key, OAuth client secret i owner secret. `TOKEN_ENCRYPTION_KEY` po dekodowaniu base64 musi mieć dokładnie 32 bajty.
+Opis zgody właściciela i dwóch niezależnych warstw autoryzacji znajduje się na
+stronie [OAuth](/pl/oauth). Parametry dostawców i ich ograniczenia opisują
+[przewodniki dostawców](/providers/). Operacje lokalne, w tym kopie zapasowe,
+są dostępne przez [CLI operatora](/operations), bez panelu administracyjnego WWW.

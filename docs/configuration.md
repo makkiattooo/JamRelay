@@ -5,7 +5,7 @@ description: Configure provider connections, the HTTP server, token storage and 
 
 # Configuration
 
-Copy `.env.example` to `.env`. Never commit `.env` or runtime token stores.
+Use `jamrelay setup` or `jamrelay config` for managed installations; source deployments may still copy `.env.example` to `.env`. Never commit private configuration or runtime token stores.
 
 The complete variable table is **generated from `.env.example`**:
 
@@ -26,7 +26,7 @@ When adding a variable, update the runtime schema and `.env.example`; do not han
 
 ## Storage defaults
 
-Local development:
+Managed installations use platform-specific directories chosen by setup; see [installation](/installation). Existing `.env` source deployments retain their paths. Legacy local development defaults:
 
 ```text
 ./data/mcp-oauth.json
@@ -114,8 +114,6 @@ MCP_OAUTH_OWNER_SECRET=<STRONG_RANDOM_SECRET>
 MCP_OAUTH_DCR_ENABLED=true
 ```
 
-### Static MCP clients
-
 ### Several pre-registered clients
 
 Use:
@@ -173,10 +171,6 @@ Use separate random values for the encryption key, API key, OAuth client secret,
 `PLAYLIST_READ_CONCURRENCY` controls the bounded worker count used for safe
 offset-based playlist pagination. Cursor-based providers remain sequential.
 
-## Owner authorization in 1.4.0
+## Provider authorization
 
-Set `MCP_OAUTH_OWNER_SECRET` privately. Visit `/owner/login`, sign in, then visit `/auth/providers/spotify/start`, `/auth/providers/soundcloud/start` or `/auth/providers/youtube/start` and explicitly approve the connection/replacement. GET no longer starts external OAuth. The same browser session must receive the callback. State/approval expires after ten minutes. No secret is passed in a query string.
-
-Keep Apple Music's existing `APPLE_MUSIC_TEAM_ID`, `APPLE_MUSIC_KEY_ID`, `APPLE_MUSIC_PRIVATE_KEY_PATH` and storefront configuration. Submit its Music User Token to `POST /auth/apple-music/user-token` with `x-jamrelay-owner-secret` and JSON `{"music_user_token":"..."}` over HTTPS. Use a private local client to load the header value; do not paste secrets into shared logs or URLs.
-
-Do not enable only a provider callback URL: all configuration keys in an optional provider group must be set together or all left empty. The [operator CLI](/operations) replaces web management. No queue service or additional database is needed.
+Follow the [owner consent flow](/oauth#secure-provider-oauth-without-a-dashboard) before connecting or replacing a provider account. Configure all required values in a provider group or leave the entire group empty. [Operations](/operations) describes local administration; no web management panel is required.

@@ -1,6 +1,6 @@
 # CLI updates and notices
 
-JamRelay 1.5.1 adds local information commands; none starts the server or opens SQLite:
+The CLI provides local information commands; none starts the server or opens SQLite:
 
 ```bash
 jamrelay info --json

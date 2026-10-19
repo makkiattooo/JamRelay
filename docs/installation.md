@@ -1,33 +1,59 @@
 # Installation and deployment
 
-## Packaged installation (1.5.0)
+## npm installation
 
-The npm package and GHCR image are prepared but not published yet. Build a candidate with `npm pack`, then install its archive:
+Requires Node.js 22.13 or later. Once the official npm package is published:
 
 ```bash
-npm install -g ./jamrelay-1.5.0.tgz
+npm install -g jamrelay
 jamrelay setup
 jamrelay start
-jamrelay doctor
 ```
 
-After publication use `npm install -g jamrelay` or `npx jamrelay setup` (also `pnpm dlx` / `bunx`, with Node.js installed). The unified CLI retains all local operator commands. `jamrelay config` safely reopens setup; `setup --yes` reads environment variables for automation.
+`npx jamrelay setup`, `pnpm dlx jamrelay setup` and `bunx jamrelay setup` use the same Node-based package after publication. The setup wizard configures private storage, owner security and optional provider credentials. Provider developer applications cannot be created automatically; follow the [provider guides](/providers/) to authorize accounts separately.
 
-Private configuration/data defaults follow XDG, macOS Application Support, or Windows AppData. Environment overrides and existing `.env` deployments are retained. Set `JAMRELAY_CONFIG_PATH` for an explicit private file; run reconfiguration from the original deployment directory to retain relative paths. Back up the encryption key separately from application backups. Stop the service before setup/reconfiguration.
+**Publication is pending.** A GitHub commit or development version does not imply that npm or GHCR artifacts exist. `jamrelay update check` inspects actual official distribution metadata.
 
-Recommended Docker flow (no tunnel or external network required):
+## Development candidate archive
+
+From a checkout with development dependencies installed, build and install the actual archive reported by npm, without hardcoding a package version:
+
+```bash
+npm ci
+npm pack --pack-destination /tmp
+```
+
+Then run `npm install -g <archive-path-printed-by-npm>` followed by `jamrelay setup` and `jamrelay start`. On Windows, use a writable temporary directory instead of `/tmp`. Installed users need neither TypeScript nor a source checkout.
+
+## Persistent configuration and upgrades
+
+The wizard uses XDG directories on Linux, Application Support on macOS and AppData on Windows. Existing `.env` deployments and environment path overrides are retained. `JAMRELAY_CONFIG_PATH` selects a private configuration file; run `jamrelay config` from the original deployment directory to preserve existing relative paths as absolute paths.
+
+Stop the server before reconfiguration or upgrades. Back up data **and** private configuration, preserve encryption keys, install the new package, run `jamrelay doctor`, then `jamrelay start`. Do not silently move data or replace keys. See [operations](/operations) for migration/recovery details and the [CLI reference](/cli-information) for update channels and offline notices.
+
+## Docker Compose (recommended)
+
+The repository's `compose.yml` builds locally and needs no tunnel, external network or pre-created volume:
 
 ```bash
 docker compose run --rm jamrelay setup
 docker compose up -d
+docker compose ps
 docker compose logs -f jamrelay
 ```
 
-The named `jamrelay_data` volume (override `JAMRELAY_VOLUME_NAME` for existing differently named volumes) persists `/data/jamrelay.env`, SQLite and credentials. Localhost port mapping is configurable with `JAMRELAY_PORT`; use the actual host port in the public URL. Images run `jamrelay start` using the same configuration model as npm.
+The named `jamrelay_data` volume persists `/data/jamrelay.env`, SQLite and credentials. Set `JAMRELAY_VOLUME_NAME` to an existing differently named volume when upgrading. Host binding defaults to `127.0.0.1:5267`; `JAMRELAY_PORT` changes the host port, while the container listener stays on 5267. Set the public URL to the actual host port during setup.
 
-For remote MCP use reachable HTTPS plus a reverse proxy. Setup prints the actual `/mcp` endpoint; add it to your client, complete owner consent and verify with `tools/list`. Provider developer credentials are optional and never automatically provisioned.
+`compose.legacy.yml` retains the existing app/tunnel topology used by `scripts/deploy.mjs`. It is for that established deployment workflow, not a second recommended installer. Root Compose aliases have been removed; use `docker compose` or `docker compose -f compose.yml`.
 
-Upgrade 1.4.0 by stopping the server, backing up private configuration and data, installing the package and starting with the same paths/keys. Migration 0012 is preserved; no 1.5.0 migration is needed.
+For a standalone image, build with `docker build -t jamrelay:local .`, then:
+
+```bash
+docker run --rm -it -v jamrelay_data:/data jamrelay:local setup
+docker run --rm -p 127.0.0.1:5267:5267 -v jamrelay_data:/data jamrelay:local start
+```
+
+Official images, when intentionally published, use `ghcr.io/makkiattooo/jamrelay` with the selected published tag. Preserve `/data` when replacing containers. Version tags and optional explicit workflow dispatch control GHCR publication; development-branch pushes do not publish images.
 
 ## Local development
 
@@ -55,21 +81,6 @@ npm ci
 npm run build
 npm start
 ```
-
-## Docker
-
-```bash
-docker build -t jamrelay .
-docker run --env-file .env -p 127.0.0.1:5267:5267 -v jamrelay-data:/data jamrelay
-```
-
-## Docker Compose
-
-```bash
-docker compose up -d --build
-```
-
-The example binds to localhost, persists `/data`, drops privileges in the image, and includes a health check. Put an HTTPS reverse proxy in front of it for remote clients.
 
 ## VPS, home server, or NAS
 
@@ -140,8 +151,6 @@ Run `cloudflared` separately, map only the intended hostname, and store its cred
 - Healthchecks monitor liveness; an authenticated read monitors Spotify connectivity.
 - Logs are protected and have a retention policy.
 
-## Initialize without provider accounts
+## Start without provider accounts
 
-Use Node.js 22.13 or later. After copying `.env.example`, clear entire optional provider configuration groups (including redirect URIs) to boot with no provider credentials. Set `PUBLIC_BASE_URL`, `MCP_OAUTH_OWNER_SECRET`, and a strong 32-byte base64 `TOKEN_ENCRYPTION_KEY` before connecting providers. Generate the key locally with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"` and store it privately in `.env`.
-
-`npm run operator -- status` or application startup initializes SQLite and applies migrations without resetting existing data. `npm run operator -- connections list` requires the matching encryption key. Follow [operations](/operations) for upgrading an existing installation; never generate a replacement key over existing encrypted records.
+Skip providers during setup. For `.env` deployments, leave complete optional provider groups empty. Keep owner security configured before authorizing accounts. See [configuration](/configuration) and [provider connections](/provider-connections) for the required fields; never replace an existing encryption key.

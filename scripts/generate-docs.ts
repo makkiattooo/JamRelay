@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { format, resolveConfig } from 'prettier';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +8,8 @@ import { registerTools } from '../src/mcp/tools.js';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const docs = resolve(root, 'docs');
 const locales = ['pl', 'de', 'fr', 'es'] as const;
+const writeMarkdown = async (path: string, contents: string) =>
+  writeFile(path, await format(contents, { ...(await resolveConfig(path)), filepath: path }));
 
 type CapturedTool = {
   name: string;
@@ -127,7 +130,7 @@ for (const tool of [...captured.values()].sort((a, b) => a.name.localeCompare(b.
   toolLines.push('');
 }
 
-await writeFile(resolve(docs, 'tools-reference.md'), `${toolLines.join('\n')}\n`);
+await writeMarkdown(resolve(docs, 'tools-reference.md'), `${toolLines.join('\n')}\n`);
 
 const envText = await readFile(resolve(root, '.env.example'), 'utf8');
 const envLines = envText.split(/\r?\n/);
@@ -184,7 +187,7 @@ for (const variable of variables) {
   if (variable.notes.length) envDoc.push(`- **Notes:** ${variable.notes.join(' ')}`);
   envDoc.push('');
 }
-await writeFile(resolve(docs, 'environment-reference.md'), `${envDoc.join('\n')}\n`);
+await writeMarkdown(resolve(docs, 'environment-reference.md'), `${envDoc.join('\n')}\n`);
 
 const stubCopy = {
   pl: {
@@ -217,11 +220,11 @@ for (const locale of locales) {
   const dir = resolve(docs, locale);
   await mkdir(dir, { recursive: true });
   const copy = stubCopy[locale];
-  await writeFile(
+  await writeMarkdown(
     resolve(dir, 'tools-reference.md'),
     `---\ntitle: ${copy.title}\n---\n\n# ${copy.title}\n\n${copy.body}\n\n[${copy.tools}](/tools-reference)\n`,
   );
-  await writeFile(
+  await writeMarkdown(
     resolve(dir, 'environment-reference.md'),
     `---\ntitle: ${copy.title}\n---\n\n# ${copy.title}\n\n${copy.body}\n\n[${copy.env}](/environment-reference)\n`,
   );

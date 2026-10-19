@@ -1,29 +1,34 @@
 # Getting started
 
-## Requirements
+JamRelay is a self-hosted MCP server for Spotify, SoundCloud, Apple Music and
+YouTube. You can start with no connected providers. Provider features differ;
+Spotify playback requires an eligible account and active device.
 
-- Node.js 22 or newer, or Docker.
-- A provider application only if you want provider-backed operations immediately.
-- A Spotify Premium account and active device only for Spotify playback controls.
+## 1. Install and configure
 
-## Quick start
+Follow the canonical [installation guide](/installation) for npm, development
+archives, source checkouts or Docker. Run `jamrelay setup` to configure private
+storage, owner security and optional providers. Node.js 22.13 or later is required
+for the Node executable.
 
-```bash
-npm ci
-cp .env.example .env
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-npm run dev
-```
+## 2. Authorize your music accounts
 
-Fill `PUBLIC_BASE_URL`, `MCP_OAUTH_OWNER_SECRET` and `TOKEN_ENCRYPTION_KEY` in `.env`. Provider blocks
-are optional, but each configured block must be complete. For a protected
-remote deployment, use `MCP_AUTH_MODE=bearer` with a strong `MCP_API_KEY`, or
-configure MCP OAuth as described in [MCP authentication](/oauth).
+Obtain developer credentials for the [providers](/providers/) you want to use.
+Sign in at `/owner/login`, open `/auth/providers/PROVIDER/start` and explicitly
+approve the connection. Complete the callback in the same browser.
+[Provider connections](/provider-connections) explains Apple Music's separate
+MusicKit token flow and connection restrictions.
 
-Sign in at `http://127.0.0.1:5267/owner/login` with the configured owner secret. Then open `/auth/providers/spotify/start` and explicitly approve connection or replacement. Check `/health` for readiness and `npm run operator -- status` for local status. The MCP endpoint is `/mcp`; its OAuth consent remains separate. Use the [operator CLI](/operations) for local operations.
+## 3. Connect your AI client
 
-## Features implemented
+Add the `/mcp` URL shown by setup to a [compatible client](/clients/). Complete
+owner OAuth consent for the connections and permissions you want to grant.
+Request `tools/list` to verify discovery. Provider login and MCP consent are
+separate operations; never give your owner secret to an AI agent.
 
-Search and entity reads, current-user playlists, playlist contents and writes, saved tracks, top and recent items, current playback, devices, play/pause/next/previous, seek, volume, transfer playback, deterministic track lookup, bulk playlist operations, deduplication, and playlist statistics.
+## 4. Try a workflow
 
-The `get_artist_top_tracks` tool remains registered and reports `spotify_feature_removed`, because the corresponding Spotify endpoint was removed. See the [tool reference](/tools).
+Start with a read operation or [playlist dry run](/playlist-automation). Consult
+the [tool reference](/tools-reference) for arguments and [provider capabilities](/providers/capabilities)
+for limitations. Use the [operator CLI](/operations) to inspect jobs, revoke
+clients or create backups. Read [security](/security) before exposing the service.

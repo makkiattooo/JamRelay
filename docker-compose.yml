@@ -1,3 +1,0 @@
-# Compatibility filename. The canonical configuration is compose.yml.
-include:
-  - compose.yml

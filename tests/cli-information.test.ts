@@ -1,3 +1,5 @@
+import { APP_VERSION } from '../src/version.js';
+import semver from 'semver';
 import { beforeEach, afterEach, it, expect, vi } from 'vitest';
 import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -154,18 +156,19 @@ it('handles development versions, genuine 404s, GitHub prereleases, and verified
   );
   expect((await updateSummary({ refresh: true })).state).toBe('not_published');
   vi.stubEnv('JAMRELAY_INSTALL_MODE', 'docker');
+  const nextVersion = semver.inc(APP_VERSION, 'patch')!;
   const fetch = vi
     .fn()
     .mockResolvedValueOnce(new Response(JSON.stringify({ token: 'public-registry-token' })))
     .mockResolvedValueOnce(
       new Response(
-        JSON.stringify({ name: 'makkiattooo/jamrelay', tags: ['1.6.0-beta.10', '1.5.2'] }),
+        JSON.stringify({ name: 'makkiattooo/jamrelay', tags: ['1.6.0-beta.10', nextVersion] }),
       ),
     );
   vi.stubGlobal('fetch', fetch);
   const docker = await updateSummary({ refresh: true });
   expect(docker.state).toBe('update_available');
-  expect(docker.command).toBe('docker pull ghcr.io/makkiattooo/jamrelay:1.5.2');
+  expect(docker.command).toBe(`docker pull ghcr.io/makkiattooo/jamrelay:${nextVersion}`);
   expect(fetch.mock.calls[1][1].headers.get('Authorization')).toBe('Bearer public-registry-token');
 });
 it('emits JSON only, works offline with bundled fallback, rejects bad arguments, and never opens SQLite or fetches in JSON info', async () => {
@@ -176,7 +179,7 @@ it('emits JSON only, works offline with bundled fallback, rejects bad arguments,
   vi.spyOn(console, 'error').mockImplementation(() => {});
   expect(await runCli(['info', '--json'])).toBe(0);
   const json = output.mock.calls.map((c) => String(c[0])).join('');
-  expect(JSON.parse(json).application.version).toBe('1.5.1');
+  expect(JSON.parse(json).application.version).toBe(APP_VERSION);
   expect(json).not.toContain('SECRET_CANARY');
   expect(fetch).not.toHaveBeenCalled();
   expect(existsSync(join(root, 'data', 'jamrelay.db'))).toBe(false);

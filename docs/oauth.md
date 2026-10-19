@@ -26,8 +26,7 @@ Provider credentials are stored through the encrypted connection store.
 - owner approval protected by `MCP_OAUTH_OWNER_SECRET`.
 
 After approval, the consent screen records the selected provider connections and
-operation permissions in the MCP grant. The owner can review, replace, or
-revoke grants through the local operator CLI (`clients revoke CLIENT_ID`). Tokens without a current grant are
+operation permissions in the MCP grant. Use the local CLI to inspect clients/grants (`clients list`) or revoke a client (`clients revoke CLIENT_ID`). Repeat owner consent to change a grant. Tokens without a current grant are
 rejected and must be authorized again.
 
 ## Authorization screen

@@ -18,6 +18,19 @@ const exists = async (path: string) => {
 
 const errors: string[] = [];
 const warnings: string[] = [];
+// Known UTF-8/Windows-1252 mojibake markers, not a ban on legitimate Unicode.
+const mojibake =
+  /\uFFFD|\u00C2[\u00A0\u00B7]|\u00C3[\u00A0-\u00BF]|\u00E2[\u0080-\u00BF\u20AC\u2020\u2021\u201D]/u;
+const decodeUtf8 = async (file: string) => {
+  try {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(await readFile(file));
+    if (mojibake.test(text)) errors.push(`Corrupted Unicode in ${file}`);
+    return text;
+  } catch {
+    errors.push(`Invalid UTF-8 in ${file}`);
+    return '';
+  }
+};
 const obsoleteClaims = [
   'Dynamic Client Registration is not implemented',
   'Dynamic Client Registration ist nicht implementiert',
@@ -51,8 +64,19 @@ const walk = async (dir: string): Promise<string[]> => {
   return out;
 };
 
+const readme = await decodeUtf8(resolve(root, 'README.md'));
+if (readme.trimEnd().split('\n').length > 150)
+  errors.push('README must remain a concise landing page (maximum 150 lines).');
+for (const match of readme.matchAll(/\[[^\]]*\]\(([^)]+)\)/g)) {
+  const target = match[1].split('#')[0];
+  if (target && !/^(https?:|mailto:)/.test(target) && !(await exists(resolve(root, target))))
+    errors.push(`Broken README link: ${target}`);
+}
+for (const file of ['CHANGELOG.md', 'docs/.vitepress/navigation.mts', 'docs/.vitepress/config.mts'])
+  await decodeUtf8(resolve(root, file));
+
 for (const file of await walk(docsRoot)) {
-  const text = await readFile(file, 'utf8');
+  const text = await decodeUtf8(file);
 
   for (const claim of obsoleteClaims) {
     if (text.includes(claim))
@@ -90,8 +114,7 @@ for (const file of await walk(docsRoot)) {
       const relative = clean.replace(/\/$/, '/index');
       candidate = resolve(dirname(file), relative.endsWith('.md') ? relative : `${relative}.md`);
     }
-    if (!(await exists(candidate)))
-      warnings.push(`Possible broken docs link in ${file}: ${target}`);
+    if (!(await exists(candidate))) errors.push(`Broken docs link in ${file}: ${target}`);
   }
 }
 

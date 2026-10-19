@@ -61,15 +61,15 @@ A shared playlist mutation service now provides a clearer execution lifecycle fo
 
 ```text
 READ
-  â†“
+  ↓
 PLAN
-  â†“
+  ↓
 SNAPSHOT
-  â†“
+  ↓
 EXECUTE
-  â†“
+  ↓
 VERIFY
-  â†“
+  ↓
 RECORD
 ```
 

@@ -1,15 +1,23 @@
 # JamRelay
 
-Samodzielnie hostowany serwer MCP łączący asystentów AI z własnym kontem Spotify.
+Samodzielnie hostowany serwer MCP łączący asystentów AI ze Spotify,
+SoundCloud, Apple Music i YouTube. Pomaga wyszukiwać muzykę, porządkować
+playlisty i wykonywać powtarzalne operacje z kontrolą dostępu właściciela.
 
-[Szybki start](/pl/getting-started) · [Konfiguracja](/pl/configuration) · [Narzędzia MCP](/pl/tools)
+## Od czego zacząć?
 
-> **Projekt nieoficjalny.** JamRelay nie jest powiązany ze Spotify, OpenAI, Anthropic, Google ani innymi dostawcami platform AI.
+1. Przeczytaj [szybki start](/pl/getting-started) i [instalację](/pl/installation).
+2. Skonfiguruj wybrany [serwis muzyczny](/providers/) i autoryzuj połączenie.
+3. Dodaj adres MCP do [ChatGPT, Claude lub innego klienta](/pl/clients/).
+4. Korzystaj z [narzędzi MCP](/tools-reference) i [poradników automatyzacji](/playlist-automation).
 
-JamRelay udostępnia wyszukiwanie, biblioteki, playlisty, odkrywanie muzyki i sterowanie odtwarzaniem przez MCP. Istnieją dwa niezależne poziomy uwierzytelniania: klient AI → serwer MCP oraz serwer MCP → Spotify.
+Konto dostawcy nie jest wymagane do uruchomienia serwera. Dostępne możliwości
+zależą od serwisu; autoryzacja konta muzycznego i zgoda dla klienta AI to
+osobne kroki. Administracja odbywa się przez lokalne CLI, bez panelu WWW.
 
-## Języki
+Angielska dokumentacja jest kanoniczna. Polskie strony zawierają podstawowe
+instrukcje i odnośniki do pełnych referencji; nieaktualne tłumaczenia są oznaczone.
 
-[English](/) · [Polski](/pl/) · [Deutsch](/de/) · [Français](/fr/) · [Español](/es/)
+[English](/) · [Deutsch](/de/) · [Français](/fr/) · [Español](/es/)
 
-Pełna struktura dokumentacji jest dostępna poniżej; przykłady poleceń, nazw zmiennych, ścieżek API i nazw narzędzi pozostają nieprzetłumaczone.
+Projekt nie jest powiązany z dostawcami muzyki ani platform AI.

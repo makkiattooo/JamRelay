@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.2
+
+- Shorten the project landing page and simplify documentation navigation, installation guidance and Polish entry points.
+- Repair corrupted Unicode and add lightweight documentation encoding/link checks.
+- Keep package metadata authoritative for versioning; remove version-dependent test expectations and redundant release text.
+- Remove obsolete root reports and Compose aliases; retain the deployment script’s legacy configuration and historical documentation URLs.
+- No MCP, OAuth, provider, queue or SQLite behavior changes.
+
 ## 1.5.1 — Development candidate
 
 - Add `info`, update checks/channels, changelog, project notices and notification preferences to the existing CLI without opening SQLite.
@@ -347,7 +355,7 @@ v1.1.0 ships:
 
 High-level lifecycle:
 
-`ANALYZE â†’ PLAN â†’ DRY RUN â†’ SNAPSHOT â†’ EXECUTE â†’ VERIFY â†’ RECORD`
+`ANALYZE → PLAN → DRY RUN → SNAPSHOT → EXECUTE → VERIFY → RECORD`
 
 #### Rules and recipes
 
