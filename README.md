@@ -345,7 +345,7 @@ Start:
 npm run dev
 ```
 
-Authorize Spotify:
+Sign in at `http://127.0.0.1:5267/owner/login` using the configured owner secret, then approve the exact Spotify connection/replacement:
 
 ```text
 http://127.0.0.1:5267/auth/providers/spotify/start
@@ -354,7 +354,7 @@ http://127.0.0.1:5267/auth/providers/spotify/start
 Check:
 
 ```text
-http://127.0.0.1:5267/auth/status
+npm run operator -- status
 http://127.0.0.1:5267/health
 ```
 
@@ -561,10 +561,11 @@ Read:
 
 Latest release:
 
-[**JamRelay v1.3.0 â€” Production Hardening & Admin Console**](https://github.com/makkiattooo/JamRelay/releases/tag/v1.3.0)
+[**JamRelay v1.3.0 â€” Historical 1.3.0 release**](https://github.com/makkiattooo/JamRelay/releases/tag/v1.3.0)
 
 Release notes:
 
+- [JamRelay 1.4.0 development candidate](docs/release-1.4.0.md)
 - [JamRelay 1.3.0](docs/release-1.3.0.md)
 - [JamRelay 1.2.0](docs/release-1.2.0.md)
 
@@ -594,3 +595,9 @@ Spotify and other product names and trademarks belong to their respective owners
 **Music automation you can run yourself.**
 
 </div>
+
+## 1.4.0 development candidate
+
+Provider authorization now requires a short-lived owner login and explicit connection/replacement consent. The web management interface is removed. Use `npm run operator -- status`, `connections list`, `clients list`, `clients revoke CLIENT_ID`, `jobs list/inspect/cancel/resume ID`, `diagnostics`, and `backup create/list` for local operation. MCP OAuth and all four provider integrations remain available.
+
+SQLite migration 0012 preserves existing data and adds atomic job claims, client-scoped access, cancellation protection, retry scheduling and at-most-once automatic commit reservation. Uncertain writes require manual reconciliation; they are never automatically replayed. [Upgrade and recovery instructions](docs/operations.md) describe compatibility changes and backups. This candidate has not been published or deployed.

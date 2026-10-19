@@ -6,6 +6,10 @@ import { writeChunks, writePlaylistOrder } from '../providers/write-operation.js
 import { createLegacyResolver } from './legacy-resolver.js';
 import {
   cancelJob,
+  reserveJobCommit,
+  finishJobCommit,
+  resumeJob,
+  isJobCancelled,
   createJob,
   getJob,
   getJobItems,
@@ -39,6 +43,7 @@ import { PlaylistMutationService } from '../playlists/mutation-service.js';
 import { PlaylistGateway as PlaylistGatewayImpl } from '../providers/playlist-gateway.js';
 import { ProviderRegistry } from '../providers/registry.js';
 import type { ProviderHttpClient } from '../providers/http-client.js';
+import { JOB_TYPES } from '../db/job-runner.js';
 import { toolContext } from './context.js';
 import type { TrackResolutionService } from '../music/resolver-service.js';
 import { createLegacyProviderRegistry } from './legacy-provider-registry.js';
@@ -817,10 +822,34 @@ export function registerAdvanced(
   });
   const waitingJob = (type: string, payload: unknown, items: unknown[], report?: any[]) => {
     if (!isDatabaseInitialized()) return undefined;
-    const jobId = createJob(type, payload, items);
+    const input = (payload ?? {}) as any;
+    const target =
+      !input.dry_run && playlists && typeof playlists.assertSupported === 'function'
+        ? playlists.assertSupported(
+            type === 'create_playlist_from_tracks' ? 'create' : 'add',
+            input,
+          )
+        : undefined;
+    const jobId = createJob(
+      type,
+      {
+        ...input,
+        ...(target
+          ? { provider: target.summary.provider, connection_id: target.summary.connectionId }
+          : {}),
+      },
+      items,
+    );
+    const job = getJob(jobId, 0, 1);
     if (report)
       report.forEach((item, index) => {
-        if (item.status !== 'waiting')
+        // Legacy synchronous helpers use the Spotify resolver. Never carry a
+        // Spotify resolution into a deferred operation for another provider.
+        const sameTarget =
+          job.provider === 'spotify'
+            ? !item.provider || item.provider === 'spotify'
+            : item.provider === job.provider && item.connection_id === job.connectionId;
+        if (item.status !== 'waiting' && sameTarget)
           updateJobItem(
             getJobItems(jobId)[index].id,
             item.status === 'matched' ? 'completed' : 'failed',
@@ -829,11 +858,11 @@ export function registerAdvanced(
             item.errorId,
           );
       });
-    const state = getRateLimit('spotify', 'search');
+    const state = getRateLimit(job.provider, 'search', job.connectionId);
     setJobStatus(
       jobId,
       'waiting',
-      state?.blockedUntil ?? Date.now() + 60000,
+      state?.blockedUntil ?? Date.now() + (job.provider === 'spotify' ? 60000 : 0),
       report?.find((x) => x.errorId)?.errorId,
     );
     return jobId;
@@ -1128,7 +1157,7 @@ export function registerAdvanced(
         title: 'Create bulk job',
         description: 'Persist a bulk track operation for later processing.',
         inputSchema: {
-          type: z.string().min(1).max(100),
+          type: z.enum(JOB_TYPES),
           payload: z.record(z.string(), z.unknown()).default({}),
           items: z.array(z.record(z.string(), z.unknown())).min(1).max(10000),
           max_attempts: z.number().int().min(1).max(20).default(5),
@@ -1136,7 +1165,16 @@ export function registerAdvanced(
       },
       async (a: any) =>
         text({
-          job_id: createJob(a.type, a.payload, a.items, a.max_attempts),
+          job_id: createJob(
+            a.type,
+            {
+              ...a.payload,
+              connection_id: a.payload.connection_id ?? a.connection_id,
+              provider: a.payload.provider ?? a.provider,
+            },
+            a.items,
+            a.max_attempts,
+          ),
           job_status: 'pending',
         }),
     );
@@ -1179,14 +1217,17 @@ export function registerAdvanced(
       async (a: any) => {
         const job = getJob(a.job_id, 0, 1);
         if (!job) return text({ error: 'job_not_found' });
-        if (job.status === 'cancelled' || job.status === 'completed')
-          return text({ error: 'invalid_resume_state', job_status: job.status });
-        const state = getRateLimit('spotify', 'search');
-        if (state) {
-          setJobStatus(a.job_id, 'waiting', state.blockedUntil ?? Date.now() + 60000);
+        if (!resumeJob(a.job_id))
+          return text({
+            error: 'invalid_resume_state',
+            job_status: job.status,
+            manual_review: Boolean(job.manualReview || job.payload.manual_review),
+          });
+        const state = getRateLimit(job.provider, 'search', job.connectionId);
+        if (state && (state.blockedUntil ?? 0) > Date.now()) {
+          setJobStatus(a.job_id, 'waiting', state.blockedUntil ?? undefined);
           return text({ job_id: a.job_id, job_status: 'waiting', run_after: state.blockedUntil });
         }
-        setJobStatus(a.job_id, 'pending', Date.now());
         return text({
           job_id: a.job_id,
           job_status: 'pending',
@@ -1199,18 +1240,27 @@ export function registerAdvanced(
       'commit_job',
       {
         title: 'Commit job',
-        description: 'Commit a ready durable job with ordered, chunked Spotify writes.',
+        description:
+          'Commit a ready durable job once, using its original provider connection. Uncertain outcomes require local operator review.',
         inputSchema: { job_id: z.number().int().positive() },
       },
       async (a: any) => {
         const job = getJob(a.job_id, 0, 1);
         if (!job) return text({ error: 'job_not_found' });
         const payload = job.payload as any;
+        if (job.status === 'completed' && job.commitState === 'completed')
+          return text({
+            job_id: a.job_id,
+            job_status: 'completed',
+            result: job.result ? JSON.parse(job.result) : payload.commit_result,
+          });
         if (
           payload.phase !== 'ready_to_commit' ||
           ['cancelled', 'completed'].includes(String(job.status))
         )
           return text({ job_id: a.job_id, job_status: job.status, error: 'invalid_commit_state' });
+        if (!JOB_TYPES.includes(job.type))
+          return text({ job_id: a.job_id, error: 'UNKNOWN_JOB_TYPE' });
         const rows = getJobItems(a.job_id);
         const unresolved = rows.filter((x) => x.status !== 'completed');
         if (payload.strict !== false && unresolved.length)
@@ -1219,114 +1269,246 @@ export function registerAdvanced(
             error: 'unresolved_items',
             unresolved_count: unresolved.length,
           });
-        let uris = rows
-          .filter((x) => x.status === 'completed')
-          .sort((x, y) => x.position - y.position)
-          .map((x) => {
-            const item: any = x.payload ? JSON.parse(x.payload) : {};
-            return item.resolution?.uri;
-          })
-          .filter(Boolean);
-        if (payload.skip_duplicates) uris = [...new Set(uris)];
-        if (payload.skip_existing && payload.playlist_id) {
-          const existing = new Set(
-            (await allPlaylistItems(pid({ playlist_id: payload.playlist_id })))
-              .map((x: any) => x.item?.uri)
-              .filter(Boolean),
+        const wrongTarget = rows.some((row) => {
+          if (row.status !== 'completed') return false;
+          const resolution = JSON.parse(row.payload ?? '{}').resolution;
+          return (
+            resolution &&
+            ((resolution.provider && resolution.provider !== job.provider) ||
+              (resolution.connection_id && resolution.connection_id !== job.connectionId) ||
+              (job.provider !== 'spotify' && String(resolution.uri ?? '').startsWith('spotify:')))
           );
-          uris = uris.filter((uri) => !existing.has(uri));
-        }
-        if (payload.dry_run) {
-          const dryRunResult = { dry_run: true, requested_count: uris.length, uris };
-          updateJobPayload(a.job_id, {
-            ...payload,
-            phase: 'completed',
-            dry_run: true,
-            commit_result: dryRunResult,
-          });
-          setJobStatus(a.job_id, 'completed');
+        });
+        if (wrongTarget)
           return text({
             job_id: a.job_id,
-            job_status: 'completed',
-            phase: 'completed',
-            ...dryRunResult,
+            error: 'RESOLUTION_TARGET_MISMATCH',
+            provider: job.provider,
+            connection_id: job.connectionId,
           });
-        }
         try {
-          updateJobPayload(a.job_id, {
-            ...payload,
-            phase: 'committing',
-            commit_started_at: Date.now(),
-            commit_operation: job.type,
-          });
-          setJobStatus(a.job_id, 'running');
-          let playlistId = payload.playlist_id as string | undefined;
-          let playlist: any;
-          if (job.type === 'create_playlist_from_tracks') {
-            playlist = playlists
-              ? await playlists.create(
-                  {
-                    name: payload.name,
-                    description: payload.description ?? '',
-                    public: payload.public ?? false,
-                  },
-                  {
-                    connection_id: payload.connection_id as string | undefined,
-                    provider: payload.provider as string | undefined,
-                    preferred_connection_id: payload.preferred_connection_id as string | undefined,
-                  },
-                )
-              : await c.json('/me/playlists', {
-                  name: payload.name,
-                  description: payload.description ?? '',
-                  public: payload.public ?? false,
-                });
-            playlistId = playlist.id;
+          const target = { provider: job.provider, connection_id: job.connectionId };
+          if (!payload.dry_run) {
+            if (playlists && typeof playlists.assertSupported === 'function') {
+              playlists.assertSupported('add', target);
+              if (job.type === 'create_playlist_from_tracks')
+                playlists.assertSupported('create', target);
+            } else if (!playlists && job.provider !== 'spotify')
+              throw new Error('CAPABILITY_UNAVAILABLE');
           }
-          if (!playlistId) return text({ job_id: a.job_id, error: 'playlist_id_required' });
-          const result: any = playlists
-            ? await playlists.add(playlistId, uris, {
-                connection_id: payload.connection_id as string | undefined,
-                provider: payload.provider as string | undefined,
-                preferred_connection_id: payload.preferred_connection_id as string | undefined,
-              })
-            : await writeChunks(`job:${job.type}`, playlistId, uris, async (part) =>
-                c.json('/playlists/' + playlistId + '/items', { uris: part }),
-              );
-          if (!result.ok) {
-            updateJobPayload(a.job_id, {
-              ...payload,
-              phase: 'failed',
-              commit_result: result,
-              manual_review: Boolean(result.partial),
-            });
-            setJobStatus(a.job_id, 'failed');
-            return text({ job_id: a.job_id, job_status: 'failed', result });
-          }
-          updateJobPayload(a.job_id, {
-            ...payload,
-            phase: 'completed',
-            playlist_id: playlistId,
-            playlist,
-            commit_result: result,
-          });
-          setJobStatus(a.job_id, 'completed');
-          return text({ job_id: a.job_id, job_status: 'completed', playlist, result });
+          if (
+            payload.playlist_id &&
+            (payload.skip_existing || !payload.dry_run) &&
+            playlists &&
+            typeof playlists.resolveReadTarget === 'function'
+          )
+            playlists.resolveReadTarget(target);
         } catch {
-          updateJobPayload(a.job_id, {
-            ...payload,
-            phase: 'failed',
-            manual_review: true,
-            commit_error: 'transport_uncertain',
-          });
-          setJobStatus(a.job_id, 'failed');
           return text({
             job_id: a.job_id,
-            job_status: 'failed',
-            manual_review: true,
-            error: 'transport_uncertain',
+            error: 'CAPABILITY_UNAVAILABLE',
+            provider: job.provider,
+            connection_id: job.connectionId,
+            manual_review: false,
           });
         }
+        if (!reserveJobCommit(a.job_id))
+          return text({ job_id: a.job_id, error: 'commit_already_reserved_or_unsafe' });
+        const parent = toolContext.get();
+        return toolContext.run(
+          {
+            requestId: parent?.requestId ?? `commit_${a.job_id}`,
+            signal: parent?.signal ?? new AbortController().signal,
+            deadlineAt: parent?.deadlineAt ?? Date.now() + 300000,
+            ...parent,
+            queueJobId: a.job_id,
+          },
+          async () => {
+            try {
+              let uris = rows
+                .filter((x) => x.status === 'completed')
+                .sort((x, y) => x.position - y.position)
+                .map((x) => {
+                  const item: any = x.payload ? JSON.parse(x.payload) : {};
+                  return item.resolution?.uri;
+                })
+                .filter(Boolean);
+              if (payload.skip_duplicates) uris = [...new Set(uris)];
+              if (payload.skip_existing && payload.playlist_id) {
+                const existing = new Set(
+                  (playlists
+                    ? (
+                        await new PlaylistStateReader(playlists).read(payload.playlist_id, {
+                          provider: job.provider,
+                          connection_id: job.connectionId,
+                        })
+                      ).items
+                    : await allPlaylistItems(pid({ playlist_id: payload.playlist_id }))
+                  )
+                    .map((x: any) =>
+                      job.provider === 'spotify'
+                        ? (x.item?.uri ?? x.track?.uri)
+                        : (x.item?.id ?? x.track?.id ?? x.id),
+                    )
+                    .filter(Boolean),
+                );
+                uris = uris.filter((uri) => !existing.has(uri));
+              }
+              if (isJobCancelled(a.job_id)) throw new Error('commit_cancelled');
+              if (
+                !payload.dry_run &&
+                payload.playlist_id &&
+                playlists &&
+                typeof playlists.get === 'function'
+              ) {
+                const state = await new PlaylistStateReader(playlists).read(payload.playlist_id, {
+                  provider: job.provider,
+                  connection_id: job.connectionId,
+                });
+                const refs = state.items.map((raw: any) => raw.item ?? raw.track ?? raw);
+                const before = saveSnapshot({
+                  playlistId: payload.playlist_id,
+                  providerId: job.provider,
+                  connectionId: job.connectionId,
+                  providerRevision: state.providerRevision,
+                  metadata: state.playlist,
+                  uris: refs.map((track: any) =>
+                    String(job.provider === 'spotify' ? (track.uri ?? track.id) : track.id),
+                  ),
+                  reason: `job:${a.job_id}:before_commit`,
+                });
+                payload.pre_commit_snapshot_id = before.id;
+                updateJobPayload(a.job_id, { ...payload, phase: 'committing' });
+              }
+              if (payload.dry_run) {
+                const dryRunResult = { dry_run: true, requested_count: uris.length, uris };
+                updateJobPayload(a.job_id, {
+                  ...payload,
+                  phase: 'completed',
+                  dry_run: true,
+                  commit_result: dryRunResult,
+                });
+                finishJobCommit(a.job_id, dryRunResult);
+                setJobStatus(a.job_id, 'completed');
+                return text({
+                  job_id: a.job_id,
+                  job_status: 'completed',
+                  phase: 'completed',
+                  ...dryRunResult,
+                });
+              }
+              updateJobPayload(a.job_id, {
+                ...payload,
+                phase: 'committing',
+                commit_started_at: Date.now(),
+                commit_operation: job.type,
+              });
+              setJobStatus(a.job_id, 'running');
+              if (isJobCancelled(a.job_id)) throw new Error('commit_cancelled');
+              if (!playlists && job.provider !== 'spotify')
+                throw new Error('CAPABILITY_UNSUPPORTED');
+              let playlistId = payload.playlist_id as string | undefined;
+              let playlist: any;
+              if (job.type === 'create_playlist_from_tracks') {
+                playlist = playlists
+                  ? await playlists.create(
+                      {
+                        name: payload.name,
+                        description: payload.description ?? '',
+                        public: payload.public ?? false,
+                      },
+                      {
+                        connection_id: job.connectionId,
+                        provider: job.provider,
+                        preferred_connection_id: payload.preferred_connection_id as
+                          string | undefined,
+                      },
+                    )
+                  : await c.json('/me/playlists', {
+                      name: payload.name,
+                      description: payload.description ?? '',
+                      public: payload.public ?? false,
+                    });
+                playlistId = playlist.id;
+                payload.playlist_id = playlistId;
+                payload.created_playlist = playlist;
+                updateJobPayload(a.job_id, { ...payload, phase: 'committing' });
+              }
+              if (!playlistId) throw new Error('playlist_id_required');
+              if (isJobCancelled(a.job_id)) throw new Error('commit_cancelled');
+              const writeResult = await writeChunks(
+                `job:${job.type}`,
+                playlistId,
+                uris,
+                async (part) => {
+                  if (isJobCancelled(a.job_id)) throw new Error('OPERATION_CANCELLED');
+                  const response: any = playlists
+                    ? await playlists.add(playlistId!, part, {
+                        connection_id: job.connectionId,
+                        provider: job.provider,
+                      })
+                    : await c.json('/playlists/' + playlistId + '/items', { uris: part });
+                  if (response?.ok === false) {
+                    payload.last_chunk_result = response;
+                    updateJobPayload(a.job_id, { ...payload, phase: 'committing' });
+                    throw new Error('PROVIDER_WRITE_FAILED');
+                  }
+                  return { snapshot_id: response?.snapshot_id };
+                },
+                { chunkSize: job.provider === 'youtube' ? 1 : 100 },
+              );
+              const result = writeResult;
+              if (!result.ok) {
+                updateJobPayload(a.job_id, {
+                  ...payload,
+                  phase: 'failed',
+                  commit_result: result,
+                  manual_review: true,
+                });
+                finishJobCommit(a.job_id, result, true);
+                setJobStatus(a.job_id, 'failed');
+                return text({
+                  job_id: a.job_id,
+                  job_status: getJob(a.job_id, 0, 1).status,
+                  manual_review: true,
+                  result,
+                });
+              }
+              updateJobPayload(a.job_id, {
+                ...payload,
+                phase: 'completed',
+                playlist_id: playlistId,
+                playlist,
+                commit_result: result,
+              });
+              const cancelled = isJobCancelled(a.job_id);
+              finishJobCommit(a.job_id, result, cancelled);
+              setJobStatus(a.job_id, 'completed');
+              return text({
+                job_id: a.job_id,
+                job_status: getJob(a.job_id, 0, 1).status,
+                manual_review: cancelled,
+                playlist,
+                result,
+              });
+            } catch {
+              finishJobCommit(a.job_id, { error: 'transport_uncertain' }, true);
+              updateJobPayload(a.job_id, {
+                ...payload,
+                phase: 'failed',
+                manual_review: true,
+                commit_error: 'transport_uncertain',
+              });
+              setJobStatus(a.job_id, 'failed');
+              return text({
+                job_id: a.job_id,
+                job_status: getJob(a.job_id, 0, 1).status,
+                manual_review: true,
+                error: 'transport_uncertain',
+              });
+            }
+          },
+        );
       },
     );
   if (includeStateTools)
@@ -1339,7 +1521,10 @@ export function registerAdvanced(
       },
       async (a: any) => {
         cancelJob(a.job_id);
-        return text({ job_id: a.job_id, job_status: 'cancelled' });
+        return text({
+          job_id: a.job_id,
+          job_status: getJob(a.job_id, 0, 1)?.status ?? 'not_found',
+        });
       },
     );
   if (includeStateTools)

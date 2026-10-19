@@ -62,7 +62,7 @@ and [security](/security).
 
 - [Playlist automation](/playlist-automation), [safety and undo](/playlist-safety), and [chapters](/playlist-chapters)
 - [Cross-provider transfer](/tools#transfer-workflows), [import/export](/playlist-import-export), and [canonical resolution](/database-first-resolution)
-- [Authentication](/oauth), [Connection Hub](/provider-connections), and [ACLs](/clients/oauth-compatibility)
+- [Authentication](/oauth), [Provider connections](/provider-connections), and [ACLs](/clients/oauth-compatibility)
 - [Persistence and migrations](/state-database), [operations](/operations), and [troubleshooting](/troubleshooting)
 
 ## Support boundaries

@@ -32,15 +32,9 @@ sequenceDiagram
 
 The server starts from `src/index.ts`, registers one provider-neutral MCP surface in `src/mcp/tools.ts` and `src/mcp/helpers.ts`, and resolves provider capabilities through `src/providers/registry.ts`. Spotify remains the reference adapter under `src/spotify/`; SoundCloud is an additive adapter under `src/soundcloud/`. Provider OAuth and encrypted credential stores remain separate from MCP OAuth in `src/mcp/oauth.ts`.
 
-The owner-facing Connection Hub is a separate control plane: provider OAuth
-manages credentials and connection lifecycle, while MCP OAuth manages a client
-grant over selected connection IDs and granular operation permissions. The MCP
-request path enforces that grant before provider routing.
+Owner-authenticated provider consent is implemented separately from MCP OAuth. The only browser owner pages are login and exact provider-authorization confirmation. Local operator commands handle privileged operational work; MCP clients cannot acquire server administration powers.
 
-Owner-facing HTML administration is mounted through `src/web/admin-router.ts`.
-It is a separate route boundary from public provider and owner JSON APIs; page
-renderers receive sanitized view data, and mutation feedback is kept in the
-owner session as bounded one-request flash state.
+The durable queue uses SQLite job persistence (`src/db/jobs.ts`), atomic UPDATE/RETURNING claiming, an explicit executor registry (`src/db/job-runner.ts`) and provider-scoped capability execution. Scheduling, retry/cooldown, cancellation and external-commit reservation are persisted separately from provider tokens. See [operations](/operations).
 
 The MCP endpoint is stateless at the transport layer. Durable state includes the SQLite State DB plus the encrypted Spotify credentials and MCP OAuth store. The database is documented in [State Database](/state-database); do not share any of these stores between unrelated deployments.
 
@@ -56,13 +50,13 @@ The MCP endpoint is stateless at the transport layer. Durable state includes the
 
 ## State and trust boundaries
 
-| Boundary             | Data crossing it                                    | Main control                              |
-| -------------------- | --------------------------------------------------- | ----------------------------------------- |
-| AI client → `/mcp`   | JSON-RPC and tool arguments                         | Bearer API key or MCP OAuth               |
-| Browser → MCP OAuth  | Client ID, redirect, PKCE challenge, owner approval | Exact allowlist, S256, rate limit         |
-| Browser → Spotify    | Authorization code and state                        | Spotify OAuth and one-time state          |
-| Server → Spotify API | Access token and API request                        | Encrypted refreshable token store         |
-| Server → filesystem  | Encrypted tokens and hashed MCP records             | Atomic writes and restrictive permissions |
+| Boundary             | Data crossing it                                    | Main control                                       |
+| -------------------- | --------------------------------------------------- | -------------------------------------------------- |
+| AI client → `/mcp`   | JSON-RPC and tool arguments                         | Bearer API key or MCP OAuth                        |
+| Browser → MCP OAuth  | Client ID, redirect, PKCE challenge, owner approval | Exact allowlist, S256, rate limit                  |
+| Browser → Spotify    | Authorization code and state                        | Owner-approved initiation, state and existing PKCE |
+| Server → Spotify API | Access token and API request                        | Encrypted refreshable token store                  |
+| Server → filesystem  | Encrypted tokens and hashed MCP records             | Atomic writes and restrictive permissions          |
 
 Each configured provider connection is scoped independently. A deployment may have Spotify, SoundCloud and Apple Music connections, but credentials, capabilities, snapshots, rate limits and writes remain connection-scoped. Apple Music's Developer Token and Music User Token are distinct credentials, and neither is MCP OAuth. Do not expose one deployment to unrelated users unless you add a separate tenancy model.
 

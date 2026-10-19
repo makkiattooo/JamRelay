@@ -1,9 +1,9 @@
-# Rozwiązywanie problemów
+---
+title: Troubleshooting
+---
 
-- **Invalid redirect URI:** callback musi być identyczny w Spotify Dashboard, `.env` i adresie publicznym.
-- **`invalid_grant` / `reauthorization_required`:** połącz ponownie providera przez `/auth/providers/:provider/start`.
-- **MCP `401`:** sprawdź bearer key, OAuth metadata, client ID/secret, callback i PKCE verifier.
-- **Owner secret:** `MCP_OAUTH_OWNER_SECRET` pozostaje wyłącznie na serwerze.
-- **Playback:** sprawdź `get_devices`, Spotify Premium i aktywne urządzenie.
-- **Docker:** sprawdź logi, prawa do `/data`, env i healthcheck.
-- **Cloudflare/proxy:** sprawdź HTTPS, `X-Forwarded-Proto`, hostname i `TRUST_PROXY`.
+# JamRelay 1.4.0
+
+> Translation freshness notice: this page is being updated for 1.4.0. Follow the canonical English instructions below; obsolete web management and anonymous provider-login instructions have been removed.
+
+[Canonical troubleshooting](/troubleshooting) · [Operations and upgrade guide](/operations) · [Secure provider authorization](/oauth)

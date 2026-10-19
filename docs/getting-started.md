@@ -15,17 +15,12 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 npm run dev
 ```
 
-Fill `PUBLIC_BASE_URL` and `TOKEN_ENCRYPTION_KEY` in `.env`. Provider blocks
+Fill `PUBLIC_BASE_URL`, `MCP_OAUTH_OWNER_SECRET` and `TOKEN_ENCRYPTION_KEY` in `.env`. Provider blocks
 are optional, but each configured block must be complete. For a protected
 remote deployment, use `MCP_AUTH_MODE=bearer` with a strong `MCP_API_KEY`, or
 configure MCP OAuth as described in [MCP authentication](/oauth).
 
-Open `http://127.0.0.1:5267/auth/providers/spotify/start`, approve access, then check `/auth/status` and `/health`. Configure the client with `http://127.0.0.1:5267/mcp` for local use.
-
-For owner administration, set `MCP_OAUTH_OWNER_SECRET`, open
-`/owner/login`, and use the Connection Hub at `/connections/ui`. Provider OAuth
-connects credentials; MCP OAuth consent separately grants a client only the
-selected connections and operation groups. See [Provider connections](/provider-connections).
+Sign in at `http://127.0.0.1:5267/owner/login` with the configured owner secret. Then open `/auth/providers/spotify/start` and explicitly approve connection or replacement. Check `/health` for readiness and `npm run operator -- status` for local status. The MCP endpoint is `/mcp`; its OAuth consent remains separate. Use the [operator CLI](/operations) for local operations.
 
 ## Features implemented
 

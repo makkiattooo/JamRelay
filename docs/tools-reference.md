@@ -256,7 +256,7 @@ Clone ordered playlist content; dry_run defaults true and never creates a playli
 
 **Type:** Write / action
 
-Commit a ready durable job with ordered, chunked Spotify writes.
+Commit a ready durable job once, using its original provider connection. Uncertain outcomes require local operator review.
 
 **Arguments:**
 

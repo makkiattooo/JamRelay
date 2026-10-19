@@ -1,3 +1,5 @@
+import { assertQueueJobActive } from '../db/jobs.js';
+import { retryAfterSeconds } from '../providers/retry-after.js';
 import { SpotifyAuth } from './auth.js';
 import { SpotifyApiError, normalizeSpotifyError } from './errors.js';
 import type { Logger } from 'pino';
@@ -158,8 +160,7 @@ export class SpotifyClient {
         continue;
       }
       const retryHeader = response.headers.get('retry-after');
-      const retryAfter =
-        retryHeader && /^\d+(?:\.\d+)?$/.test(retryHeader) ? Number(retryHeader) : undefined;
+      const retryAfter = retryAfterSeconds(retryHeader);
       const raw = await response.text();
       const trimmed = raw.trim();
       let body: unknown = undefined;

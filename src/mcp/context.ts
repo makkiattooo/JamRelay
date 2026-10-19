@@ -6,9 +6,11 @@ export type ToolContext = {
   signal: AbortSignal;
   deadlineAt: number;
   operation?: string;
+  queueJobId?: number;
   singleflight?: Singleflight;
   mcpAccess?: {
     clientId: string;
+    issuedAt?: number;
     connectionIds?: string[];
     permissions?: string[];
   };

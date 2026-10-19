@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.0 — Development candidate
+
+- Require owner authentication, CSRF-protected explicit provider/replacement consent, one-time session-bound initiation and validated callbacks; retain MCP OAuth and all four providers.
+- Extend the existing SQLite durable queue with atomic claims, typed executor registration, provider routing, bounded retry/cooldown, client/connection ACLs, cancellation protection and at-most-once automatic commit reservation.
+- Add forward migration 0012, retaining existing data; uncertain commits require local reconciliation and cannot be automatically resumed.
+- Remove the complete web management application and its assets/routes. Add local `operator` commands for status, connections, client revocation, jobs, diagnostics and backups.
+- Public health retains non-personal database readiness but no account inventory. Removed connection/status/grant JSON routes return 404. Legacy unowned jobs are operator-only. See `docs/operations.md` before upgrading or rolling back.
+- Use `node --import tsx` for repository scripts to avoid unnecessary CLI IPC, and cap test worker concurrency without changing assertions or timeouts.
+- Candidate only: no release publication, tag or deployment.
+
 All notable changes to JamRelay are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),

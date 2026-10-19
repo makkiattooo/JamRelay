@@ -4,6 +4,8 @@ translationReviewed: 2026-09-12
 sourceHash: 61ec5392803b
 ---
 
+> Translation freshness notice: provider authorization and operations changed in 1.4.0. Follow the [canonical English configuration](/configuration) and [upgrade guide](/operations) for current, secure instructions.
+
 # Konfiguration
 
 Kopiere `.env.example` nach `.env`. Committe weder `.env` noch Runtime-Token-Stores. Die kanonische Variablentabelle wird aus `.env.example` generiert.

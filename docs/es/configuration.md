@@ -4,6 +4,8 @@ translationReviewed: 2026-09-12
 sourceHash: 61ec5392803b
 ---
 
+> Translation freshness notice: provider authorization and operations changed in 1.4.0. Follow the [canonical English configuration](/configuration) and [upgrade guide](/operations) for current, secure instructions.
+
 # Configuración
 
 Copia `.env.example` a `.env`. No hagas commit de `.env` ni de los token stores. La tabla canónica de variables se genera desde `.env.example`.

@@ -1,3 +1,5 @@
+import { assertQueueJobActive } from '../db/jobs.js';
+import { retryAfterSeconds } from '../providers/retry-after.js';
 import { ProviderApiError } from '../providers/errors.js';
 import type { SoundCloudAuth } from './auth.js';
 import { toolContext } from '../mcp/context.js';
@@ -22,6 +24,7 @@ export class SoundCloudClient {
     const timer = setTimeout(() => controller.abort(), Math.min(15_000, remaining));
     try {
       const parentSignal = toolContext.get()?.signal;
+      assertQueueJobActive();
       const response = await fetch('https://api.soundcloud.com' + path, {
         ...init,
         headers: { accept: 'application/json', Authorization: 'OAuth ' + token, ...init.headers },
@@ -38,7 +41,12 @@ export class SoundCloudClient {
           'SoundCloud API request failed',
           'soundcloud',
           this.connectionId,
-          { providerCode: value.error, capability: 'provider_api' },
+          {
+            providerCode: value.error,
+            capability: 'provider_api',
+            retryAfter: retryAfterSeconds(response.headers.get('retry-after')),
+            scope: 'search',
+          },
         );
       return value as T;
     } finally {

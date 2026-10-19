@@ -26,7 +26,7 @@ import { PlaylistGateway, type PlaylistWriteTarget } from '../providers/playlist
 import type { ProviderHttpClient } from '../providers/http-client.js';
 import type { TrackResolutionService } from '../music/resolver-service.js';
 import { createLegacyProviderRegistry } from './legacy-provider-registry.js';
-import { isDraining } from '../runtime/lifecycle.js';
+import { trackOperation, isDraining } from '../runtime/lifecycle.js';
 import { getToolSecurityMetadata, type ToolExecutionClass } from './tool-manifest.js';
 import {
   exportPlaylist,
@@ -465,6 +465,26 @@ export function registerTools(
     if (!permission) throw new Error('TOOL_SECURITY_METADATA_MISSING');
     if (!access.permissions?.includes(permission)) throw new Error('PERMISSION_NOT_GRANTED');
     if (name === 'get_connections') return undefined;
+    if (['get_job_status', 'list_jobs', 'resume_job', 'commit_job', 'cancel_job'].includes(name))
+      return undefined;
+    if (name === 'create_bulk_job') {
+      const ids = access.connectionIds ?? [];
+      const target =
+        args?.payload?.connection_id ??
+        args?.connection_id ??
+        (ids.length === 1 ? ids[0] : readRegistry.getPreferred().write);
+      if (!target || !ids.includes(target)) throw new Error('CONNECTION_NOT_GRANTED');
+      const connection = readRegistry.getConnection(target);
+      if (!connection) throw new Error('CONNECTION_UNAVAILABLE');
+      if (args.payload?.provider && args.payload.provider !== connection.summary.provider)
+        throw new Error('provider_connection_conflict');
+      args.payload = {
+        ...args.payload,
+        provider: connection.summary.provider,
+        connection_id: target,
+      };
+      return target;
+    }
     const allowed = access.connectionIds ?? [];
     if (!allowed.length) throw new Error('CONNECTION_NOT_GRANTED');
     const requested =
@@ -569,7 +589,7 @@ export function registerTools(
             },
             async () =>
               await Promise.race([
-                callback(...args),
+                trackOperation(Promise.resolve().then(() => callback(...args))),
                 new Promise((_, reject) =>
                   signal.addEventListener(
                     'abort',

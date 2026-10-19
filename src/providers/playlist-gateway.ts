@@ -65,6 +65,7 @@ export class PlaylistGateway {
       provider: options.provider as string | undefined,
       capability: 'playlistRead',
       preferredConnectionId: options.connection_id as string | undefined,
+      strategy: options.connection_id ? 'preferred_only' : undefined,
     });
     if (!connection?.playlistRead)
       throw new ProviderSelectionError('No playlist read connection is available.', 'read');

@@ -4,7 +4,7 @@
 
 This is valid. JamRelay can boot with an empty provider registry and `/health`
 can still be `status: ok` when the database is ready. Connect a provider through
-the [Connection Hub](/provider-connections) before calling provider-scoped tools.
+the [Provider connections](/provider-connections) before calling provider-scoped tools.
 
 ## Write target errors
 

@@ -1,41 +1,21 @@
-## Owner sessions and MCP grants
+# Security boundaries
 
-Credential-store mutations are serialized by canonical file path, including
-across multiple in-process store instances. The encrypted file store remains a
-single-process/single-writer design; use one JamRelay writer per credential
-path unless deployment-level file locking is added.
+Provider OAuth, owner sessions and MCP OAuth are separate trust boundaries. Provider tokens stay in the encrypted AES-256-GCM credential store; MCP token digests, clients and grants remain in their existing store. SQLite holds job authorization context and progress, never provider credentials. Keep one credential-store writer process per installation.
 
-The owner secret is a bootstrap credential. `/owner/login` exchanges it for a
-short-lived HttpOnly session cookie; production cookies are Secure and use
-SameSite=Lax. Owner mutations require the session's CSRF token. Sessions can be
-rotated at `POST /owner/session/rotate` and invalidated at `POST /owner/logout`.
+## Provider authorization
 
-MCP OAuth consent records an allow-list of connection IDs and granular
-permissions. The server checks both on every tool invocation and returns
-`PERMISSION_NOT_GRANTED` or `CONNECTION_NOT_GRANTED` with HTTP/MCP status 403.
-Provider adapters still enforce capability availability and return
-`CAPABILITY_UNAVAILABLE` when an operation is not supported.
+An anonymous GET cannot initiate a provider flow. Sign in at `/owner/login` with `MCP_OAUTH_OWNER_SECRET` and its login CSRF nonce, then open a provider start URL. The GET only displays consent. An owner-session/CSRF protected POST approves the specific provider and default connection, explicitly including replacement. A separate one-use initiation record binds OAuth state to that session, provider and connection. It expires after ten minutes and is consumed before exchanging a code. The provider's own state verification and existing PKCE checks still apply.
 
-The additive OAuth-store migration keeps records created before ACLs usable as
-Tokens without a current grant are rejected and must be authorized again.
-Every consented grant contains an explicit connection and permission allow-list;
-owners can replace or revoke it from the Connection Hub. Revocation is checked
-against each request and invalidates the grant immediately.
+Unapproved, wrong-session, cross-provider, expired and replayed callbacks fail generically without overwriting credentials. A failed token exchange retains old credentials. Initial authorization never borrows another account's refresh token. Apple Music retains the explicit owner-secret-header token endpoint; static MCP API keys cannot configure provider tokens.
 
-## Three separate trust boundaries
+Owner login is limited to ten attempts per five minutes per trusted client IP. Secrets are compared as fixed-size hashes with a timing-safe primitive. Session cookies are HttpOnly, SameSite=Lax, Path=/, Secure on HTTPS/production, and expire after thirty minutes. Logout is CSRF protected and revokes the session. Restart invalidates browser sessions and pending initiations. Use HTTPS and configure proxy trust correctly; do not log request bodies, cookies, owner headers or provider callback query strings at the reverse proxy.
 
-1. **MCP authentication** protects `/mcp` with bearer API keys or MCP OAuth.
-2. **Owner authentication** protects the Connection Hub with the owner secret,
-   an owner session cookie, and CSRF checks for mutations.
-3. **Provider authentication** is the independent OAuth/token model of Spotify,
-   SoundCloud, YouTube, or Apple Music.
+## MCP authorization
 
-An MCP grant can restrict both permissions and allowed connection IDs. Writes
-and destructive operations fail closed when a target is missing, revoked,
-ambiguous, or lacks the capability. Provider status is never treated as a
-server-health credential.
+MCP OAuth retains DCR, exact redirect validation, S256 PKCE, authorization codes, refresh rotation and explicit owner consent. Consent chooses connection IDs and granular permissions. Each tool is checked against the security manifest and current grant. The local operator can revoke a client immediately through SQLite; renewed owner consent is needed to regrant. The static bearer key is privileged operator access and must not be handed to unrelated clients.
 
-Tool authorization, read-only/destructive MCP annotations and execution
-budgets come from one declarative tool-security manifest. Registration fails
-closed when a tool has no manifest entry. Generic MCP and playlist services use
-the provider transport contract rather than depending on `SpotifyClient`.
+Queued jobs persist the creating client and original connection. Job inspection, mutation and list queries enforce both ownership and granted connections. Legacy unowned jobs are operator-only. Unknown executors fail closed; missing connections or unsupported capabilities never fall back to another provider. External write reservation, cancellation and uncertain outcomes are documented in [operations](/operations).
+
+## Operator boundary
+
+There is no HTTP administration interface. The CLI requires local operating-system access and never emits credential content, encryption keys or raw OAuth client records. It is not exposed as an MCP tool. Protect local files, backups and the service account. Detailed diagnostics are for the operator or explicitly granted clients. Public health is limited to readiness/version and non-personal schema readiness.

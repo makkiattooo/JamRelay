@@ -37,7 +37,7 @@ Every application connection sets:
 - `journal_mode=WAL`: allows readers while the writer appends to the WAL.
 - `foreign_keys=ON`: enforces the declared relationships.
 - `busy_timeout=5000`: waits briefly for another transaction instead of failing immediately.
-- `synchronous=NORMAL`: a practical durability/performance balance for WAL mode.
+- `synchronous=NORMAL`: preserves baseline throughput for read progress and bulk ingestion. External-write reservation/finalization and cancellation temporarily use `FULL` and restore the previous policy; the reservation is synced before any provider mutation.
 - `wal_autocheckpoint=1000`: bounds WAL growth through SQLite checkpoints.
 
 This is intentionally a single-process/local-volume design. It is not a distributed lock or multi-replica database solution.
@@ -188,3 +188,13 @@ Migration files use LF line endings through `.gitattributes` (`*.sql text eol=lf
 - **Local reset:** stop the local app and remove only the local `data/` database files when intentionally resetting development state. Never use a destructive reset against the production `jamrelay_data` volume.
 
 Recreating `jamrelay_app` does not delete the external `jamrelay_data` volume. The deployment script packages and ships migration source but does not run migrations itself; normal application startup owns that responsibility. A failed migration therefore prevents healthy state and lets deployment health/rollback react.
+
+## Migration 0012: durable queue and operator revocation
+
+`0012_durable_queue.sql` adds job `provider`, `connection_id`, `owner_client_id`, `authorization_json`, `cancellation_requested_at`, `commit_state`, `result_json`, `last_error_code` and `manual_review`, plus eligibility/client indexes. Existing provider/connection values are backfilled from payloads; legacy jobs default to their historical Spotify connection. Existing job items and history are unchanged. Legacy jobs have no MCP client owner and are locally operable only. In-progress legacy commits are marked uncertain for manual review.
+
+`operator_client_revocations` stores local client revocation IDs/timestamps, so a CLI action takes effect without rewriting the OAuth server's cached JSON. New owner consent permits newly issued tokens; the revocation timestamp remains so older tokens cannot regain access.
+
+Claims use one guarded UPDATE/RETURNING statement under SQLite's write locking. `pending` and `waiting` can move to `running`; active reads may return to `pending` or `waiting`, fail, or become ready. Cancellation and terminal status cannot be overwritten by late worker results. Explicit resume may reset failed read attempts, but never cancelled/completed jobs or reserved/uncertain commits. A ready job retains the historical `running` status with `phase=ready_to_commit` and is excluded from automatic claiming.
+
+Commit reservation is independent of the six public job states: `none` → `reserved` → `completed` or `uncertain`. Automatic replay from `uncertain` is forbidden. Final results and cancellation/review flags remain durable. Rate-limit waiting does not consume failed attempts. See [operations](/operations) for recovery, upgrade and backup instructions.

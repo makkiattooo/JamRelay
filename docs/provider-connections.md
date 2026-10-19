@@ -1,30 +1,9 @@
----
-title: Provider connections
----
+# Provider connections
 
-# Provider Connection Hub
+Spotify, SoundCloud, Apple Music and YouTube remain independent provider adapters. Each configured adapter uses its own default connection ID (`spotify-default`, `soundcloud-default`, `apple-music-default`, `youtube-default`) and encrypted credential record. Configuration enables an adapter; authorization supplies its account credentials.
 
-The owner Connection Hub is provider-neutral. A deployment can hold several
-connections for the same provider and can independently choose preferred read
-and write connections. Read routing may fall back only among permitted,
-capable connections. Writes remain fail-closed when the target is missing or
-ambiguous.
+Use `npm run operator -- connections list` for credential-record inventory. To authorize Spotify, SoundCloud or YouTube, sign in at `/owner/login`, open `/auth/providers/<provider>/start`, and approve that exact connection or replacement. The browser callback must return in the same owner session. Apple Music retains Developer Token configuration and the owner-authenticated Music User Token endpoint. See [configuration](/configuration) and [OAuth](/oauth).
 
-The Hub is the onboarding and administration surface, not the MCP client
-authentication layer. Owner login/session and CSRF protection guard its
-mutations; MCP OAuth/API-key authentication and grants guard `/mcp` separately.
+There is no connection-management web application. MCP tools select explicit granted connection IDs and enforce provider capabilities. To change a client's connection selection, repeat MCP owner consent; revoke a client with `npm run operator -- clients revoke CLIENT_ID`. Removing a provider's configuration does not delete its encrypted record, cached playlists or job history. Disconnect access at the provider and stop the service before any credential-file maintenance. Do not delete SQLite state to disconnect a provider.
 
-The JSON owner API is available after signing in at `/owner/login`:
-
-- `GET /connections` lists connection summaries and preferred targets;
-- `GET /connections/:connectionId` inspects one connection;
-- `PATCH /connections/:connectionId` renames a connection or sets
-  `preferred_read` / `preferred_write`;
-- `DELETE /connections/:connectionId` disconnects the runtime connection while
-  retaining local state and history;
-- `GET/PATCH/DELETE /owner/grants/:clientId` inspects, changes, or revokes an
-  MCP client grant.
-
-Mutating owner requests require the `x-csrf-token` value issued by the owner
-session. Provider credentials are managed by their provider-specific OAuth
-flow; they are never returned by this API.
+Queued operations retain the selected provider and connection. Removing that connection causes safe failure, never substitution by Spotify. The built-in browser flow targets configured default connections; it does not provision arbitrary additional accounts.

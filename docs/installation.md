@@ -110,3 +110,9 @@ Run `cloudflared` separately, map only the intended hostname, and store its cred
 - Proxy headers and `TRUST_PROXY` agree.
 - Healthchecks monitor liveness; an authenticated read monitors Spotify connectivity.
 - Logs are protected and have a retention policy.
+
+## Initialize without provider accounts
+
+Use Node.js 22.13 or later. After copying `.env.example`, clear entire optional provider configuration groups (including redirect URIs) to boot with no provider credentials. Set `PUBLIC_BASE_URL`, `MCP_OAUTH_OWNER_SECRET`, and a strong 32-byte base64 `TOKEN_ENCRYPTION_KEY` before connecting providers. Generate the key locally with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"` and store it privately in `.env`.
+
+`npm run operator -- status` or application startup initializes SQLite and applies migrations without resetting existing data. `npm run operator -- connections list` requires the matching encryption key. Follow [operations](/operations) for upgrading an existing installation; never generate a replacement key over existing encrypted records.

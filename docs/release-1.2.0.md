@@ -1,3 +1,5 @@
+> Historical release information. For 1.4.0 use the [upgrade and operations guide](/operations); web management routes and anonymous provider authorization are no longer available.
+
 # JamRelay 1.2.0
 
 Version 1.2.0 is the provider-neutral architecture release. JamRelay now
@@ -8,7 +10,6 @@ canonical entities and capability-aware services.
 
 - Spotify, SoundCloud, Apple Music, and YouTube adapters with intentionally
   different capability surfaces;
-- Connection Hub, owner sessions, MCP OAuth grants, connection ACLs, and
   explicit write targeting;
 - canonical track mappings and cross-provider transfer planning/execution;
 - provider-neutral playlist import/export and persisted playlist chapters;
