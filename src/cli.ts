@@ -15,6 +15,11 @@ Usage: jamrelay <command>
   jobs list | jobs inspect/cancel/resume ID
   diagnostics
   backup create | backup list
+  info [--json]
+  update [check [--refresh|--offline] | channel [stable|beta]]
+  changelog [--latest|--version X] [--json]
+  notices [--refresh|--offline] [--all] | notices read/dismiss ID
+  notifications status/enable/disable
   --help | --version
 Operator commands support --json. JAMRELAY_CONFIG_PATH selects a private env file.`;
 export async function runCli(args: string[]) {
@@ -33,6 +38,12 @@ export async function runCli(args: string[]) {
     return 1;
   }
   try {
+    if (['info', 'update', 'changelog', 'notices', 'notifications'].includes(command)) {
+      const information = await import('./cli/information.js');
+      const code = await information.runInformation(args);
+      if (code === 0) await information.passiveHint(args);
+      return code;
+    }
     if (command === 'setup' || command === 'config') {
       if (rest.some((s) => s !== '--yes')) {
         console.error(help);
@@ -57,7 +68,15 @@ export async function runCli(args: string[]) {
       return 2;
     }
     const paths = loadInstallation();
-    if (command === 'doctor') return await (await import('./runtime/setup.js')).doctor();
+    if (command === 'doctor') {
+      if (rest.some((s) => s !== '--json')) {
+        console.error(help);
+        return 2;
+      }
+      const code = await (await import('./runtime/setup.js')).doctor();
+      if (code === 0) await (await import('./cli/information.js')).passiveHint(args);
+      return code;
+    }
     if (command === 'start') {
       if (rest.length) {
         console.error(help);
@@ -73,7 +92,10 @@ export async function runCli(args: string[]) {
       }
       return 0;
     }
-    return await (await import('./operator.js')).runOperator(args);
+    const code = await (await import('./operator.js')).runOperator(args);
+    if (command === 'status' && code === 0)
+      await (await import('./cli/information.js')).passiveHint(args);
+    return code;
   } catch (error) {
     // Never print validator input, env values, provider responses or stacks.
     const safe =

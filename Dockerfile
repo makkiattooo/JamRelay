@@ -14,6 +14,8 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY db/migrations ./db/migrations
 COPY assets ./assets
+COPY CHANGELOG.md ./CHANGELOG.md
+COPY .github/cli/notices.json ./.github/cli/notices.json
 RUN mkdir /data && chown node:node /data
 USER node
 EXPOSE 5267

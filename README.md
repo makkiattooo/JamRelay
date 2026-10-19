@@ -30,12 +30,12 @@ Turn high-level requests into deterministic, inspectable and reversible music op
 
 ---
 
-## Install and run (1.5.0 candidate)
+## Install and run (1.5.1 candidate)
 
 Node.js **22.13+** is required. npm/GHCR publication is pending; the commands below apply after publication. Until then install the candidate tarball built with `npm pack`:
 
 ```bash
-npm install -g ./jamrelay-1.5.0.tgz
+npm install -g ./jamrelay-1.5.1.tgz
 # After publication: npm install -g jamrelay
 jamrelay setup
 jamrelay start
@@ -63,6 +63,19 @@ jamrelay backup list
 
 Configuration uses platform user directories (XDG on Linux, Application Support on macOS, AppData on Windows). Existing `.env` deployments and environment path overrides are retained. `JAMRELAY_CONFIG_PATH` selects another private env file. `setup --yes` uses environment variables without prompts, through the same validation/persistence logic; do not put secrets in command arguments. After an interrupted process, installation locks expire within 30 seconds.
 
+### CLI information (1.5.1 candidate)
+
+```bash
+jamrelay info
+jamrelay update check --refresh
+jamrelay update channel stable    # or beta
+jamrelay changelog --latest
+jamrelay notices --offline
+jamrelay notifications enable     # disable to opt out
+```
+
+These commands work independently of the server, support `--json`, and use separate local preferences/cache. Updates check actual official npm/GitHub/GHCR publication; development builds are never advertised as published releases. No upgrade is executed automatically. Passive metadata checks are opt-in, human-terminal only; no credentials or telemetry are sent. Bundled release information/notices work offline and before the feed reaches `main`. See [CLI updates and notices](docs/cli-information.md) for commands, privacy, cache and the maintainer feed workflow.
+
 ### Docker
 
 The repository's `compose.yml` builds the candidate locally; it needs no tunnel, external network or pre-created volume:
@@ -84,7 +97,7 @@ docker run --rm -it -v jamrelay_data:/data jamrelay:local setup
 docker run --rm -p 127.0.0.1:5267:5267 -v jamrelay_data:/data jamrelay:local start
 ```
 
-GHCR is prepared at `ghcr.io/makkiattooo/jamrelay:1.5.0`; the image is **not published yet**. The container workflow builds amd64/arm64 and publishes only on an intentional matching version tag or explicit workflow publish action; branch pushes do not trigger it.
+GHCR is prepared at `ghcr.io/makkiattooo/jamrelay:1.5.1`; the image is **not published yet**. The container workflow builds amd64/arm64 and publishes only on an intentional matching version tag or explicit workflow publish action; branch pushes do not trigger it.
 
 ### Connect an MCP client / upgrade
 

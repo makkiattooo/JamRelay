@@ -8,6 +8,9 @@ coverage/
 data/
 *.zip
 .git/
-.github/
+.github/*
+!.github/cli/
+.github/cli/*
+!.github/cli/notices.json
 docs/
 tests/

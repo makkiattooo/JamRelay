@@ -273,6 +273,27 @@ export async function setup(nonInteractive = false) {
     initializeDatabase({ dbPath: settings.JAMRELAY_DB_PATH, dataDir: data });
     closeDatabase();
     saveSettings(paths.config, settings);
+    if (!nonInteractive) {
+      const { readState, changeState } = await import('../cli/state.js');
+      console.log(
+        '\nJamRelay updates: optional occasional public HTTPS checks for official releases and project notices. No credentials, installation IDs or telemetry are sent. Disable later with jamrelay notifications disable.',
+      );
+      const enabled = await ask(
+        'Enable occasional CLI update/notice checks? (Y/n)',
+        readState().notifications === false ? 'n' : 'y',
+      );
+      // Follow a custom configuration path selected in this wizard without touching OAuth settings.
+      const priorConfig = process.env.JAMRELAY_CONFIG_PATH;
+      process.env.JAMRELAY_CONFIG_PATH = paths.config;
+      try {
+        await changeState((s) => {
+          s.notifications = ['y', 'yes'].includes(enabled.toLowerCase());
+        });
+      } finally {
+        if (priorConfig === undefined) delete process.env.JAMRELAY_CONFIG_PATH;
+        else process.env.JAMRELAY_CONFIG_PATH = priorConfig;
+      }
+    }
     const configured = providers.filter((p) =>
       Boolean(
         settings[p === 'apple-music' ? 'APPLE_MUSIC_TEAM_ID' : `${p.toUpperCase()}_CLIENT_ID`],

@@ -18,7 +18,7 @@ it('dispatches help/version without starting a server or requiring configuration
   expect(await runCli(['--help'])).toBe(0);
   expect(out.mock.calls.flat().join('')).toContain('setup');
   expect(await runCli(['--version'])).toBe(0);
-  expect(out.mock.calls.at(-1)?.[0]).toBe('1.5.0');
+  expect(out.mock.calls.at(-1)?.[0]).toBe('1.5.1');
   vi.spyOn(console, 'error').mockImplementation(() => {});
   expect(await runCli(['unknown'])).toBe(2);
 });

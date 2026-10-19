@@ -302,8 +302,8 @@ function buildTarball(tarballPath) {
     '--exclude=.git',
     '--exclude=.git/**',
 
-    '--exclude=.github',
-    '--exclude=.github/**',
+    '--exclude=.github/workflows',
+    '--exclude=.github/ISSUE_TEMPLATE',
 
     '--exclude=.vscode',
     '--exclude=.vscode/**',

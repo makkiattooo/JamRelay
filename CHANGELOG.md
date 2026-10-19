@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.1 — Development candidate
+
+- Add `info`, update checks/channels, changelog, project notices and notification preferences to the existing CLI without opening SQLite.
+- Discover actual official npm/GitHub/GHCR publication using SemVer; show manual upgrade instructions only after verifying distribution metadata.
+- Add strict static GitHub notice feed, bundled offline fallback, local read/dismiss state, atomic caches, ETags and bounded HTTPS requests.
+- Offer optional passive checks during interactive setup; preserve OAuth/encryption configuration and default existing/noninteractive installations to disabled.
+- Include notice feed and changelog in npm/Docker artifacts. No schema, MCP or provider changes; publication remains pending.
+
 ## 1.5.0 — Development candidate
 
 - Prepare installable npm archive with unified `jamrelay` executable and package-relative runtime resources.
