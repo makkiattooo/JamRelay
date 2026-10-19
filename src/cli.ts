@@ -11,6 +11,8 @@ export function cliHelp() {
 ${t('Usage')}: jamrelay <command>
   setup [--yes]       ${t('Configure installation (interactive; --yes uses environment)')}
   config             ${t('Safely reconfigure existing installation')}
+  onboard             ${t('Resume guided provider and AI client setup')}
+  connect provider|client NAME  ${t('Configure a music provider or MCP client')}
   start              ${t('Run the MCP HTTP server')}
   status | doctor    ${t('Installation status / configuration diagnostics')}
   connections list
@@ -55,7 +57,28 @@ export async function runCli(args: string[]) {
         console.error(help);
         return 2;
       }
-      await (await import('./runtime/setup.js')).setup(rest.includes('--yes'));
+      await (
+        await import('./runtime/setup.js')
+      ).setup(rest.includes('--yes'), command === 'config');
+      return 0;
+    }
+    if (command === 'onboard') {
+      if (rest.length) {
+        console.error(help);
+        return 2;
+      }
+      await (await import('./cli/guided.js')).onboard();
+      return 0;
+    }
+    if (command === 'connect') {
+      const [kind, name, ...extra] = rest;
+      if (!['provider', 'client'].includes(kind) || !name || extra.length) {
+        console.error(knownMessage('connect provider|client NAME'));
+        return 2;
+      }
+      await (
+        await import('./cli/guided.js')
+      ).guidedConnect(kind as 'provider' | 'client', name.toLowerCase());
       return 0;
     }
     if (
@@ -108,7 +131,7 @@ export async function runCli(args: string[]) {
     // Never print validator input, env values, provider responses or stacks.
     const safe =
       error instanceof Error &&
-      /^(JamRelay is running|Setup cancelled|Interactive setup requires|Existing encrypted credentials|Configured port is occupied|Remote access requires|Public URL must|Owner secret must|Encryption key must|Runtime |Choose local|Unknown provider|Configuration values)/.test(
+      /^(JamRelay is running|Setup cancelled|Interactive setup requires|Run jamrelay setup|Existing encrypted credentials|Configured port is occupied|Remote access requires|Public URL must|Owner secret must|Encryption key must|Runtime |Choose local|Unknown provider|Configuration values)/.test(
         error.message,
       );
     if (error && typeof error === 'object' && 'issues' in error && Array.isArray(error.issues)) {

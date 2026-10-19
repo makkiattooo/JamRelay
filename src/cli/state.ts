@@ -22,6 +22,7 @@ export const cliStateSchema = z
         }),
       )
       .default({}),
+    guidedClients: z.enum(['chatgpt', 'claude', 'cursor', 'vscode', 'generic']).array().default([]),
   })
   .strict();
 export type CliState = z.infer<typeof cliStateSchema>;
@@ -31,6 +32,7 @@ export const defaultState = (): CliState => ({
   notifications: null,
   lastPassiveAttempt: 0,
   notices: {},
+  guidedClients: [],
 });
 export function cliPaths() {
   const paths = installationPaths();

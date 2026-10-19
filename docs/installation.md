@@ -10,15 +10,17 @@ jamrelay setup
 jamrelay start
 ```
 
-`npx jamrelay setup`, `pnpm dlx jamrelay setup` and `bunx jamrelay setup` use the same Node-based package after publication. The setup wizard configures private storage, owner security and optional provider credentials. Provider developer applications cannot be created automatically; follow the [provider guides](/providers/) to authorize accounts separately.
+`npx jamrelay setup`, `pnpm dlx jamrelay setup` and `bunx jamrelay setup` use the same Node-based package after publication. The setup wizard chooses safe private storage and owner security automatically. Run `jamrelay connect provider spotify` to enter provider application credentials securely, then start the server and run `jamrelay onboard` to authorize your personal music account and connect an AI client. Creating an application and authorizing a listener account are separate steps. See the [provider guides](/providers/) for service requirements.
 
 **Publication is pending.** A GitHub commit or development version does not imply that npm or GHCR artifacts exist. `jamrelay update check` inspects actual official distribution metadata.
 
 ## CLI language
 
-The first interactive setup question is a numbered language menu: Polski (`pl`), English (`en`), Deutsch (`de`), Français (`fr`), Español (`es`). Enter a number or press Enter for the suggested language. The default follows `LC_ALL`, `LC_MESSAGES`, `LANG`, then the system locale; unsupported locales use English.
+The first interactive setup screen presents its instructions in all five languages and shows native language names: Polski (`pl`), English (`en`), Deutsch (`de`), Français (`fr`), Español (`es`). Press a number to select immediately, use the arrow keys and Enter, or accept the detected language. The default follows `LC_ALL`, `LC_MESSAGES`, `LANG`, then the system locale; unsupported locales use English.
 
 Setup saves `JAMRELAY_LANGUAGE` in the selected private configuration. Subsequent commands reuse it, and `jamrelay config` offers the language menu again while preserving credentials, encryption keys, paths and provider settings. `JAMRELAY_LANGUAGE` in the environment overrides the saved preference; `JAMRELAY_CONFIG_PATH` selects which installation to read, including for `--help`.
+
+`jamrelay config` keeps network defaults unless you opt into advanced settings. Remote access requires a reachable HTTPS origin and a reverse proxy you control; only then should you trust forwarded proxy headers.
 
 ```bash
 JAMRELAY_LANGUAGE=pl jamrelay --help
@@ -26,6 +28,18 @@ JAMRELAY_LANGUAGE=de jamrelay setup --yes
 ```
 
 PowerShell: `$env:JAMRELAY_LANGUAGE = 'pl'`, then `jamrelay --help`. For Docker Compose, pass `-e JAMRELAY_LANGUAGE=fr` to `docker compose run --rm`. `setup --yes` never asks questions and saves the environment/saved/locale default. Localized confirmations also accept English `yes/no`. Command names, flags, provider IDs, URLs, JSON keys and machine-readable values remain unchanged; `--json` preserves the English interface. Provider data and release/notice content retain their original language.
+
+## Guided integrations
+
+Configure application credentials before starting the server (or stop it before changing saved credentials):
+
+```bash
+jamrelay connect provider spotify
+jamrelay start
+jamrelay onboard
+```
+
+For Docker Compose, run setup and provider configuration with `docker compose run --rm jamrelay setup` and `docker compose run --rm jamrelay connect provider spotify`, then start the service with `docker compose up -d`. Re-run `jamrelay onboard` (or `docker compose run --rm jamrelay onboard`) to continue. Provider authorization uses the existing owner login and OAuth consent page. `jamrelay connect client chatgpt|claude|cursor|vscode|generic` prints client-specific setup steps and the exact `/mcp` URL. A cloud client cannot reach private `localhost`; use an eligible secure tunnel or a reachable HTTPS endpoint.
 
 ## Development candidate archive
 

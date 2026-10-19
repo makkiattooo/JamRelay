@@ -1,6 +1,8 @@
 # CLI updates and notices
 
-Human-facing CLI output supports Polish, English, German, French and Spanish. Interactive `setup`/`config` starts with the native-language menu and saves `JAMRELAY_LANGUAGE`. An environment override takes precedence over the selected installation’s saved preference; see [installation](/installation#cli-language). `--json` keeps its existing English keys, messages and machine-readable values. Remote release notes and project notices remain in their original language. `doctor` without `--json` displays localized diagnostics.
+Human-facing CLI output supports Polish, English, German, French and Spanish. Interactive `setup`/`config` begins with a language selector whose instructions are shown in all five languages; number keys choose immediately, and arrow keys plus Enter also work. It saves `JAMRELAY_LANGUAGE`. An environment override takes precedence over the selected installation’s saved preference; see [installation](/installation#cli-language). `--json` keeps its existing English keys, messages and machine-readable values. Remote release notes and project notices remain in their original language. `doctor` without `--json` displays localized diagnostics.
+
+Use `jamrelay onboard` to resume provider and MCP client setup. `jamrelay connect provider NAME` guides application setup separately from personal account authorization. `jamrelay connect client NAME` prints the endpoint and client-specific instructions; supported client names are `chatgpt`, `claude`, `cursor`, `vscode` and `generic`. The guide reports server reachability and saved token records separately; it does not claim that a saved token has been verified with the external provider.
 
 The CLI provides local information commands; none starts the server or opens SQLite:
 

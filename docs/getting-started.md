@@ -8,8 +8,10 @@ Spotify playback requires an eligible account and active device.
 
 Follow the canonical [installation guide](/installation) for npm, development
 archives, source checkouts or Docker. Run `jamrelay setup` to configure private
-storage, owner security and optional providers. Node.js 22.13 or later is required
-for the Node executable.
+storage and owner security. Run `jamrelay connect provider NAME` to add an
+application, then start the server and use `jamrelay onboard` for personal
+account authorization and MCP client instructions. Node.js 22.13 or later is
+required for the Node executable.
 
 ## 2. Authorize your music accounts
 

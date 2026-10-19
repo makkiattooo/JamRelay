@@ -32,6 +32,31 @@ Przed aktualizacją zatrzymaj serwer i zabezpiecz dane **oraz** prywatną
 konfigurację z kluczem szyfrowania. Nie generuj nowego klucza nad istniejącymi
 zaszyfrowanymi danymi.
 
-`jamrelay doctor` pomaga sprawdzić konfigurację. Zdalny MCP wymaga osiągalnego
-HTTPS; lokalna instalacja nie wymaga domeny. Zobacz [szybki start](/pl/getting-started)
-i [informacje CLI](/cli-information).
+Pierwszy ekran kreatora pokazuje instrukcje we wszystkich pięciu językach.
+Wybór działa klawiszami 1–5 bez dodatkowego Entera; można też użyć strzałek i
+Enter. Domyślny język wynika
+z ustawień regionalnych, a przy braku obsługiwanego języka jest to angielski.
+`JAMRELAY_LANGUAGE` pozwala ustawić język dla kolejnych poleceń.
+`jamrelay config` zachowuje ustawienia sieciowe, chyba że wybierzesz opcje
+zaawansowane. Dostęp zdalny wymaga osiągalnego adresu HTTPS i kontrolowanego
+reverse proxy; zaufanie do nagłówków proxy włączaj wyłącznie w takim układzie.
+
+Ustaw dane aplikacji usługi przed uruchomieniem serwera, a potem autoryzuj
+własne konto i skonfiguruj klienta:
+
+```bash
+jamrelay connect provider spotify
+jamrelay start
+jamrelay onboard
+```
+
+W Docker Compose użyj `docker compose run --rm jamrelay connect provider spotify`,
+a potem `docker compose up -d`. Polecenie `jamrelay onboard` można uruchamiać
+ponownie, aby kontynuować. Dane aplikacji i zgoda na dostęp do własnego konta
+to osobne kroki OAuth. Polecenie `jamrelay connect client chatgpt|claude|cursor|vscode|generic`
+wyświetla instrukcje dla wybranego klienta i dokładny adres `/mcp`.
+Zdalny asystent w chmurze nie połączy się z prywatnym adresem `localhost`;
+potrzebuje obsługiwanego tunelu albo dostępnego adresu HTTPS.
+
+`jamrelay doctor` pomaga sprawdzić konfigurację. Zobacz
+[szybki start](/pl/getting-started) i [informacje CLI](/cli-information).
