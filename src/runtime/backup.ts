@@ -1,7 +1,7 @@
 import { chmod, copyFile, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import { openSqlite } from './sqlite.js';
 
 export type ApplicationBackupOptions = {
   databasePath: string;
@@ -29,7 +29,7 @@ export async function createApplicationBackup(
   if (!existsSync(databasePath)) throw new Error('State DB does not exist.');
   await mkdir(outputDir, { recursive: true, mode: 0o700 });
   const destinationDb = path.join(outputDir, 'jamrelay.db');
-  const source = new DatabaseSync(databasePath, { readOnly: true });
+  const source = openSqlite(databasePath, { readOnly: true });
   try {
     const escaped = destinationDb.replaceAll("'", "''");
     source.exec(`VACUUM INTO '${escaped}'`);

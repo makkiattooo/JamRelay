@@ -103,16 +103,6 @@ export async function setup(nonInteractive = false, reconfigure = false) {
   const paths = installationPaths();
   let unlock = () => {};
   let closeDatabase = () => {};
-  const deferredWarnings: Error[] = [];
-  const warningHandler = (warning: Error) => {
-    if (
-      warning.name === 'ExperimentalWarning' &&
-      /SQLite is an experimental feature/.test(warning.message)
-    )
-      deferredWarnings.push(warning);
-    else console.error(warning.stack ?? warning.message);
-  };
-  if (!nonInteractive) process.on('warning', warningHandler);
   let stateForSetup: typeof import('../cli/state.js') | undefined;
   let notificationPreference: boolean | undefined;
   const ask = async (label: string, fallback: string) => {
@@ -341,10 +331,6 @@ export async function setup(nonInteractive = false, reconfigure = false) {
     }
     closeDatabase();
     unlock();
-    if (!nonInteractive) {
-      process.off('warning', warningHandler);
-      for (const warning of deferredWarnings) console.error(warning.stack ?? warning.message);
-    }
   }
 }
 export async function doctor(json = false) {
@@ -384,11 +370,11 @@ export async function doctor(json = false) {
         'HTTPS origin: configure TRUST_PROXY for your trusted reverse proxy if TLS terminates there.',
       );
     if (existsSync(settings.JAMRELAY_DB_PATH)) {
-      const [{ DatabaseSync }, database] = await Promise.all([
-        import('node:sqlite'),
+      const [{ openSqlite }, database] = await Promise.all([
+        import('./sqlite.js'),
         import('../db/database.js'),
       ]);
-      const db = new DatabaseSync(settings.JAMRELAY_DB_PATH, { readOnly: true });
+      const db = openSqlite(settings.JAMRELAY_DB_PATH, { readOnly: true });
       try {
         if (db.prepare('PRAGMA integrity_check').get()?.integrity_check !== 'ok')
           errors.push('SQLite integrity check failed.');

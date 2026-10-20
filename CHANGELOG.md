@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.6
+
+- Load SQLite only when opening a database; filter its known Node 22 experimental notice during CLI commands, defer unrelated interactive warnings until teardown, and remove duplicate stack output. Native diagnostics remain available with `node --trace-warnings dist/cli.js …`; SQL errors, logs and existing storage are unchanged.
+
 ## 1.5.5
 
 - Add masked owner password setup/reset with salted scrypt hashing and retained recovery/legacy access. Preserve encryption keys, OAuth stores and provider credentials.

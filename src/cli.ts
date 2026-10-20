@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { manageCliWarnings } from './runtime/warnings.js';
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { APP_VERSION } from './version.js';
@@ -32,6 +33,19 @@ ${t('Operator commands support --json. JAMRELAY_CONFIG_PATH selects a private en
 }
 export const help = cliHelp();
 export async function runCli(args: string[]) {
+  const interactive = Boolean(
+    process.stdin.isTTY &&
+    ['setup', 'config', 'onboard', 'connect', 'connectivity', 'owner'].includes(args[0]) &&
+    !args.includes('--yes'),
+  );
+  const restoreWarnings = manageCliWarnings(interactive);
+  try {
+    return await dispatchCli(args);
+  } finally {
+    restoreWarnings();
+  }
+}
+async function dispatchCli(args: string[]) {
   const help = cliHelp();
   const [command, ...rest] = args;
   if (!command || command === '--help' || command === '-h') {

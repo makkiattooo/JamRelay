@@ -7,7 +7,7 @@ import { atomicJson, changeState, readState, type CliState } from './state.js';
 import { menuPanel, selectOption, showPanel } from './tui.js';
 import { isLoopbackHttp, probeHealth } from './network-context.js';
 import { McpOAuthStore, StaticOAuthClientRegistry } from '../mcp/oauth.js';
-import { DatabaseSync } from 'node:sqlite';
+import { openSqlite } from '../runtime/sqlite.js';
 
 const execute = promisify(execFile);
 export type InstallClient =
@@ -144,7 +144,7 @@ export async function verifyClient(client: InstallClient, endpoint: string) {
   );
   let evidence;
   if (authenticated) {
-    const db = new DatabaseSync(process.env.JAMRELAY_DB_PATH!, { readOnly: true });
+    const db = openSqlite(process.env.JAMRELAY_DB_PATH!, { readOnly: true });
     try {
       evidence = db
         .prepare(
