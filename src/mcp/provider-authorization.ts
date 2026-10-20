@@ -2,7 +2,7 @@ import { ownerCredentialMatches, ownerCredentialFields } from './owner-password.
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type express from 'express';
 import { OwnerSessionStore } from './owner-session.js';
-import { oauthPageHeaders } from './oauth-authorize-page.js';
+import { oauthPageHeaders, renderStandaloneAuthPage } from './oauth-authorize-page.js';
 
 export const secretMatches = (a: string, b: string) =>
   Boolean(b) &&
@@ -12,8 +12,7 @@ const escape = (s: string) =>
     /[&<>"']/g,
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
   );
-export const authPage = (title: string, body: string) =>
-  `<!doctype html><html lang="en"><meta charset="utf-8"><title>${escape(title)}</title><h1>${escape(title)}</h1>${body}</html>`;
+export const authPage = (title: string, body: string) => renderStandaloneAuthPage(title, body);
 export const authResultPage = (
   _provider: string,
   ok: boolean,
@@ -101,8 +100,8 @@ export function registerOwnerAuthentication(
       .type('html')
       .send(
         authPage(
-          'Owner authentication',
-          `<form method="post" action="/owner/login"><input type="hidden" name="csrf_token" value="${nonce}"><input type="hidden" name="next" value="${escape(returnPath(req.query.next))}">${ownerCredentialFields(Boolean(passwordHash))}<button>Sign in</button></form>`,
+          'Owner sign-in',
+          `<p class="intro">Sign in to JamRelay to approve this music service connection.</p><form class="auth-form" method="post" action="/owner/login"><input type="hidden" name="csrf_token" value="${nonce}"><input type="hidden" name="next" value="${escape(returnPath(req.query.next))}">${ownerCredentialFields(Boolean(passwordHash))}<div class="actions"><button class="primary" type="submit">Sign in</button></div></form>`,
         ),
       );
   });
@@ -153,5 +152,5 @@ export function registerOwnerAuthentication(
 export const providerConsentPage = (provider: string, connection: string, csrf: string) =>
   authPage(
     'Authorize provider connection',
-    `<p>Connect or replace ${escape(connection)} on ${escape(provider)}. Existing credentials will change only after successful authorization.</p><form method="post" action="/auth/providers/${encodeURIComponent(provider)}/start"><input type="hidden" name="csrf_token" value="${escape(csrf)}"><input type="hidden" name="connection_id" value="${escape(connection)}"><button>Approve connection or replacement</button></form>`,
+    `<p class="intro">Connect or replace ${escape(connection)} on ${escape(provider)}. Existing credentials change only after successful authorization.</p><form class="actions" method="post" action="/auth/providers/${encodeURIComponent(provider)}/start"><input type="hidden" name="csrf_token" value="${escape(csrf)}"><input type="hidden" name="connection_id" value="${escape(connection)}"><button class="primary">Approve connection</button></form>`,
   );

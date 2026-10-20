@@ -57,11 +57,11 @@ export async function ownerCredentialMatches(
 }
 export function ownerCredentialFields(hasPassword: boolean) {
   const recovery =
-    '<label>Recovery / legacy owner secret <input type="password" name="owner_secret" autocomplete="off" maxlength="1024"></label>';
+    '<label class="credential-field" for="owner-secret">Recovery / legacy owner secret <input id="owner-secret" type="password" name="owner_secret" autocomplete="off" maxlength="1024"></label>';
   return hasPassword
-    ? '<label>Owner password <input type="password" name="owner_password" autocomplete="current-password" maxlength="256"></label><details><summary>Use recovery / legacy secret instead</summary><p>Leave the password blank when using recovery.</p>' +
+    ? '<label class="credential-field" for="owner-password">Owner password <input id="owner-password" type="password" name="owner_password" autocomplete="current-password" maxlength="256" autofocus></label><details class="recovery"><summary>Use recovery / legacy secret instead</summary><p>Leave the password blank when using recovery.</p>' +
         recovery +
         '</details>'
     : recovery +
-        '<p>Set an owner password with <code>jamrelay owner password</code> on the server.</p>';
+        '<p class="intro">Set an owner password with <code>jamrelay owner password</code> on the server.</p>';
 }

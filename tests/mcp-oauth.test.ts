@@ -264,7 +264,7 @@ describe('MCP OAuth', () => {
     expect(page.status).toBe(200);
     expect(page.headers.get('cache-control')).toBe('no-store');
     expect(page.headers.get('content-security-policy')).toContain("default-src 'none'");
-    expect(page.headers.get('referrer-policy')).toBe('no-referrer');
+    expect(page.headers.get('referrer-policy')).toBe('same-origin');
     expect(html).toContain('Connect an AI client to JamRelay');
     expect(html).toContain('/assets/icons/jamrelay-icon-dark.png');
     const icon = await fetch(`${root}/assets/icons/jamrelay-icon-dark.png`);

@@ -3,7 +3,7 @@ import { recordDiscovery } from './mcp/client-evidence.js';
 import express from 'express';
 import { timingSafeEqual } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { runtimePath } from './runtime/installation.js';
+import { loadInstallation, runtimePath } from './runtime/installation.js';
 import { McpServer, createMcpHandler } from '@modelcontextprotocol/server';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import pino, { type Logger } from 'pino';
@@ -172,7 +172,7 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
-    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Referrer-Policy', 'same-origin');
     next();
   });
   app.get('/assets/icons/jamrelay-icon-dark.png', (_req, res) =>
@@ -467,8 +467,19 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
   ).jamrelayRegistry = registry;
   return app;
 }
-export async function startServer(cfg = getConfig()) {
-  const logger = pino({ level: cfg.LOG_LEVEL });
+export async function startServer(
+  cfg = getConfig(),
+  logger: Logger = pino({ level: cfg.LOG_LEVEL }),
+) {
+  if (
+    !cfg.TOKEN_ENCRYPTION_KEY ||
+    Buffer.from(cfg.TOKEN_ENCRYPTION_KEY, 'base64').length !== 32 ||
+    !cfg.MCP_OAUTH_OWNER_SECRET ||
+    cfg.MCP_OAUTH_OWNER_SECRET.length < 32
+  )
+    throw new Error(
+      'JamRelay setup is incomplete. Run `jamrelay setup` before starting the server.',
+    );
   initializeDatabase({
     dataDir: cfg.JAMRELAY_DATA_DIR,
     dbPath: cfg.JAMRELAY_DB_PATH,
@@ -526,8 +537,10 @@ export async function startServer(cfg = getConfig()) {
   process.once('SIGINT', () => shutdown('SIGINT'));
   return server;
 }
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url)
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  loadInstallation();
   startServer().catch((error: unknown) => {
     pino().error({ err: error }, `${APP_NAME} startup failed`);
     process.exitCode = 1;
   });
+}

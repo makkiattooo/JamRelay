@@ -12,6 +12,7 @@ import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 import { createRequire } from 'node:module';
+import { randomUUID } from 'node:crypto';
 const lockfile = createRequire(import.meta.url)('proper-lockfile');
 
 export const packageRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -45,6 +46,26 @@ export function installationPaths() {
 }
 export function readSettings(path: string): Record<string, string> {
   return existsSync(path) ? (parseEnv(readFileSync(path, 'utf8')) as Record<string, string>) : {};
+}
+/**
+ * Setup creates the encryption material, owner approval secret and public origin
+ * that later provider connections, OAuth approvals and callback URLs depend on.
+ * A fully provisioned environment-only deployment can provide the same values.
+ */
+export function isInstallationConfigured(path = installationPaths().config) {
+  const settings = { ...readSettings(path), ...process.env };
+  const encryptionKey = settings.TOKEN_ENCRYPTION_KEY;
+  const ownerSecret = settings.MCP_OAUTH_OWNER_SECRET;
+  const publicBaseUrl = settings.PUBLIC_BASE_URL;
+  if (!encryptionKey || Buffer.from(encryptionKey, 'base64').length !== 32) return false;
+  if (!ownerSecret || ownerSecret.length < 32) return false;
+  if (!publicBaseUrl) return false;
+  try {
+    const url = new URL(publicBaseUrl);
+    return !url.username && !url.password && !url.search && !url.hash && url.pathname === '/';
+  } catch {
+    return false;
+  }
 }
 export function loadInstallation() {
   const paths = installationPaths();
@@ -91,16 +112,47 @@ export function saveSettings(path: string, settings: Record<string, string>) {
     if (existsSync(temp)) unlinkSync(temp);
   }
 }
+
+export function queueSettingsRestart(config: string, settings: Record<string, string>) {
+  const data = installationPaths().data;
+  mkdirSync(data, { recursive: true, mode: 0o700 });
+  const id = randomUUID();
+  const request = join(data, '.jamrelay-reconfigure-request.json');
+  const temporary = `${request}.${process.pid}.tmp`;
+  try {
+    writeFileSync(temporary, JSON.stringify({ id, config: resolve(config), settings }), {
+      mode: 0o600,
+      flag: 'wx',
+    });
+    renameSync(temporary, request);
+  } finally {
+    if (existsSync(temporary)) unlinkSync(temporary);
+  }
+  return { id, request, result: join(data, `.jamrelay-reconfigure-${id}.json`) };
+}
+
+export function readSettingsRestartResult(path: string) {
+  if (!existsSync(path)) return undefined;
+  try {
+    return JSON.parse(readFileSync(path, 'utf8')) as {
+      id: string;
+      ok: boolean;
+      message?: string;
+    };
+  } catch {
+    return undefined;
+  }
+}
 // Heartbeat locks work across container PID namespaces and recover after crashes.
+export const INSTALLATION_LOCKED_MESSAGE =
+  'JamRelay is running or setup is active. Stop it before reconfiguration; after an unclean exit allow 30 seconds for lock recovery.';
 export async function lockInstallation(config: string): Promise<() => void> {
   mkdirSync(dirname(config), { recursive: true, mode: 0o700 });
   try {
     await lockfile.lock(config, { realpath: false, stale: 30_000, update: 5_000, retries: 0 });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ELOCKED')
-      throw new Error(
-        'JamRelay is running or setup is active. Stop it before reconfiguration; after an unclean exit allow 30 seconds for lock recovery.',
-      );
+      throw new Error(INSTALLATION_LOCKED_MESSAGE);
     throw error;
   }
   return () => {

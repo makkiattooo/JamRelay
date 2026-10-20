@@ -37,7 +37,7 @@ These registry commands require publication; building a source checkout does not
 
 Stop JamRelay and back up the private configuration plus data/credentials before replacing code. Preserve `TOKEN_ENCRYPTION_KEY`, the recovery secret, provider credentials and OAuth stores. Version 1.5.5 adds forward migration `0013_client_discovery.sql`, containing only client ID, tool count and discovery timestamp. Start applies pending migrations. Do not downgrade against a newer schema without restoring the matching backup.
 
-Existing owner secrets continue to work. To migrate, stop the server and run `jamrelay owner password` (Compose: `docker compose run --rm jamrelay owner password`), then restart. Password confirmation is masked; only a salted scrypt hash is stored. Recovery and encryption material are retained. Noninteractive `setup --yes` retains recovery access and does not ask for a password.
+Existing owner secrets continue to work. To migrate, stop the server and run `jamrelay owner password` (Compose: `docker compose run --rm -it jamrelay owner password`), then restart. Password confirmation is masked; only a salted scrypt hash is stored. Recovery and encryption material are retained. Noninteractive `setup --yes` retains recovery access and does not ask for a password.
 
 New OAuth approvals default to read access. Existing active grants are preserved until explicitly changed. After authorizing a music account, reconnect any MCP client whose grant does not yet include it.
 

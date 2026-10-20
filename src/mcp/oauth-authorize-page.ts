@@ -55,6 +55,15 @@ const pageStart = (title: string) => `<!doctype html>
     .cancel:hover { color: #c9d1d9; }
     .error { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 24px; padding: 2px 0 2px 12px; border-left: 2px solid #da3633; color: #c9d1d9; font-size: 14px; line-height: 1.5; }
     .error-icon { flex: 0 0 auto; color: #f85149; font-weight: 700; }
+    .auth-form { display: grid; gap: 18px; }
+    .auth-form > label, .credential-field { display: grid; gap: 8px; margin: 0; color: #c9d1d9; font-size: 14px; font-weight: 600; }
+    input[type="password"] { min-height: 44px; }
+    details.recovery { padding: 14px; border: 1px solid #30363d; border-radius: 8px; background: #0d1117; }
+    details.recovery summary { color: #8b949e; font-size: 13px; cursor: pointer; }
+    details.recovery p { margin: 12px 0; color: #8b949e; font-size: 13px; line-height: 1.5; }
+    .primary:focus-visible, summary:focus-visible, input:focus-visible { outline: 2px solid #2fbbd0; outline-offset: 3px; }
+    .primary { background: #168da2; }
+    .primary:hover { background: #1aa5bb; }
     footer { margin-top: 28px; color: #6e7681; font-size: 12px; text-align: center; }
     @media (max-width: 520px) { .card { padding: 28px 22px; } body { padding: 14px; } }
   </style>
@@ -69,6 +78,15 @@ const logo =
   '<img src="/assets/icons/jamrelay-icon-dark.png" alt="JamRelay" width="32" height="32">';
 
 const brandName = 'JamRelay Connect';
+
+export const renderStandaloneAuthPage = (title: string, body: string) => `${pageStart(title)}
+  <main class="card">
+    <div class="brand">${logo}<span>${brandName}</span></div>
+    <h1>${escapeHtml(title)}</h1>
+    ${body}
+    <footer>JamRelay · Secure owner access</footer>
+  </main>
+${pageEnd}`;
 
 export const renderAuthorizePage = ({
   clientName,
@@ -154,7 +172,7 @@ ${pageEnd}`;
 export const oauthPageHeaders = {
   'Cache-Control': 'no-store',
   Pragma: 'no-cache',
-  'Referrer-Policy': 'no-referrer',
+  'Referrer-Policy': 'same-origin',
   'Content-Security-Policy':
     "default-src 'none'; img-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
 };

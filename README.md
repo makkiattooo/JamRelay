@@ -52,9 +52,12 @@ Requires **Node.js 22.13 or later**. Once the official npm package is published:
 npm install -g jamrelay
 jamrelay setup
 jamrelay start
+jamrelay onboard
 ```
 
-The terminal wizard configures storage, a masked owner password and optional providers.
+The setup command configures storage and a masked owner password, then exits. Run
+`jamrelay onboard` to configure network access, music connections and MCP clients
+or open the management menu.
 You obtain provider developer credentials yourself and authorize accounts
 separately through the owner consent flow. Existing installations can stop the
 server and run `jamrelay owner password` without changing encryption keys.

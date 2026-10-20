@@ -82,12 +82,15 @@ describe('guided connectivity setup', () => {
     try {
       const address = server.address();
       if (!address || typeof address === 'string') throw new Error('Test server did not bind');
-      await expect(verifyEndpoint(`http://127.0.0.1:${address.port}`, true)).resolves.toEqual({
-        dns: null,
-        https: null,
-        health: true,
-        mcpProtected: true,
-      });
+      await expect(verifyEndpoint(`http://127.0.0.1:${address.port}`, true)).resolves.toMatchObject(
+        {
+          dns: null,
+          https: null,
+          health: true,
+          mcpProtected: true,
+          oauthDiscovery: false,
+        },
+      );
     } finally {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),

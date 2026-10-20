@@ -6,9 +6,9 @@ JamRelay 1.5.9 is prepared on `codex/jamrelay-work`. Nothing in this checklist a
 
 Use the newly built source/image with your existing private `/data` and configuration preserved. For the Windows Compose installation, keep `JAMRELAY_PORT=15268` in the host environment (or your chosen published port).
 
-1. Stop the service and set/migrate the owner password: `docker compose stop jamrelay`, then `docker compose run --rm jamrelay owner password`.
-2. Configure your own Spotify application: `docker compose run --rm jamrelay connect provider spotify`. Register the exact printed callback in Spotify. Existing credentials can be retained; they are distinct from account authorization.
-3. Run `docker compose up -d --build --wait`. Verify `http://127.0.0.1:15268/health` reports version 1.5.9 and current schema. Run `docker compose run --rm jamrelay onboard`; health/MCP protection should pass, DNS/TLS should show N/A for local HTTP, and it must not request shutdown for read-only steps.
+1. Stop the service and set/migrate the owner password: `docker compose stop jamrelay`, then `docker compose run --rm -it jamrelay owner password`.
+2. Configure your own Spotify application: `docker compose run --rm -it jamrelay connect provider spotify`. Register the exact printed callback in Spotify. Existing credentials can be retained; they are distinct from account authorization.
+3. Run `docker compose up -d --build --wait`. Verify `http://127.0.0.1:15268/health` reports version 1.5.9 and current schema. Run `docker compose run --rm -it jamrelay onboard`; health/MCP protection should pass, DNS/TLS should show N/A for local HTTP, and it must not request shutdown for read-only steps.
 4. Sign in at `http://127.0.0.1:15268/owner/login`, open `/auth/providers/spotify/start`, approve and complete Spotify OAuth. Run `docker compose run --rm jamrelay connections list` to inspect saved records; that alone is not a live API test.
 5. On Windows HOST PowerShell run `claude mcp add --transport http jamrelay http://127.0.0.1:15268/mcp` (inspect an existing registration with `claude mcp get jamrelay` first). In Claude Code run `/mcp`, complete browser OAuth, choose the Spotify connection and keep read-only permissions initially.
 6. Request tool discovery, `get_connections`, account identity, `get_my_playlists`, `get_playlist_tracks`, and current playback with an active eligible Spotify device. Re-run `jamrelay connect client claude-code --verify` through Compose to check actual server-observed discovery.

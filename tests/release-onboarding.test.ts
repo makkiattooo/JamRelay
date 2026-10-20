@@ -30,13 +30,18 @@ it('probes Compose instead of host loopback and never marks DNS or TLS verified 
       ? new Response('', { status: 401 })
       : Response.json({ status: 'ok', version: APP_VERSION, database: { schemaState: 'current' } });
   });
-  expect(await verifyEndpoint(origin, true)).toEqual({
+  expect(await verifyEndpoint(origin, true)).toMatchObject({
     dns: null,
     https: null,
     health: true,
     mcpProtected: true,
+    oauthDiscovery: false,
   });
-  expect(targets).toEqual(['http://jamrelay:5267/health', 'http://jamrelay:5267/mcp']);
+  expect(targets).toEqual([
+    'http://jamrelay:5267/health',
+    'http://jamrelay:5267/mcp',
+    'http://jamrelay:5267/.well-known/oauth-authorization-server',
+  ]);
 });
 it('merges only the selected MCP entry, backs up original settings and uses argument-safe Claude registration', () => {
   const root = mkdtempSync(join(tmpdir(), 'jamrelay-client-'));
@@ -94,11 +99,12 @@ it('reports an older healthy service as unavailable in the connectivity wizard',
       ? new Response('', { status: 401 })
       : Response.json({ status: 'ok', version: '1.5.4', database: { schemaState: 'current' } }),
   );
-  expect(await verifyEndpoint('http://127.0.0.1:15268', true)).toEqual({
+  expect(await verifyEndpoint('http://127.0.0.1:15268', true)).toMatchObject({
     dns: null,
     https: null,
     health: false,
     mcpProtected: true,
+    oauthDiscovery: false,
   });
 });
 it('selects a numeric TUI shortcut immediately without Enter', async () => {

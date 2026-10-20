@@ -243,13 +243,19 @@ export async function updateSummary(options: FetchOptions = {}) {
     message:
       state === 'not_published'
         ? `No official published ${mode === 'docker' ? 'image/tag' : mode === 'npm' ? 'npm release' : 'GitHub release'} found.`
-        : mode === 'docker' && !verified
-          ? 'Official image availability is unverified.'
-          : !verified && mode === 'npm'
-            ? 'Package ownership/channel/Node compatibility could not be verified.'
-            : result.fresh
-              ? 'Official public distribution metadata checked.'
-              : 'Cached information is not verified-current. Use --refresh for current availability.',
+        : result.status === 'offline'
+          ? 'Could not reach the update service. Check the internet connection and try again.'
+          : result.status === 'error'
+            ? result.problem === 'invalid_metadata'
+              ? 'The update service returned data JamRelay could not verify.'
+              : 'The update service returned an error. Try again later.'
+            : mode === 'docker' && !verified
+              ? 'Official image availability is unverified.'
+              : !verified && mode === 'npm'
+                ? 'Package ownership/channel/Node compatibility could not be verified.'
+                : result.fresh
+                  ? 'Official public distribution metadata checked.'
+                  : 'Cached information is not verified-current. Use --refresh for current availability.',
     guidance:
       (mode === 'docker' && latest && verified && result.fresh
         ? `For Compose, explicitly set image: ghcr.io/makkiattooo/jamrelay:${latest}, remove the local build entry if switching from source, then manually run docker compose up -d --no-deps jamrelay. Keep the same persistent volume and configuration. `

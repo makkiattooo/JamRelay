@@ -10,7 +10,9 @@ jamrelay setup
 jamrelay start
 ```
 
-`npx jamrelay setup`, `pnpm dlx jamrelay setup` and `bunx jamrelay setup` use the same Node-based package after publication. The setup wizard chooses safe private storage and owner security automatically. Run `jamrelay connect provider spotify` to enter provider application credentials securely, then start the server and run `jamrelay onboard` to authorize your personal music account and connect an AI client. Creating an application and authorizing a listener account are separate steps. See the [provider guides](/providers/) for service requirements.
+`npx jamrelay setup`, `pnpm dlx jamrelay setup` and `bunx jamrelay setup` use the same Node-based package after publication. The setup wizard saves safe private storage and owner security, then exits. It does not open the management menu. Start JamRelay and run `jamrelay onboard` when you want to configure network access, music connections, MCP clients or manage the installation. Run `jamrelay connect provider spotify` to enter provider application credentials securely. Creating an application and authorizing a listener account are separate steps. See the [provider guides](/providers/) for service requirements.
+
+The server will not start until setup has saved its persistent credential-encryption key, owner approval secret and public origin. These are used later to protect music-service credentials, approve OAuth connections and generate callback URLs. If setup has not run, an interactive local `jamrelay start` opens it first. Container starts stop with instructions to run setup explicitly, so a detached Compose service cannot hang waiting for keyboard input. Environment-only deployments must provide the same values explicitly.
 
 **Publication is pending.** A GitHub commit or development version does not imply that npm or GHCR artifacts exist. `jamrelay update check` inspects actual official distribution metadata.
 
@@ -19,6 +21,10 @@ jamrelay start
 The first interactive setup screen presents its instructions in all five languages and shows native language names: Polski (`pl`), English (`en`), Deutsch (`de`), Français (`fr`), Español (`es`). Press a number to select immediately, use the arrow keys and Enter, or accept the detected language. The default follows `LC_ALL`, `LC_MESSAGES`, `LANG`, then the system locale; unsupported locales use English.
 
 Setup saves `JAMRELAY_LANGUAGE` in the selected private configuration. Subsequent commands reuse it, and `jamrelay config` offers the language menu again while preserving credentials, encryption keys, paths and provider settings. `JAMRELAY_LANGUAGE` in the environment overrides the saved preference; `JAMRELAY_CONFIG_PATH` selects which installation to read, including for `--help`.
+
+In an interactive terminal, `jamrelay help` or `jamrelay --help` opens the TUI command guide with descriptions by category. Without an interactive terminal, help is printed as plain text.
+
+Interactive command results are shown in the JamRelay TUI and wait for Enter before returning to the terminal. The interactive `jamrelay start` screen stays open while the server runs; press Ctrl+C to stop it. Noninteractive commands keep their text output for scripts and service logs.
 
 `jamrelay config` keeps network defaults unless you opt into advanced settings. Remote access requires a reachable HTTPS origin and a reverse proxy you control; only then should you trust forwarded proxy headers.
 
@@ -36,7 +42,7 @@ Interactive setup offers masked password entry and confirmation (12–256 charac
 ```bash
 jamrelay owner password
 # Compose, after docker compose stop jamrelay:
-docker compose run --rm jamrelay owner password
+docker compose run --rm -it jamrelay owner password
 ```
 
 Restart afterward. Encryption keys, recovery secret, provider tokens and OAuth grants are preserved. On `/owner/login` and OAuth consent use the password, or expand the recovery/legacy-secret alternative. Keep secrets out of AI chat and client configuration.
@@ -51,7 +57,7 @@ jamrelay start
 jamrelay onboard
 ```
 
-For Docker Compose, run setup and provider configuration with `docker compose run --rm jamrelay setup` and `docker compose run --rm jamrelay connect provider spotify`, then start the service with `docker compose up -d`. Re-run `jamrelay onboard` (or `docker compose run --rm jamrelay onboard`) to continue. Provider authorization uses the existing owner login and OAuth consent page. `jamrelay connect client chatgpt|claude-code|claude-desktop|cursor|vscode|generic` provides client-specific configuration (the `claude` alias asks which application). Local Claude Code registration and Cursor/VS Code JSON edits require confirmation, preserve other settings and back up files. Docker only prints host-side commands. Add `--verify` after browser authentication and tool discovery to check server-observed evidence. The CLI reports generated/configured/authenticated/verified states separately and the exact `/mcp` URL. A cloud client cannot reach private `localhost`; use an eligible secure tunnel or a reachable HTTPS endpoint.
+For Docker Compose, run setup and provider configuration with `docker compose run --rm -it jamrelay setup` and `docker compose run --rm -it jamrelay connect provider spotify`, then start the service with `docker compose up -d`. `jamrelay onboard` (or `docker compose run --rm -it jamrelay onboard`) opens the main management menu. `jamrelay connectivity` (or `docker compose run --rm -it jamrelay connectivity`) opens network setup directly. Provider authorization uses the existing owner login and OAuth consent page. `jamrelay connect client chatgpt|claude-code|claude-desktop|cursor|vscode|generic` provides client-specific configuration (the `claude` alias asks which application). Local Claude Code registration and Cursor/VS Code JSON edits require confirmation, preserve other settings and back up files. Docker only prints host-side commands. Add `--verify` after browser authentication and tool discovery to check server-observed evidence. The CLI reports generated/configured/authenticated/verified states separately and the exact `/mcp` URL. A cloud client cannot reach private `localhost`; use an eligible secure tunnel or a reachable HTTPS endpoint.
 
 ## Development candidate archive
 
@@ -68,14 +74,14 @@ Then run `npm install -g <archive-path-printed-by-npm>` followed by `jamrelay se
 
 The wizard uses XDG directories on Linux, Application Support on macOS and AppData on Windows. Existing `.env` deployments and environment path overrides are retained. `JAMRELAY_CONFIG_PATH` selects a private configuration file; run `jamrelay config` from the original deployment directory to preserve existing relative paths as absolute paths.
 
-Stop the server before reconfiguration or upgrades. Back up data **and** private configuration, preserve encryption keys, install the new package, run `jamrelay doctor`, then `jamrelay start`. Do not silently move data or replace keys. See the [connectivity guide](/connectivity) for local-only access, tunnels, custom domains, HTTPS checks and recovery; see [operations](/operations) for migration/recovery details and the [CLI reference](/cli-information) for update channels and offline notices.
+Stop the server before reconfiguration or upgrades. If setup finds JamRelay already running or another setup holding the configuration lock, it keeps the warning in the setup screen until you press Enter, then exits without changing configuration. After an unclean exit, allow up to 30 seconds for lock recovery. Back up data **and** private configuration, preserve encryption keys, install the new package, run `jamrelay doctor`, then `jamrelay start`. Do not silently move data or replace keys. See the [connectivity guide](/connectivity) for local-only access, tunnels, custom domains, HTTPS checks and recovery; see [operations](/operations) for migration/recovery details and the [CLI reference](/cli-information) for update channels and offline notices.
 
 ## Docker Compose (recommended)
 
 The repository's `compose.yml` builds locally and needs no tunnel, external network or pre-created volume:
 
 ```bash
-docker compose run --rm jamrelay setup
+docker compose run --rm -it jamrelay setup
 docker compose up -d --wait
 docker compose ps
 docker compose logs -f jamrelay
