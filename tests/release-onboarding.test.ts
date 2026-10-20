@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mergeClientConfig, claudeAddArgs } from '../src/cli/client-installation.js';
+import { mergeClientConfig, claudeAddArgs, verifyClient } from '../src/cli/client-installation.js';
 import { probeOrigin } from '../src/cli/network-context.js';
 import { verifyEndpoint } from '../src/cli/connectivity.js';
 import { selectOption } from '../src/cli/tui.js';
@@ -92,5 +92,34 @@ it('selects a numeric TUI shortcut immediately without Enter', async () => {
       if (descriptor) Object.defineProperty(object, key, descriptor);
       else Reflect.deleteProperty(object, key);
     }
+  }
+});
+
+it('does not mistake Claude Code OAuth evidence for a Claude Desktop connection', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'jamrelay-client-evidence-'));
+  vi.stubEnv('MCP_OAUTH_STORE_PATH', join(root, 'oauth.json'));
+  vi.stubEnv('MCP_OAUTH_CLIENTS_PATH', join(root, 'clients.json'));
+  vi.stubEnv('JAMRELAY_CLI_STATE_PATH', join(root, 'state.json'));
+  vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+  writeFileSync(
+    join(root, 'clients.json'),
+    JSON.stringify({
+      clients: [
+        {
+          clientId: 'code-only',
+          clientName: 'Claude Code (jamrelay)',
+          redirectUris: ['http://127.0.0.1/callback'],
+        },
+      ],
+    }),
+  );
+  try {
+    expect(await verifyClient('claude-desktop', 'http://127.0.0.1:5267/mcp')).toBe(false);
+    expect(
+      JSON.parse(readFileSync(join(root, 'state.json'), 'utf8')).clientSetup['claude-desktop']
+        .status,
+    ).toBe('authentication_required');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });

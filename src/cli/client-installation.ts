@@ -104,7 +104,7 @@ export async function verifyClient(client: InstallClient, endpoint: string) {
       (client === 'claude-code'
         ? /claude.*code/i
         : client === 'claude-desktop'
-          ? /claude/i
+          ? /claude(?!.*code)/i
           : new RegExp(client, 'i')
       ).test(c.clientName),
   );
@@ -136,7 +136,7 @@ export async function verifyClient(client: InstallClient, endpoint: string) {
       'Authentication required',
       'Complete OAuth from your client, request its tool list, then run this verification again.',
     );
-    return;
+    return false;
   }
   const grant = await store.getGrant(clientId);
   const authenticated = Boolean(
@@ -177,6 +177,7 @@ export async function verifyClient(client: InstallClient, endpoint: string) {
     statusLabels[status],
     `${detail}\n${endpoint}${previous?.status === 'failed' ? '\nPrevious failure replaced by this check.' : ''}`,
   );
+  return status === 'verified';
 }
 
 export async function installClient(client: InstallClient, endpoint: string) {

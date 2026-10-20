@@ -98,14 +98,14 @@ export async function runCli(args: string[]) {
         console.error(knownMessage('connect provider|client NAME'));
         return 2;
       }
-      await (
+      const verified = await (
         await import('./cli/guided.js')
       ).guidedConnect(
         kind as 'provider' | 'client',
         name.toLowerCase(),
         extra.includes('--verify'),
       );
-      return 0;
+      return extra.includes('--verify') && verified !== true ? 1 : 0;
     }
     if (
       ![
