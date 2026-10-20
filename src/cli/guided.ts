@@ -1,7 +1,6 @@
+import { openBrowser } from './browser.js';
 import { installClient, verifyClient, type InstallClient } from './client-installation.js';
 import { probeHealth } from './network-context.js';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { stdin } from 'node:process';
 import { resolve } from 'node:path';
 import { existsSync } from 'node:fs';
@@ -24,7 +23,6 @@ import {
 } from '../runtime/installation.js';
 import { validateSettings } from '../runtime/setup.js';
 
-const execFileAsync = promisify(execFile);
 type Provider = 'spotify' | 'soundcloud' | 'apple-music' | 'youtube';
 type Client = 'chatgpt' | 'claude' | 'cursor' | 'vscode' | 'generic';
 
@@ -551,20 +549,6 @@ async function requiredLine(label: string, hidden = false) {
   }
 }
 
-async function openBrowser(url: string) {
-  if (!process.stdin.isTTY || process.env.CI || process.env.JAMRELAY_HEADLESS === 'true')
-    return false;
-  try {
-    if (process.platform === 'win32')
-      await execFileAsync('rundll32.exe', ['url.dll,FileProtocolHandler', url]);
-    else if (process.platform === 'darwin') await execFileAsync('open', [url]);
-    else await execFileAsync('xdg-open', [url]);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 async function choose<T extends string>(title: string, items: readonly T[]) {
   return selectOption(
     items.map((value) => ({ label: value, value })),
@@ -659,6 +643,12 @@ export async function connectProvider(provider: Provider) {
   );
   if (provider === 'apple-music')
     showPanel(p.name, `${requirements[currentLanguage()][provider]}\n\n${tr('appleToken')}`);
+  if (
+    replace &&
+    (await choose(tr('create'), [tr('later'), tr('openBrowser')])) === tr('openBrowser')
+  ) {
+    if (!(await openBrowser(p.portal))) showPanel(p.name, p.portal);
+  }
   if (replace && provider === 'apple-music') {
     saved.APPLE_MUSIC_TEAM_ID = await requiredLine(tr('team'));
     saved.APPLE_MUSIC_KEY_ID = await requiredLine(tr('keyId'));
@@ -692,7 +682,7 @@ export async function connectProvider(provider: Provider) {
     showPanel(tr('authLink'), `${tr('authLink')}\n${authorizationUrl}`);
     const openLogin = await choose(tr('ownerLogin'), [tr('openBrowser'), tr('later')]);
     if (openLogin === tr('openBrowser')) {
-      const loginUrl = `${new URL(callback).origin}/owner/login`;
+      const loginUrl = `${new URL(callback).origin}/owner/login?next=${encodeURIComponent(new URL(authorizationUrl).pathname)}`;
       if (!(await openBrowser(loginUrl))) showPanel(tr('ownerLogin'), loginUrl);
       else showPanel(tr('ownerLogin'), tr('openedLogin'));
     }

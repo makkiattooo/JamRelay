@@ -113,6 +113,7 @@ describe('MCP OAuth', () => {
       state: 'state with spaces',
       resource: `${base}/mcp`,
       [method]: owner,
+      permissions: 'diagnostics.read',
     });
     const response = await fetch(`${root}/oauth/authorize`, {
       method: 'POST',
@@ -265,7 +266,10 @@ describe('MCP OAuth', () => {
     expect(page.headers.get('content-security-policy')).toContain("default-src 'none'");
     expect(page.headers.get('referrer-policy')).toBe('no-referrer');
     expect(html).toContain('Connect an AI client to JamRelay');
-    expect(html).toContain('/assets/icons/jamrelay-icon-dark.png.png');
+    expect(html).toContain('/assets/icons/jamrelay-icon-dark.png');
+    const icon = await fetch(`${root}/assets/icons/jamrelay-icon-dark.png`);
+    expect(icon.status).toBe(200);
+    expect(icon.headers.get('content-type')).toContain('image/png');
     expect(html).toContain('JamRelay Connect');
     expect(html).toContain('Authorize access');
     expect(html).toContain('type="password"');

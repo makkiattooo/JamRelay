@@ -1,9 +1,8 @@
+import { openBrowser as openUrl } from './browser.js';
 import { probeOrigin, probeOrigins, isLoopbackHttp } from './network-context.js';
 import { resolve4, resolve6 } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { domainToASCII } from 'node:url';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { stdin, stdout } from 'node:process';
 import { currentLanguage, type Language } from './i18n/index.js';
 import { changeState, readState, type connectivityMethodSchema } from './state.js';
@@ -33,7 +32,6 @@ type Checks = {
   health: boolean;
   mcpProtected: boolean;
 };
-const execFileAsync = promisify(execFile);
 const PORTAL = {
   cloudflare: 'https://dash.cloudflare.com/',
   cloudflareTunnels: 'https://one.dash.cloudflare.com/',
@@ -948,19 +946,6 @@ async function persist(
       checkedAt: status === 'verified' || status === 'local' ? new Date().toISOString() : null,
     };
   });
-}
-
-async function openUrl(url: string) {
-  if (!stdin.isTTY || process.env.CI || process.env.JAMRELAY_HEADLESS === 'true') return false;
-  try {
-    if (process.platform === 'win32')
-      await execFileAsync('rundll32.exe', ['url.dll,FileProtocolHandler', url]);
-    else if (process.platform === 'darwin') await execFileAsync('open', [url]);
-    else await execFileAsync('xdg-open', [url]);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 async function maybeOpen(url: string, language: Language) {

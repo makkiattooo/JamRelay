@@ -88,7 +88,12 @@ export function registerOwnerAuthentication(
     attempts.set(key, r);
     return ++r.count <= 10;
   };
-  app.get('/owner/login', (_req, res) => {
+  const returnPath = (value: unknown) =>
+    typeof value === 'string' &&
+    /^\/auth\/providers\/(spotify|soundcloud|youtube)\/start$/.test(value)
+      ? value
+      : '';
+  app.get('/owner/login', (req, res) => {
     const nonce = randomBytes(24).toString('base64url');
     res
       .set(oauthPageHeaders)
@@ -97,7 +102,7 @@ export function registerOwnerAuthentication(
       .send(
         authPage(
           'Owner authentication',
-          `<form method="post" action="/owner/login"><input type="hidden" name="csrf_token" value="${nonce}">${ownerCredentialFields(Boolean(passwordHash))}<button>Sign in</button></form>`,
+          `<form method="post" action="/owner/login"><input type="hidden" name="csrf_token" value="${nonce}"><input type="hidden" name="next" value="${escape(returnPath(req.query.next))}">${ownerCredentialFields(Boolean(passwordHash))}<button>Sign in</button></form>`,
         ),
       );
   });
@@ -120,12 +125,15 @@ export function registerOwnerAuthentication(
     const session = sessions.authenticate(secret, secret);
     if (!session) return res.status(401).json({ error: 'OWNER_AUTH_REQUIRED' });
     sessions.revoke(cookie(req, 'jamrelay_owner'));
-    return res
+    res
       .set(oauthPageHeaders)
       .setHeader('Set-Cookie', [
         `jamrelay_owner=${session.token}${attrs}; Max-Age=1800`,
         `jamrelay_login=${attrs}; Max-Age=0`,
-      ])
+      ]);
+    const next = returnPath(req.body?.next);
+    if (next) return res.redirect(303, next);
+    return res
       .type('html')
       .send(
         authPage(

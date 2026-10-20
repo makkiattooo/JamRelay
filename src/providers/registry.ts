@@ -1,3 +1,4 @@
+import { toolContext } from '../mcp/context.js';
 import type { ProviderCapabilityName } from './capabilities.js';
 import { ProviderSelectionError } from './errors.js';
 import type {
@@ -16,6 +17,10 @@ export interface ProviderSelectionOptions {
   strategy?: ReadSelectionStrategy;
 }
 
+const isGranted = (id: string) => {
+  const access = toolContext.get()?.mcpAccess;
+  return !access || Boolean(access.connectionIds?.includes(id));
+};
 const isAvailable = (connection: ProviderConnection) => connection.summary.connected !== false;
 
 export class ProviderRegistry {
@@ -62,16 +67,22 @@ export class ProviderRegistry {
     );
   }
 
+  hasConfiguredConnections(): boolean {
+    return this.connections.size > 0;
+  }
+
   listConnections(): ProviderConnectionSummary[] {
-    return [...this.connections.values()].map(({ summary }) => ({
-      ...summary,
-      capabilities: { ...summary.capabilities },
-      metadata: summary.metadata ? { ...summary.metadata } : undefined,
-    }));
+    return [...this.connections.values()]
+      .filter((c) => isGranted(c.summary.connectionId))
+      .map(({ summary }) => ({
+        ...summary,
+        capabilities: { ...summary.capabilities },
+        metadata: summary.metadata ? { ...summary.metadata } : undefined,
+      }));
   }
 
   getConnection(connectionId: ConnectionId): ProviderConnection | undefined {
-    return this.connections.get(connectionId);
+    return isGranted(connectionId) ? this.connections.get(connectionId) : undefined;
   }
 
   connectionMatchesProvider(connectionId: ConnectionId, provider: ProviderId): boolean {
@@ -85,6 +96,7 @@ export class ProviderRegistry {
     return [...this.connections.values()].filter((connection) => {
       const summary = connection.summary;
       return (
+        isGranted(summary.connectionId) &&
         isAvailable(connection) &&
         (!options.provider || summary.provider === options.provider) &&
         (!options.capability || summary.capabilities[options.capability] === true)
@@ -112,6 +124,7 @@ export class ProviderRegistry {
     const allMatching = [...this.connections.values()].filter((connection) => {
       const summary = connection.summary;
       return (
+        isGranted(summary.connectionId) &&
         (!options.provider || summary.provider === options.provider) &&
         (!options.capability || summary.capabilities[options.capability] === true)
       );

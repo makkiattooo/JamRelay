@@ -19,7 +19,7 @@ ${t('Usage')}: jamrelay <command>
   start              ${t('Run the MCP HTTP server')}
   status | doctor    ${t('Installation status / configuration diagnostics')}
   connections list
-  clients list | clients revoke ID
+  clients list | clients show ID | clients permissions [set] ID | clients policy | clients revoke ID
   jobs list | jobs inspect/cancel/resume ID
   diagnostics
   backup create | backup list
@@ -35,7 +35,9 @@ export const help = cliHelp();
 export async function runCli(args: string[]) {
   const interactive = Boolean(
     process.stdin.isTTY &&
-    ['setup', 'config', 'onboard', 'connect', 'connectivity', 'owner'].includes(args[0]) &&
+    ['setup', 'config', 'onboard', 'connect', 'connectivity', 'owner', 'clients'].includes(
+      args[0],
+    ) &&
     !args.includes('--yes'),
   );
   const restoreWarnings = manageCliWarnings(interactive);

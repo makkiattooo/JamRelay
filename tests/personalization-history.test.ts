@@ -1,3 +1,5 @@
+import { toolContext } from '../src/mcp/context.js';
+import { registerPlaylistPersonalizationTools } from '../src/playlists/personalization.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -81,6 +83,18 @@ describe('provider-aware personalization history', () => {
     ]);
     expect(historyStats(['spotify-1']).get('spotify-1').plays).toBe(2);
     expect(historyStats(['beta-1']).get('beta-1').plays).toBe(2);
+    await toolContext.run(
+      {
+        requestId: 'isolated-history',
+        signal: new AbortController().signal,
+        deadlineAt: Date.now() + 1000,
+        mcpAccess: { clientId: 'client-a', connectionIds: ['spotify-default'] },
+      },
+      async () => {
+        expect(listHistory({}).map((e) => e.connectionId)).toEqual(['spotify-default']);
+        expect(historyStats(['spotify-1']).get('spotify-1').plays).toBe(1);
+      },
+    );
   });
 
   it('avoids a recently played track through a provider mapping and retains low-data evidence', async () => {
@@ -135,4 +149,52 @@ describe('provider-aware personalization history', () => {
     );
     expect(source).not.toContain('SpotifyClient');
   });
+});
+
+it('executes personalization writes and verifies resulting provider state instead of returning a simulated success', async () => {
+  await setup();
+  const tools = new Map<string, (args: any) => Promise<any>>();
+  let ids = ['one', 'two'];
+  let writes = 0;
+  const gateway: any = {
+    resolveReadTarget: () => ({
+      summary: { provider: 'beta', connectionId: 'beta-main' },
+      playlistRead: {},
+    }),
+    get: async () => ({ name: 'Fixture', snapshot_id: String(writes) }),
+    items: async () => ({
+      items: ids.map((id) => ({
+        item: {
+          id,
+          name: id,
+          uri: 'beta:track:' + id,
+          type: 'track',
+          artists: [{ name: 'Artist' }],
+        },
+      })),
+    }),
+    replace: async (_playlist: string, next: string[]) => {
+      writes++;
+      ids = next;
+    },
+  };
+  registerPlaylistPersonalizationTools(
+    { registerTool: (name: string, _config: unknown, callback: any) => tools.set(name, callback) },
+    gateway,
+  );
+  const result = await tools.get('personalize_playlist')!({
+    playlist_id: 'fixture-playlist',
+    dry_run: false,
+    min_artist_gap: 0,
+    seed: 1,
+  });
+  expect(writes).toBe(1);
+  expect(result.structuredContent.verification).toEqual({ ok: true, count: 2 });
+  gateway.replace = async () => {
+    writes++;
+    ids = [];
+  };
+  await expect(
+    tools.get('sort_by_personal_affinity')!({ playlist_id: 'fixture-playlist', dry_run: false }),
+  ).rejects.toThrow('playlist_integrity_mismatch');
 });

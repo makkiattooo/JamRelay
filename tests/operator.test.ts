@@ -60,6 +60,23 @@ describe('local operator CLI', () => {
     const tokens = await store.issueTokens('client', 'http://localhost/mcp');
     expect(await store.accessPolicy(tokens.access, 'http://localhost/mcp')).toBeDefined();
     closeDatabase();
+    expect(
+      await run(
+        'clients',
+        'permissions',
+        'set',
+        'client',
+        '--permissions',
+        'playlist.read',
+        '--tools',
+        'get_my_playlists',
+      ),
+    ).toBe(0);
+    expect(await store.accessPolicy(tokens.access, 'http://localhost/mcp')).toMatchObject({
+      permissions: ['playlist.read'],
+      tools: ['get_my_playlists'],
+    });
+    expect(await run('clients', 'permissions', 'client')).toBe(0);
     expect(await run('clients', 'revoke', 'client')).toBe(0);
     initializeDatabase();
     expect(await store.accessPolicy(tokens.access, 'http://localhost/mcp')).toBeUndefined();

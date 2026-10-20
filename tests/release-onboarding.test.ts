@@ -1,3 +1,4 @@
+import { parse } from 'jsonc-parser';
 import { afterEach, expect, it, vi } from 'vitest';
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -37,13 +38,14 @@ it('merges only the selected MCP entry, backs up original settings and uses argu
     const path = join(root, 'mcp.json');
     writeFileSync(
       path,
-      JSON.stringify({
-        theme: 'dark',
-        mcpServers: { other: { url: 'https://other.example/mcp' } },
-      }),
+      '{ // preserve this comment\n \"theme\": \"dark\", \"mcpServers\": { \"other\": { \"url\": \"https://other.example/mcp\" } },\n}\n',
     );
     mergeClientConfig(path, 'cursor', 'http://127.0.0.1:15268/mcp');
-    expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({
+    expect(readFileSync(path, 'utf8')).toContain('// preserve this comment');
+    expect(() => mergeClientConfig(path, 'cursor', 'http://127.0.0.1:5267/mcp')).toThrow(
+      'different jamrelay registration',
+    );
+    expect(parse(readFileSync(path, 'utf8'))).toMatchObject({
       theme: 'dark',
       mcpServers: {
         other: { url: 'https://other.example/mcp' },

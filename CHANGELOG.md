@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.7
+
+- Centralize model-independent MCP permissions, live per-registration scope/account/tool edits and revocation, including durable work. Filter discovery by grants and provider capabilities; default new installations to the essential profile.
+- Preserve JSONC settings and backups for desktop configuration; add project/user scope selection and the optional Claude Desktop stdio bridge. Keep Docker setup on the host and verify OAuth IDs rather than application names.
+- Repair browser navigation and owner-to-provider redirects; retain validated OAuth callbacks and fix the authorization icon URL. Retire 17 planning/empty-result placeholders, the obsolete artist-top-tracks endpoint stub and two misleading artist-operation aliases; the full catalog now contains 95 tools (including database tools). Repair actual personalization writes, playlist identifiers and two-way sync; splitting is explicitly preview-only.
+
 ## 1.5.6
 
 - Load SQLite only when opening a database; filter its known Node 22 experimental notice during CLI commands, defer unrelated interactive warnings until teardown, and remove duplicate stack output. Native diagnostics remain available with `node --trace-warnings dist/cli.js …`; SQL errors, logs and existing storage are unchanged.

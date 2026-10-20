@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { McpServer, createMcpHandler } from '@modelcontextprotocol/server';
 import {
@@ -75,8 +78,8 @@ it('exposes exactly the required tools through tools/list', async () => {
   );
   const listed = await rpc(handler, { jsonrpc: '2.0', id: 10, method: 'tools/list', params: {} });
   const names = listed.result.tools.map((x: any) => x.name);
-  expect(names).toHaveLength(106);
-  expect(new Set(names).size).toBe(106);
+  expect(names).toHaveLength(86);
+  expect(new Set(names).size).toBe(86);
   expect(names.sort()).toEqual(
     [
       ...REQUIRED_TOOL_NAMES,
@@ -103,6 +106,7 @@ it('exposes exactly the required tools through tools/list', async () => {
   expect(search.annotations.readOnlyHint).toBe(true);
 });
 it('serves the real Express app with bearer auth and MCP v2 discovery/calls', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jamrelay-mcp-http-'));
   const cfg: any = {
     SPOTIFY_CLIENT_ID: 'id',
     SPOTIFY_CLIENT_SECRET: 'secret',
@@ -114,6 +118,7 @@ it('serves the real Express app with bearer auth and MCP v2 discovery/calls', as
     LOG_LEVEL: 'silent',
     MCP_AUTH_MODE: 'bearer',
     MCP_API_KEY: 'test-key',
+    MCP_OAUTH_STORE_PATH: join(directory, 'oauth.json'),
     TRUST_PROXY: 'false',
     SPOTIFY_MARKET: 'PL',
   };
@@ -176,8 +181,12 @@ it('serves the real Express app with bearer auth and MCP v2 discovery/calls', as
     });
     expect(response.status).toBe(200);
     const listed: any = wire(await response.text());
-    expect(listed.result.tools).toHaveLength(106);
+    expect(listed.result.tools.map((t: any) => t.name)).toEqual([
+      'get_connections',
+      'get_capabilities',
+    ]);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
+    await rm(directory, { recursive: true, force: true });
   }
 });

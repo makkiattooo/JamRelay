@@ -1,9 +1,22 @@
+import { parse, modify, applyEdits, type ParseError } from 'jsonc-parser';
+import { randomBytes } from 'node:crypto';
+import { openBrowser, isContainer, publicHttpsEndpoint } from './browser.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { existsSync, lstatSync, readFileSync, copyFileSync, chmodSync, mkdirSync } from 'node:fs';
-import { atomicJson, changeState, readState, type CliState } from './state.js';
+import {
+  existsSync,
+  lstatSync,
+  readFileSync,
+  copyFileSync,
+  chmodSync,
+  mkdirSync,
+  writeFileSync,
+  renameSync,
+  unlinkSync,
+} from 'node:fs';
+import { changeState, readState, type CliState } from './state.js';
 import { menuPanel, selectOption, showPanel } from './tui.js';
 import { isLoopbackHttp, probeHealth } from './network-context.js';
 import { McpOAuthStore, StaticOAuthClientRegistry } from '../mcp/oauth.js';
@@ -29,41 +42,91 @@ async function choose(title: string, labels: string[]) {
     (index) => menuPanel(title, labels, index),
   );
 }
-export function clientConfig(client: 'cursor' | 'vscode', endpoint: string) {
-  return client === 'cursor'
-    ? { mcpServers: { jamrelay: { url: endpoint } } }
-    : { servers: { jamrelay: { type: 'http', url: endpoint } } };
+export type FileClient = 'cursor' | 'vscode' | 'claude-desktop';
+export function clientConfig(client: FileClient, endpoint: string) {
+  return client === 'vscode'
+    ? { servers: { jamrelay: { type: 'http', url: endpoint } } }
+    : {
+        mcpServers: {
+          jamrelay:
+            client === 'claude-desktop'
+              ? {
+                  command: 'npx',
+                  args: [
+                    '-y',
+                    'mcp-remote@0.15.1',
+                    endpoint,
+                    ...(isLoopbackHttp(new URL(endpoint).origin) ? ['--allow-http'] : []),
+                  ],
+                }
+              : { url: endpoint },
+        },
+      };
 }
-export function mergeClientConfig(path: string, client: 'cursor' | 'vscode', endpoint: string) {
-  let existing: Record<string, unknown> = {};
-  if (existsSync(path)) {
-    if (lstatSync(path).isSymbolicLink())
-      throw new Error('Client configuration is a symlink. Configure it manually.');
-    // JSONC is deliberately not rewritten; VS Code can import the displayed fragment manually.
-    existing = JSON.parse(readFileSync(path, 'utf8'));
-    if (!existing || Array.isArray(existing) || typeof existing !== 'object')
-      throw new Error('Client configuration must be a JSON object.');
-  }
-  const key = client === 'cursor' ? 'mcpServers' : 'servers';
+function readConfig(text: string) {
+  const errors: ParseError[] = [];
+  const value = parse(text, errors, { allowTrailingComma: true, disallowComments: false });
+  if (errors.length || !value || Array.isArray(value) || typeof value !== 'object')
+    throw new Error('Client configuration must contain a valid JSON/JSONC object.');
+  return value;
+}
+export function mergeClientConfig(path: string, client: FileClient, endpoint: string) {
+  validEndpoint(endpoint);
+  const source = existsSync(path) ? readFileSync(path, 'utf8') : '{}\n';
+  if (existsSync(path) && lstatSync(path).isSymbolicLink())
+    throw new Error('Client configuration is a symlink. Configure it manually.');
+  const existing = readConfig(source);
+  const key = client === 'vscode' ? 'servers' : 'mcpServers';
   const group = existing[key] ?? {};
   if (!group || Array.isArray(group) || typeof group !== 'object')
-    throw new Error(`Invalid ${key} configuration. Use the manual fragment.`);
+    throw new Error(`Invalid ${key} configuration.`);
+  const expected = (clientConfig(client, endpoint) as any)[key].jamrelay;
+  if (group.jamrelay) {
+    if (JSON.stringify(group.jamrelay) === JSON.stringify(expected)) return;
+    throw new Error(
+      'A different jamrelay registration exists. It was preserved; review it manually before replacing.',
+    );
+  }
+  const result = applyEdits(
+    source,
+    modify(source, [key, 'jamrelay'], expected, {
+      formattingOptions: { insertSpaces: true, tabSize: 2 },
+    }),
+  );
+  if (JSON.stringify(readConfig(result)[key]?.jamrelay) !== JSON.stringify(expected))
+    throw new Error('Client configuration verification failed.');
   if (existsSync(path)) {
     const backup = `${path}.jamrelay-${Date.now()}.bak`;
     copyFileSync(path, backup);
     chmodSync(backup, 0o600);
   }
   mkdirSync(dirname(path), { recursive: true });
-  atomicJson(path, {
-    ...existing,
-    [key]: {
-      ...group,
-      jamrelay: client === 'cursor' ? { url: endpoint } : { type: 'http', url: endpoint },
-    },
-  });
-  const written = JSON.parse(readFileSync(path, 'utf8'));
-  if (written[key]?.jamrelay?.url !== endpoint)
-    throw new Error('Client configuration verification failed. Restore the .bak file.');
+  const temporary = `${path}.${randomBytes(6).toString('hex')}.tmp`;
+  try {
+    writeFileSync(temporary, result, { mode: 0o600, flag: 'wx' });
+    renameSync(temporary, path);
+  } finally {
+    if (existsSync(temporary)) unlinkSync(temporary);
+  }
+  if (
+    JSON.stringify(readConfig(readFileSync(path, 'utf8'))[key]?.jamrelay) !==
+    JSON.stringify(expected)
+  )
+    throw new Error('Written configuration could not be verified. Restore the backup.');
+}
+export function desktopConfigPath() {
+  return process.platform === 'win32'
+    ? join(process.env.APPDATA || homedir(), 'Claude', 'claude_desktop_config.json')
+    : process.platform === 'darwin'
+      ? join(homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json')
+      : undefined;
+}
+export function vscodeUserConfigPath() {
+  return process.platform === 'win32'
+    ? join(process.env.APPDATA || homedir(), 'Code', 'User', 'mcp.json')
+    : process.platform === 'darwin'
+      ? join(homedir(), 'Library', 'Application Support', 'Code', 'User', 'mcp.json')
+      : join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'Code', 'User', 'mcp.json');
 }
 export function claudeAddArgs(endpoint: string) {
   return ['mcp', 'add', '--transport', 'http', 'jamrelay', endpoint];
@@ -98,25 +161,16 @@ async function save(
 export async function verifyClient(client: InstallClient, endpoint: string) {
   const store = new McpOAuthStore(process.env.MCP_OAUTH_STORE_PATH!);
   const statics = await new StaticOAuthClientRegistry(process.env.MCP_OAUTH_CLIENTS_PATH!).list();
-  const candidates = [...(await store.listClients()), ...statics].filter(
-    (c) =>
-      client === 'generic' ||
-      (client === 'claude-code'
-        ? /claude.*code/i
-        : client === 'claude-desktop'
-          ? /claude(?!.*code)/i
-          : new RegExp(client, 'i')
-      ).test(c.clientName),
-  );
+  const candidates = [...(await store.listClients()), ...statics];
   const previous = readState().clientSetup[client];
   const options = candidates.map((c) => ({
-    label: `${c.clientName} (${c.clientId})`,
+    label: `${c.clientName.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ')} (${c.clientId})`,
     value: c.clientId,
   }));
   const clientId =
-    options.length === 1
-      ? options[0].value
-      : options.length > 1
+    previous?.clientId && options.some((o) => o.value === previous.clientId)
+      ? previous.clientId
+      : options.length > 0
         ? await selectOption(options, 0, (i) =>
             menuPanel(
               'Select the OAuth registration to verify',
@@ -130,7 +184,7 @@ export async function verifyClient(client: InstallClient, endpoint: string) {
       client,
       endpoint,
       'authentication_required',
-      'No matching OAuth registration found. Register the client, open its MCP settings and complete browser authorization.',
+      'No OAuth registration found. Register the client, open its MCP settings and complete browser authorization.',
     );
     showPanel(
       'Authentication required',
@@ -182,26 +236,48 @@ export async function verifyClient(client: InstallClient, endpoint: string) {
 
 export async function installClient(client: InstallClient, endpoint: string) {
   validEndpoint(endpoint);
-  if (['chatgpt', 'claude-desktop'].includes(client) && isLoopbackHttp(new URL(endpoint).origin)) {
+  if (client === 'chatgpt' && !publicHttpsEndpoint(endpoint)) {
     const detail =
-      'This cloud connector requires public HTTPS. Run jamrelay connectivity to configure a tunnel or your reverse proxy. Claude Desktop remote Connectors are distinct from local extensions; JamRelay does not install a local extension.';
+      'ChatGPT requires publicly reachable HTTPS. Run jamrelay connectivity to configure a tunnel or reverse proxy. Private localhost and LAN endpoints are unreachable from cloud ChatGPT.';
     await save(client, endpoint, 'not_configured', detail);
     showPanel('Not configured', detail);
     return;
   }
-  const docker = process.env.JAMRELAY_INSTALL_MODE === 'docker';
+  const docker = isContainer();
+  let desktopBridge = client === 'claude-desktop' && !publicHttpsEndpoint(endpoint);
+  if (client === 'claude-desktop' && !desktopBridge)
+    desktopBridge =
+      (await choose('Claude Desktop connection method', [
+        'Remote connector (public HTTPS)',
+        'Local stdio bridge (Node.js required)',
+      ])) === 'Local stdio bridge (Node.js required)';
   const command = `claude mcp add --transport http jamrelay ${JSON.stringify(endpoint)}`;
   const fragment =
-    client === 'cursor' || client === 'vscode'
-      ? JSON.stringify(clientConfig(client, endpoint), null, 2)
+    client === 'cursor' || client === 'vscode' || desktopBridge
+      ? JSON.stringify(clientConfig(client as FileClient, endpoint), null, 2)
       : '';
-  const path =
-    client === 'cursor' ? join(homedir(), '.cursor', 'mcp.json') : resolve('.vscode', 'mcp.json');
+  let path =
+    client === 'claude-desktop'
+      ? desktopConfigPath()
+      : client === 'cursor'
+        ? join(homedir(), '.cursor', 'mcp.json')
+        : resolve('.vscode', 'mcp.json');
+  if (!docker && (client === 'cursor' || client === 'vscode')) {
+    const scope = await choose('Configuration scope', [
+      'Project directory: ' + process.cwd(),
+      'User (default profile)',
+    ]);
+    path = scope?.startsWith('Project')
+      ? resolve(client === 'cursor' ? '.cursor' : '.vscode', 'mcp.json')
+      : client === 'cursor'
+        ? join(homedir(), '.cursor', 'mcp.json')
+        : vscodeUserConfigPath();
+  }
   const instructions =
     client === 'claude-code'
       ? `${command}\nThen: claude mcp get jamrelay (registration only). Open Claude Code, run /mcp, authenticate in the browser, then request the JamRelay tool list.`
       : fragment
-        ? `${client === 'cursor' ? '~/.cursor/mcp.json' : '<your-project>/.vscode/mcp.json'}\n${fragment}\nEnable the server in the client, complete OAuth and request the tool list.`
+        ? `${desktopBridge ? 'Claude Desktop Settings → Developer → Edit Config (Windows/macOS)' : docker ? (client === 'cursor' ? '~/.cursor/mcp.json or <project>/.cursor/mcp.json' : '<project>/.vscode/mcp.json or MCP: Open User Configuration') : path}\n${fragment}\nEnable the server in the client, complete OAuth and request the tool list.${desktopBridge ? ' Requires host Node.js/npx; this launches the external pinned mcp-remote stdio bridge, which stores its own OAuth tokens. Restart Claude Desktop after editing.' : ''}`
         : client === 'chatgpt'
           ? `ChatGPT: create a custom MCP app in developer settings using ${endpoint}. Use the documented pre-registered confidential OAuth client. Availability depends on your plan/workspace. No one-click install is available.`
           : client === 'claude-desktop'
@@ -212,7 +288,7 @@ export async function installClient(client: InstallClient, endpoint: string) {
     `${docker ? 'Run these commands or edit configuration on your HOST (PowerShell on Windows), outside Docker. This container cannot configure host applications.\n\n' : ''}${instructions}\n\nNo owner password, recovery secret or provider credential belongs in client configuration.`,
   );
   await save(client, endpoint, 'configuration_generated', instructions);
-  if (!docker && ['claude-code', 'cursor', 'vscode'].includes(client)) {
+  if (!docker && path && (['claude-code', 'cursor', 'vscode'].includes(client) || desktopBridge)) {
     let available = true;
     if (client === 'claude-code')
       available = await execute('claude', ['--version'], { timeout: 5000 })
@@ -237,13 +313,18 @@ export async function installClient(client: InstallClient, endpoint: string) {
     ) {
       try {
         if (client === 'claude-code') {
-          await execute('claude', claudeAddArgs(endpoint), { timeout: 15000 });
+          const existing = await execute('claude', ['mcp', 'get', 'jamrelay'], {
+            timeout: 10000,
+          }).catch(() => undefined);
+          if (existing && !existing.stdout.includes(endpoint))
+            throw new Error('A different registration exists; preserved.');
+          if (!existing) await execute('claude', claudeAddArgs(endpoint), { timeout: 15000 });
           const result = await execute('claude', ['mcp', 'get', 'jamrelay'], { timeout: 15000 });
           if (!result.stdout.includes(endpoint))
             throw new Error(
               'Claude registration did not return the expected MCP URL. Inspect claude mcp get jamrelay.',
             );
-        } else mergeClientConfig(path, client as 'cursor' | 'vscode', endpoint);
+        } else mergeClientConfig(path, client as FileClient, endpoint);
         await save(
           client,
           endpoint,
@@ -263,11 +344,28 @@ export async function installClient(client: InstallClient, endpoint: string) {
         );
         showPanel(
           'Failed',
-          `Could not apply/verify configuration. Check existing settings and permissions. JSONC files require manual editing.\n${instructions}`,
+          `Could not apply/verify configuration. Check existing settings and permissions. Existing registrations were preserved. Review the manual fragment.\n${instructions}`,
         );
       }
     }
   }
+  const documentation =
+    client === 'claude-code'
+      ? 'https://code.claude.com/docs/en/mcp'
+      : client === 'claude-desktop'
+        ? 'https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp'
+        : client === 'cursor'
+          ? 'https://cursor.com/docs/mcp'
+          : client === 'vscode'
+            ? 'https://code.visualstudio.com/docs/agent-customization/mcp-servers'
+            : 'https://github.com/makkiattooo/JamRelay#connecting-an-ai-client';
+  showPanel('Client documentation', documentation);
+  if (
+    !docker &&
+    (await choose('Open official connection instructions?', ['Later', 'Open browser'])) ===
+      'Open browser'
+  )
+    await openBrowser(documentation);
   if (
     (await choose('Verify after completing authentication and requesting tools?', [
       'Later',

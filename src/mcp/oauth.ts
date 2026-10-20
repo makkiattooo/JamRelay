@@ -1,3 +1,6 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { createRequire } from 'node:module';
+import { MCP_PERMISSIONS, READ_ONLY_PERMISSIONS, type PermissionPolicy } from './permissions.js';
 import { ownerCredentialMatches } from './owner-password.js';
 import { getDatabase, isDatabaseInitialized } from '../db/database.js';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -54,12 +57,15 @@ type State = {
   access: Record<string, Access>;
   refresh: Record<string, Refresh>;
   clients: Record<string, DynamicClient>;
+  defaults?: PermissionPolicy;
   grants: Record<
     string,
     {
       clientId: string;
       connectionIds: string[];
       permissions: string[];
+      tools?: string[];
+      lastActiveAt?: number;
       revokedAt?: number;
       updatedAt: number;
     }
@@ -200,9 +206,33 @@ export class StaticOAuthClientRegistry {
 export class McpOAuthStore {
   private state: State = emptyState();
   private loaded = false;
-  private writing: Promise<void> = Promise.resolve();
 
   constructor(private readonly path = '/data/mcp-oauth.json') {}
+
+  private readonly transactionContext = new AsyncLocalStorage<boolean>();
+  private pending: Promise<unknown> = Promise.resolve();
+  private async transaction<T>(work: () => Promise<T>): Promise<T> {
+    if (this.transactionContext.getStore()) return work();
+    const execute = async () => {
+      await mkdir(dirname(this.path), { recursive: true });
+      const lockfile = createRequire(import.meta.url)('proper-lockfile');
+      const release = await lockfile.lock(this.path, {
+        realpath: false,
+        stale: 30_000,
+        update: 5_000,
+        retries: { retries: 30, minTimeout: 10, maxTimeout: 100 },
+      });
+      try {
+        this.loaded = false;
+        return await this.transactionContext.run(true, work);
+      } finally {
+        await release();
+      }
+    };
+    const result = this.pending.then(execute, execute);
+    this.pending = result.catch(() => {});
+    return result;
+  }
 
   private async load() {
     if (this.loaded) return;
@@ -215,6 +245,7 @@ export class McpOAuthStore {
         refresh: parsed.refresh ?? {},
         clients: parsed.clients ?? {},
         grants: parsed.grants ?? {},
+        defaults: parsed.defaults,
       };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -250,27 +281,25 @@ export class McpOAuthStore {
   }
 
   private async save() {
-    const snapshot = JSON.stringify(this.state);
-    this.writing = this.writing.then(async () => {
-      await mkdir(dirname(this.path), { recursive: true });
-      const temporary = `${this.path}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
-      await writeFile(temporary, snapshot, { mode: 0o600 });
-      await rename(temporary, this.path);
-    });
-    return this.writing;
+    await mkdir(dirname(this.path), { recursive: true });
+    const temporary = `${this.path}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
+    await writeFile(temporary, JSON.stringify(this.state), { mode: 0o600 });
+    await rename(temporary, this.path);
   }
 
   async issueCode(input: Omit<Code, 'expiresAt' | 'used'>) {
-    await this.load();
-    this.pruneExpired();
-    const value = token();
-    this.state.codes[digest(value)] = {
-      ...input,
-      expiresAt: Date.now() + 5 * 60_000,
-      used: false,
-    };
-    await this.save();
-    return value;
+    return this.transaction(async () => {
+      await this.load();
+      this.pruneExpired();
+      const value = token();
+      this.state.codes[digest(value)] = {
+        ...input,
+        expiresAt: Date.now() + 5 * 60_000,
+        used: false,
+      };
+      await this.save();
+      return value;
+    });
   }
 
   async exchangeCode(
@@ -280,24 +309,26 @@ export class McpOAuthStore {
     verifier: string,
     resource?: string,
   ) {
-    await this.load();
-    this.pruneExpired();
-    const key = digest(value);
-    const code = this.state.codes[key];
-    if (
-      !code ||
-      code.used ||
-      code.expiresAt <= Date.now() ||
-      code.clientId !== clientId ||
-      code.redirectUri !== redirectUri ||
-      (resource && code.resource && code.resource !== resource) ||
-      !same(pkce(verifier), code.challenge)
-    ) {
-      return false;
-    }
-    code.used = true;
-    await this.save();
-    return true;
+    return this.transaction(async () => {
+      await this.load();
+      this.pruneExpired();
+      const key = digest(value);
+      const code = this.state.codes[key];
+      if (
+        !code ||
+        code.used ||
+        code.expiresAt <= Date.now() ||
+        code.clientId !== clientId ||
+        code.redirectUri !== redirectUri ||
+        (resource && code.resource && code.resource !== resource) ||
+        !same(pkce(verifier), code.challenge)
+      ) {
+        return false;
+      }
+      code.used = true;
+      await this.save();
+      return true;
+    });
   }
 
   private revoked(clientId: string, issuedAt?: number) {
@@ -312,132 +343,171 @@ export class McpOAuthStore {
     );
   }
   async issueTokens(clientId: string, resource?: string) {
-    await this.load();
-    this.pruneExpired();
-    const access = token();
-    const refresh = token();
-    this.state.access[digest(access)] = {
-      issuedAt: Math.max(Date.now(), this.state.grants[clientId]?.updatedAt ?? 0),
-      clientId,
-      expiresAt: Date.now() + 60 * 60_000,
-      resource,
-    };
-    this.state.refresh[digest(refresh)] = {
-      issuedAt: Math.max(Date.now(), this.state.grants[clientId]?.updatedAt ?? 0),
-      clientId,
-      expiresAt: Date.now() + 30 * 24 * 60 * 60_000,
-      resource,
-    };
-    await this.save();
-    return { access, refresh };
+    return this.transaction(async () => {
+      await this.load();
+      this.pruneExpired();
+      const access = token();
+      const refresh = token();
+      this.state.access[digest(access)] = {
+        issuedAt: Math.max(Date.now(), this.state.grants[clientId]?.updatedAt ?? 0),
+        clientId,
+        expiresAt: Date.now() + 60 * 60_000,
+        resource,
+      };
+      this.state.refresh[digest(refresh)] = {
+        issuedAt: Math.max(Date.now(), this.state.grants[clientId]?.updatedAt ?? 0),
+        clientId,
+        expiresAt: Date.now() + 30 * 24 * 60 * 60_000,
+        resource,
+      };
+      await this.save();
+      return { access, refresh };
+    });
   }
 
   async accessPolicy(value: string, resource?: string) {
-    await this.load();
-    this.pruneExpired();
-    const record = this.state.access[digest(value)];
-    if (
-      !record ||
-      record.expiresAt <= Date.now() ||
-      (resource && record.resource && record.resource !== resource)
-    )
-      return undefined;
-    const grant = record.clientId ? this.state.grants[record.clientId] : undefined;
-    if (!grant || grant.revokedAt) return undefined;
-    if (this.revoked(record.clientId!, record.issuedAt)) return undefined;
-    return {
-      clientId: record.clientId!,
-      issuedAt: record.issuedAt,
-      connectionIds: grant.connectionIds,
-      permissions: grant.permissions,
-    };
+    return this.transaction(async () => {
+      await this.load();
+      this.pruneExpired();
+      const record = this.state.access[digest(value)];
+      if (
+        !record ||
+        record.expiresAt <= Date.now() ||
+        (resource && record.resource && record.resource !== resource)
+      )
+        return undefined;
+      const grant = record.clientId ? this.state.grants[record.clientId] : undefined;
+      if (!grant || grant.revokedAt) return undefined;
+      if (this.revoked(record.clientId!, record.issuedAt)) return undefined;
+      return {
+        clientId: record.clientId!,
+        issuedAt: record.issuedAt,
+        connectionIds: grant.connectionIds,
+        permissions: grant.permissions,
+        tools: grant.tools,
+      };
+    });
   }
 
-  async setGrant(clientId: string, connectionIds: string[], permissions: string[]) {
-    await this.load();
-    const revokedAt = isDatabaseInitialized()
-      ? Number(
-          getDatabase()
-            .prepare('SELECT revoked_at FROM operator_client_revocations WHERE client_id=?')
-            .get(clientId)?.revoked_at ?? 0,
-        )
-      : 0;
-    this.state.grants[clientId] = {
-      clientId,
-      connectionIds: [...new Set(connectionIds)],
-      permissions: [...new Set(permissions)],
-      updatedAt: Math.max(Date.now(), revokedAt + 1),
-    };
-    await this.save();
+  async setGrant(
+    clientId: string,
+    connectionIds: string[],
+    permissions: string[],
+    tools?: string[],
+  ) {
+    return this.transaction(async () => {
+      await this.load();
+      const revokedAt = isDatabaseInitialized()
+        ? Number(
+            getDatabase()
+              .prepare('SELECT revoked_at FROM operator_client_revocations WHERE client_id=?')
+              .get(clientId)?.revoked_at ?? 0,
+          )
+        : 0;
+      this.state.grants[clientId] = {
+        clientId,
+        connectionIds: [...new Set(connectionIds)],
+        permissions: [...new Set(permissions)],
+        tools,
+        lastActiveAt: this.state.grants[clientId]?.lastActiveAt,
+        updatedAt: Math.max(Date.now(), revokedAt + 1),
+      };
+      await this.save();
+    });
   }
   async getGrant(clientId: string) {
-    await this.load();
-    return this.state.grants[clientId] ?? null;
+    return this.transaction(async () => {
+      await this.load();
+      return this.state.grants[clientId] ?? null;
+    });
   }
   async listGrants() {
-    await this.load();
-    return Object.values(this.state.grants).map((grant) => ({ ...grant }));
+    return this.transaction(async () => {
+      await this.load();
+      return Object.values(this.state.grants).map((grant) => ({ ...grant }));
+    });
   }
   async authenticationEvidence(clientId: string) {
-    await this.load();
-    return Object.values(this.state.access).some(
-      (record) =>
-        record.clientId === clientId &&
-        record.expiresAt > Date.now() &&
-        !this.revoked(clientId, record.issuedAt),
-    );
+    return this.transaction(async () => {
+      await this.load();
+      const grant = this.state.grants[clientId];
+      if (!grant || grant.revokedAt || this.revoked(clientId, grant.updatedAt)) return false;
+      if (clientId === 'api-key') return Boolean(grant.lastActiveAt);
+      return Object.values(this.state.access).some(
+        (record) =>
+          record.clientId === clientId &&
+          record.expiresAt > Date.now() &&
+          !this.revoked(clientId, record.issuedAt),
+      );
+    });
   }
   async listClients() {
-    await this.load();
-    return Object.values(this.state.clients).map((c) => ({
-      clientId: c.clientId,
-      clientName: c.clientName,
-      source: 'dynamic',
-      createdAt: c.createdAt,
-      authorizedAt: c.authorizedAt,
-    }));
+    return this.transaction(async () => {
+      await this.load();
+      return Object.values(this.state.clients).map((c) => ({
+        clientId: c.clientId,
+        clientName: c.clientName,
+        source: 'dynamic',
+        createdAt: c.createdAt,
+        authorizedAt: c.authorizedAt,
+        lastUsedAt: c.lastUsedAt,
+      }));
+    });
   }
   async revokeGrant(clientId: string) {
-    await this.load();
-    const grant = this.state.grants[clientId];
-    if (!grant) return false;
-    grant.revokedAt = Date.now();
-    await this.save();
-    return true;
+    return this.transaction(async () => {
+      await this.load();
+      const grant = this.state.grants[clientId];
+      if (!grant) return false;
+      grant.revokedAt = Date.now();
+      await this.save();
+      return true;
+    });
   }
-  async updateGrant(clientId: string, connectionIds: string[], permissions: string[]) {
-    return this.setGrant(clientId, connectionIds, permissions);
+  async updateGrant(
+    clientId: string,
+    connectionIds: string[],
+    permissions: string[],
+    tools?: string[],
+  ) {
+    return this.transaction(async () => {
+      return this.setGrant(clientId, connectionIds, permissions, tools);
+    });
   }
 
   async useRefresh(value: string, clientId: string, resource?: string) {
-    await this.load();
-    this.pruneExpired();
-    const key = digest(value);
-    const record = this.state.refresh[key];
-    if (
-      !record ||
-      record.expiresAt <= Date.now() ||
-      record.clientId !== clientId ||
-      this.revoked(clientId, record.issuedAt) ||
-      Boolean(this.state.grants[clientId]?.revokedAt) ||
-      (resource && record.resource && record.resource !== resource)
-    ) {
-      return undefined;
-    }
-    delete this.state.refresh[key];
-    await this.save();
-    return this.issueTokens(clientId, record.resource ?? resource);
+    return this.transaction(async () => {
+      await this.load();
+      this.pruneExpired();
+      const key = digest(value);
+      const record = this.state.refresh[key];
+      if (
+        !record ||
+        record.expiresAt <= Date.now() ||
+        record.clientId !== clientId ||
+        this.revoked(clientId, record.issuedAt) ||
+        Boolean(this.state.grants[clientId]?.revokedAt) ||
+        (resource && record.resource && record.resource !== resource)
+      ) {
+        return undefined;
+      }
+      delete this.state.refresh[key];
+      await this.save();
+      return this.issueTokens(clientId, record.resource ?? resource);
+    });
   }
 
   async validAccess(value: string, resource?: string) {
-    await this.load();
-    this.pruneExpired();
-    const record = this.state.access[digest(value)];
-    return Boolean(
-      record &&
-      record.expiresAt > Date.now() &&
-      (!resource || !record.resource || record.resource === resource),
-    );
+    return this.transaction(async () => {
+      await this.load();
+      this.pruneExpired();
+      const record = this.state.access[digest(value)];
+      return Boolean(
+        record &&
+        record.expiresAt > Date.now() &&
+        (!resource || !record.resource || record.resource === resource),
+      );
+    });
   }
 
   async registerDynamicClient(input: {
@@ -446,61 +516,115 @@ export class McpOAuthStore {
     tokenEndpointAuthMethod: TokenEndpointAuthMethod;
     applicationType?: 'native' | 'web';
   }) {
-    await this.load();
-    this.pruneExpired();
+    return this.transaction(async () => {
+      await this.load();
+      this.pruneExpired();
 
-    const maxDynamicClients = 128;
-    const entries = Object.values(this.state.clients);
-    if (entries.length >= maxDynamicClients) {
-      const disposable = entries
-        .filter((client) => !client.authorizedAt)
-        .sort((a, b) => a.createdAt - b.createdAt)[0];
-      if (disposable) delete this.state.clients[disposable.clientId];
-    }
-    if (Object.keys(this.state.clients).length >= maxDynamicClients) {
-      throw new Error('dynamic_client_limit_reached');
-    }
+      const maxDynamicClients = 128;
+      const entries = Object.values(this.state.clients);
+      if (entries.length >= maxDynamicClients) {
+        const disposable = entries
+          .filter((client) => !client.authorizedAt)
+          .sort((a, b) => a.createdAt - b.createdAt)[0];
+        if (disposable) delete this.state.clients[disposable.clientId];
+      }
+      if (Object.keys(this.state.clients).length >= maxDynamicClients) {
+        throw new Error('dynamic_client_limit_reached');
+      }
 
-    const clientId = `dcr_${randomBytes(24).toString('base64url')}`;
-    const clientSecret =
-      input.tokenEndpointAuthMethod === 'none' ? undefined : randomBytes(32).toString('base64url');
-    const now = Date.now();
-    this.state.clients[clientId] = {
-      clientId,
-      clientName: input.clientName,
-      redirectUris: [...new Set(input.redirectUris)],
-      tokenEndpointAuthMethod: input.tokenEndpointAuthMethod,
-      clientSecretDigest: clientSecret ? digest(clientSecret) : undefined,
-      applicationType: input.applicationType,
-      createdAt: now,
-      lastUsedAt: now,
-    };
-    await this.save();
-    return { client: this.state.clients[clientId], clientSecret };
+      const clientId = `dcr_${randomBytes(24).toString('base64url')}`;
+      const clientSecret =
+        input.tokenEndpointAuthMethod === 'none'
+          ? undefined
+          : randomBytes(32).toString('base64url');
+      const now = Date.now();
+      this.state.clients[clientId] = {
+        clientId,
+        clientName: input.clientName,
+        redirectUris: [...new Set(input.redirectUris)],
+        tokenEndpointAuthMethod: input.tokenEndpointAuthMethod,
+        clientSecretDigest: clientSecret ? digest(clientSecret) : undefined,
+        applicationType: input.applicationType,
+        createdAt: now,
+        lastUsedAt: now,
+      };
+      await this.save();
+      return { client: this.state.clients[clientId], clientSecret };
+    });
   }
 
   async getDynamicClient(clientId: string): Promise<OAuthClient | undefined> {
-    await this.load();
-    this.pruneExpired();
-    const client = this.state.clients[clientId];
-    if (!client) return undefined;
-    return {
-      clientId: client.clientId,
-      clientName: client.clientName,
-      redirectUris: client.redirectUris,
-      tokenEndpointAuthMethods: [client.tokenEndpointAuthMethod],
-      clientSecretDigest: client.clientSecretDigest,
-      source: 'dynamic',
-    };
+    return this.transaction(async () => {
+      await this.load();
+      this.pruneExpired();
+      const client = this.state.clients[clientId];
+      if (!client) return undefined;
+      return {
+        clientId: client.clientId,
+        clientName: client.clientName,
+        redirectUris: client.redirectUris,
+        tokenEndpointAuthMethods: [client.tokenEndpointAuthMethod],
+        clientSecretDigest: client.clientSecretDigest,
+        source: 'dynamic',
+      };
+    });
   }
 
   async touchDynamicClient(clientId: string, authorized = false) {
-    await this.load();
-    const client = this.state.clients[clientId];
-    if (!client) return;
-    client.lastUsedAt = Date.now();
-    if (authorized) client.authorizedAt = client.authorizedAt ?? Date.now();
-    await this.save();
+    return this.transaction(async () => {
+      await this.load();
+      const client = this.state.clients[clientId];
+      if (!client) return;
+      client.lastUsedAt = Date.now();
+      if (authorized) client.authorizedAt = client.authorizedAt ?? Date.now();
+      await this.save();
+    });
+  }
+  async ensureLegacyApiGrant(connectionIds: string[]) {
+    return this.transaction(async () => {
+      await this.load();
+      if (!this.state.grants['api-key'])
+        await this.setGrant('api-key', connectionIds, [...MCP_PERMISSIONS]);
+      const grant = this.state.grants['api-key'];
+      return this.policyFor('api-key', grant.updatedAt);
+    });
+  }
+  async defaults(): Promise<PermissionPolicy> {
+    return this.transaction(async () => {
+      await this.load();
+      return this.state.defaults ?? { permissions: [...READ_ONLY_PERMISSIONS] };
+    });
+  }
+  async setDefaults(policy: PermissionPolicy) {
+    return this.transaction(async () => {
+      await this.load();
+      this.state.defaults = policy;
+      await this.save();
+    });
+  }
+  async policyFor(clientId: string, issuedAt?: number) {
+    return this.transaction(async () => {
+      await this.load();
+      const grant = this.state.grants[clientId];
+      if (!grant || grant.revokedAt || this.revoked(clientId, issuedAt)) return undefined;
+      return {
+        clientId,
+        issuedAt,
+        connectionIds: grant.connectionIds,
+        permissions: grant.permissions,
+        tools: grant.tools,
+      };
+    });
+  }
+  async recordActivity(clientId: string) {
+    return this.transaction(async () => {
+      await this.load();
+      const grant = this.state.grants[clientId];
+      if (grant && Date.now() - (grant.lastActiveAt ?? 0) > 60_000) {
+        grant.lastActiveAt = Date.now();
+        await this.save();
+      }
+    });
   }
 }
 
@@ -788,20 +912,7 @@ export function registerMcpOAuthRoutes(
       state,
       resource: requestedResource ?? resource,
     };
-    const permissionOptions = [
-      'catalog.read',
-      'library.read',
-      'library.write',
-      'playlist.read',
-      'playlist.write',
-      'playlist.destructive',
-      'playback.read',
-      'playback.control',
-      'personalization.read',
-      'transfer.plan',
-      'transfer.execute',
-      'diagnostics.read',
-    ];
+    const permissionOptions = [...MCP_PERMISSIONS];
 
     const previousGrant = await store.getGrant(client.clientId);
     const activeGrant = previousGrant?.revokedAt ? null : previousGrant;
@@ -811,7 +922,7 @@ export function registerMcpOAuthRoutes(
         fields,
         permissions: permissionOptions,
         hasPassword: Boolean(cfg.MCP_OWNER_PASSWORD_HASH),
-        selectedPermissions: activeGrant?.permissions,
+        selectedPermissions: activeGrant?.permissions ?? (await store.defaults()).permissions,
         selectedConnections: activeGrant?.connectionIds,
         connections: connectionOptions(),
       }),
@@ -879,27 +990,19 @@ export function registerMcpOAuthRoutes(
       );
 
     const availableConnections = new Set(connectionOptions().map((connection) => connection.id));
-    const availablePermissions = new Set([
-      'catalog.read',
-      'library.read',
-      'library.write',
-      'playlist.read',
-      'playlist.write',
-      'playlist.destructive',
-      'playback.read',
-      'playback.control',
-      'personalization.read',
-      'transfer.plan',
-      'transfer.execute',
-      'diagnostics.read',
-    ]);
+    const availablePermissions = new Set<string>(MCP_PERMISSIONS);
     const connectionIds = ([] as string[])
       .concat(body.connection_ids ?? [])
       .filter((value) => Boolean(value) && availableConnections.has(value));
     const permissions = ([] as string[])
       .concat(body.permissions ?? [])
       .filter((value) => Boolean(value) && availablePermissions.has(value));
-    await store.setGrant(client.clientId, connectionIds, permissions);
+    await store.setGrant(
+      client.clientId,
+      connectionIds,
+      permissions,
+      (await store.getGrant(client.clientId))?.tools ?? (await store.defaults()).tools,
+    );
 
     if (client.source === 'dynamic') await store.touchDynamicClient(client.clientId, true);
     const code = await store.issueCode({

@@ -1,3 +1,4 @@
+import { McpPermissionEngine } from './mcp/permissions.js';
 import { recordDiscovery } from './mcp/client-evidence.js';
 import express from 'express';
 import { timingSafeEqual } from 'node:crypto';
@@ -174,6 +175,9 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
     res.setHeader('Referrer-Policy', 'no-referrer');
     next();
   });
+  app.get('/assets/icons/jamrelay-icon-dark.png', (_req, res) =>
+    res.sendFile(runtimePath('assets', 'icons', 'jamrelay-icon-dark.png.png')),
+  );
   app.use('/assets', express.static(runtimePath('assets'), { index: false }));
   const oauthStore = new McpOAuthStore(cfg.MCP_OAUTH_STORE_PATH);
   registerMcpOAuthRoutes(app, cfg, oauthStore, () =>
@@ -329,24 +333,9 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
       got.length === want.length &&
       timingSafeEqual(got, want)
     )
-      return {
-        clientId: 'api-key',
-        connectionIds: registry.listConnections().map((connection) => connection.connectionId),
-        permissions: [
-          'catalog.read',
-          'library.read',
-          'library.write',
-          'playlist.read',
-          'playlist.write',
-          'playlist.destructive',
-          'playback.read',
-          'playback.control',
-          'personalization.read',
-          'diagnostics.read',
-          'transfer.plan',
-          'transfer.execute',
-        ],
-      };
+      return oauthStore.ensureLegacyApiGrant(
+        registry.listConnections().map((connection) => connection.connectionId),
+      );
     return oauthStore.accessPolicy(value, `${cfg.PUBLIC_BASE_URL.replace(/\/$/, '')}/mcp`);
   };
   const mcpHandler = createMcpHandler(
@@ -368,7 +357,26 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
   );
   const nodeMcpHandler = toNodeHandler(mcpHandler);
   app.all('/mcp', async (req, res) => {
+    await registry.refreshAuthorization();
     const access = await authorized(req);
+    if (access) await oauthStore.recordActivity(access.clientId);
+    if (access && req.body?.method === 'tools/call') {
+      try {
+        McpPermissionEngine.assert(access, String(req.body.params?.name ?? ''));
+      } catch (error) {
+        const normalized = toApiError(error);
+        const detail = { code: normalized.code, message: normalized.message };
+        return res.json({
+          jsonrpc: '2.0',
+          id: req.body.id ?? null,
+          result: {
+            isError: true,
+            content: [{ type: 'text', text: JSON.stringify({ error: detail }) }],
+            structuredContent: { error: detail },
+          },
+        });
+      }
+    }
     if (!access)
       return sendApiError(
         res
@@ -380,7 +388,7 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
         new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required.'),
       );
     // Only successful authenticated tools/list responses count as verified discovery.
-    if (req.body?.method === 'tools/list' && access.clientId !== 'api-key') {
+    if (req.body?.method === 'tools/list') {
       let captured = '';
       const append = (chunk: unknown) => {
         if (captured.length > 262144) return;
@@ -431,6 +439,7 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
           // deadline bounds the whole MCP exchange and is not reset by nesting.
           deadlineAt: Date.now() + 5 * 60_000,
           mcpAccess: access,
+          resolveAccess: async () => (await authorized(req)) || undefined,
           singleflight,
         },
         () => nodeMcpHandler(req, res, req.body),
@@ -473,6 +482,7 @@ export async function startServer(cfg = getConfig()) {
       new TrackResolver((app as typeof app & { jamrelayClient: SpotifyClient }).jamrelayClient),
     ),
     logger,
+    new McpOAuthStore(cfg.MCP_OAUTH_STORE_PATH),
   );
   jobRunner.start();
   const server = app.listen(cfg.PORT, cfg.HOST, () =>

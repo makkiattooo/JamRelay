@@ -8,12 +8,8 @@ export type ToolContext = {
   operation?: string;
   queueJobId?: number;
   singleflight?: Singleflight;
-  mcpAccess?: {
-    clientId: string;
-    issuedAt?: number;
-    connectionIds?: string[];
-    permissions?: string[];
-  };
+  mcpAccess?: McpAccess;
+  resolveAccess?: () => Promise<McpAccess | undefined>;
 };
 const storage = new AsyncLocalStorage<ToolContext>();
 
@@ -22,4 +18,12 @@ export const toolContext = {
   run<T>(context: ToolContext, callback: () => Promise<T>) {
     return storage.run(context, callback);
   },
+};
+
+export type McpAccess = {
+  clientId: string;
+  issuedAt?: number;
+  connectionIds?: string[];
+  permissions?: string[];
+  tools?: string[];
 };

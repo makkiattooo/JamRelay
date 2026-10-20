@@ -66,7 +66,7 @@ const pageEnd = `</body>
 </html>`;
 
 const logo =
-  '<img src="/assets/icons/jamrelay-icon-dark.png.png" alt="JamRelay" width="32" height="32">';
+  '<img src="/assets/icons/jamrelay-icon-dark.png" alt="JamRelay" width="32" height="32">';
 
 const brandName = 'JamRelay Connect';
 
@@ -119,6 +119,7 @@ export const renderAuthorizePage = ({
     <div class="brand">${logo}<span>${brandName}</span></div>
     <h1>${escapeHtml(title)}</h1>
     <p class="intro"><span class="client">${escapeHtml(clientName)}</span> is requesting access to your JamRelay account.</p>
+    <p class="intro">OAuth registration: <code>${escapeHtml(fields.client_id ?? 'unknown')}</code>. The displayed client name is supplied by its registration.</p>
     <section class="permissions" aria-labelledby="permissions-title">
       <p class="permissions-title" id="permissions-title">This connection can</p>
       <ul>
@@ -128,7 +129,7 @@ export const renderAuthorizePage = ({
     </section>
     <form method="post" action="/oauth/authorize">
       ${hiddenFields}
-      ${connections.length ? `<section class="permissions"><p class="permissions-title">Provider connections</p><ul>${connections.map((x) => `<li><label><input type="checkbox" name="connection_ids" value="${escapeHtml(x.id)}"${!selectedConnections || selectedConnections.includes(x.id) ? ' checked' : ''}> ${escapeHtml(x.provider)} / ${escapeHtml(x.name)}</label></li>`).join('')}</ul></section>` : ''}
+      ${connections.length ? `<section class="permissions"><p class="permissions-title">Provider connections</p><ul>${connections.map((x) => `<li><label><input type="checkbox" name="connection_ids" value="${escapeHtml(x.id)}"${selectedConnections?.includes(x.id) ? ' checked' : ''}> ${escapeHtml(x.provider)} / ${escapeHtml(x.name)}</label></li>`).join('')}</ul></section>` : ''}
       ${permissionSections}
       ${ownerCredentialFields(hasPassword)}
       <div class="actions">

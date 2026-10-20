@@ -73,16 +73,22 @@ export function toApiError(error: unknown): ApiError {
     return new ApiError(
       403,
       'PERMISSION_NOT_GRANTED',
-      'The owner must approve this operation group in the MCP client OAuth consent. Reconnect the client and request only the permissions needed.',
+      'The owner can approve the required scope or tool using jamrelay clients permissions set <client-id>. Refresh the client tool list after approval.',
     );
   if (error instanceof Error && error.message === 'CONNECTION_NOT_GRANTED')
     return new ApiError(
       403,
       'CONNECTION_NOT_GRANTED',
-      'No selected music connection is available to this client. Ask the owner to authorize a music account, then reconnect this MCP client and approve that connection.',
+      'This music account is not in the current MCP grant. Ask the owner to authorize the provider and allow its connection using jamrelay clients permissions set <client-id>.',
     );
   if (error instanceof Error && ['JOB_ACCESS_DENIED', 'CLIENT_REVOKED'].includes(error.message))
-    return new ApiError(403, error.message, 'The MCP client cannot access this job.');
+    return new ApiError(
+      403,
+      error.message,
+      error.message === 'CLIENT_REVOKED'
+        ? 'This MCP authorization was revoked. Ask the owner to authorize a new connection.'
+        : 'This job belongs to a different OAuth registration or music account.',
+    );
   if (error instanceof Error && error.message === 'CONNECTION_UNAVAILABLE')
     return new ApiError(
       409,

@@ -28,17 +28,11 @@ export const PLAYLIST_AUTOMATION_TOOL_NAMES = [
   'split_playlist_balanced',
   'playlist_trim_to_duration',
   'extend_playlist_to_duration',
-  'replace_percentage',
-  'freshen_playlist',
   'filter_playlist',
   'move_artist_tracks',
-  'extract_artist_tracks',
   'remove_artist_from_playlist',
-  'replace_artist_tracks',
   'clone_playlist',
   'sync_playlists',
-  'bulk_edit_playlists',
-  'batch_playlist_jobs',
   'estimate_operation_cost',
 ] as const;
 export type PlaylistAutomationClient = {
@@ -52,7 +46,8 @@ export function registerPlaylistAutomationTools(
 ) {
   const stateReader = playlists ? new PlaylistStateReader(playlists) : undefined;
   const get = (p: string) => c.request<any>(p),
-    pid = (x: string) => parseProviderIdentifier(x, 'spotify', 'playlist').id;
+    pid = (x: string | { playlist_id: string }) =>
+      parseProviderIdentifier(typeof x === 'string' ? x : x.playlist_id, 'spotify', 'playlist').id;
   const state = async (playlistId: string) => {
     if (stateReader) {
       const result = await stateReader.read(playlistId, {
@@ -133,7 +128,7 @@ export function registerPlaylistAutomationTools(
         plan: p,
         safety_snapshot_id: snap.id,
         partial_failure: {
-          error: String(error),
+          error: 'PLAYLIST_WRITE_FAILED',
           rollback_attempted: true,
           rollback_succeeded: rollbackSucceeded,
         },
@@ -408,21 +403,20 @@ export function registerPlaylistAutomationTools(
     'split_playlist_balanced',
     {
       title: 'Split playlist',
-      description: 'Split a playlist into deterministic groups; dry_run defaults true.',
+      description:
+        'Preview deterministic sequential or round-robin groups. Preview only; no playlists are created.',
       inputSchema: {
         playlist_id: id,
         parts: z.number().int().min(1).max(100).optional(),
         max_tracks_per_playlist: z.number().int().min(1).optional(),
-        strategy: z
-          .enum(['balanced_artists', 'sequential', 'round_robin'])
-          .default('balanced_artists'),
-        dry_run: z.boolean().default(true),
+        strategy: z.enum(['sequential', 'round_robin']).default('round_robin'),
+        dry_run: z.literal(true).default(true),
         output_name_template: z.string().max(100).optional(),
       },
     },
     async (a: any) => {
       const x = await state(pid(a)),
-        parts = a.parts ?? Math.ceil(x.tracks.length / a.max_tracks_per_playlist),
+        parts = a.parts ?? Math.ceil(x.tracks.length / (a.max_tracks_per_playlist ?? 100)),
         groups: NormalizedPlaylistTrack[][] = Array.from({ length: Math.max(1, parts) }, () => []);
       x.tracks.forEach((t: NormalizedPlaylistTrack, i: number) =>
         groups[
@@ -438,7 +432,9 @@ export function registerPlaylistAutomationTools(
         proposed_names: groups.map((_, i) =>
           (a.output_name_template ?? `${x.meta.name} %s`).replace('%s', String(i + 1)),
         ),
-        dry_run: a.dry_run,
+        dry_run: true,
+        status: 'preview_only',
+        note: 'This tool previews a split; use create_playlist_from_tracks to create each output explicitly.',
       });
     },
   );
@@ -447,7 +443,7 @@ export function registerPlaylistAutomationTools(
       name,
       {
         title: name,
-        description: `${name} using playlist metadata; dry_run defaults true.`,
+        description: `${remove ? 'Remove selected artist tracks' : 'Move selected artist tracks to the beginning of the same playlist'}; dry_run defaults true.`,
         inputSchema: {
           playlist_id: id,
           artist_id: id.optional(),
@@ -476,8 +472,6 @@ export function registerPlaylistAutomationTools(
     );
   artistAction('remove_artist_from_playlist', true);
   artistAction('move_artist_tracks', false);
-  artistAction('extract_artist_tracks', false);
-  artistAction('replace_artist_tracks', true);
   s.registerTool(
     'sync_playlists',
     {
@@ -491,8 +485,8 @@ export function registerPlaylistAutomationTools(
       },
     },
     async (a: any) => {
-      const source = await state(pid(a)),
-        target = await state(pid(a)),
+      const source = await state(pid(a.source_playlist_id)),
+        target = await state(pid(a.target_playlist_id)),
         sUris = source.tracks.map((t) => t.uri!),
         tUris = target.tracks.map((t) => t.uri!),
         out =
@@ -507,11 +501,21 @@ export function registerPlaylistAutomationTools(
         (uri, position) => ({ uri, position, id: uri.split(':').pop() }) as any,
       );
       const p = plan(pid(a.target_playlist_id), 'sync', target.tracks, after);
-      return text(
-        a.dry_run
-          ? { ...p, affected_playlists: [a.target_playlist_id] }
-          : await execute(pid(a.target_playlist_id), target, after, p),
+      const affected =
+        a.mode === 'two_way_union'
+          ? [a.target_playlist_id, a.source_playlist_id]
+          : [a.target_playlist_id];
+      if (a.dry_run) return text({ ...p, affected_playlists: affected });
+      const targetResult = await execute(pid(a.target_playlist_id), target, after, p);
+      if ('partial_failure' in targetResult || a.mode !== 'two_way_union')
+        return text(targetResult);
+      const sourceResult = await execute(
+        pid(a.source_playlist_id),
+        source,
+        after,
+        plan(pid(a.source_playlist_id), 'sync_union', source.tracks, after),
       );
+      return text({ ...sourceResult, target_result: targetResult, affected_playlists: affected });
     },
   );
   s.registerTool(
@@ -602,31 +606,4 @@ export function registerPlaylistAutomationTools(
       return text(result);
     },
   );
-  for (const name of [
-    'replace_percentage',
-    'freshen_playlist',
-    'bulk_edit_playlists',
-    'batch_playlist_jobs',
-  ] as const)
-    s.registerTool(
-      name,
-      {
-        title: name,
-        description: `${name} is planned through the shared playlist engine; dry_run defaults true.`,
-        inputSchema: {
-          playlist_id: id,
-          dry_run: z.boolean().default(true),
-          percentage: z.number().min(0).max(1).optional(),
-          target_duration_ms: z.number().int().positive().optional(),
-        },
-      },
-      async (a: any) =>
-        text({
-          operation: name,
-          playlist_id: a.playlist_id,
-          dry_run: a.dry_run,
-          status: 'planned',
-          note: 'Candidate-pool execution is intentionally deferred until explicit candidates are supplied.',
-        }),
-    );
 }

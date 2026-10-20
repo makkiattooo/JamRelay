@@ -81,6 +81,8 @@ const schema = z.object({
   LOG_LEVEL: z.string().default('info'),
   JAMRELAY_TOOLSET: z
     .enum([
+      'essential',
+      'advanced',
       'core',
       'playback',
       'playlists',
@@ -92,7 +94,7 @@ const schema = z.object({
       'dangerous',
       'all',
     ])
-    .default('all'),
+    .default('essential'),
   MCP_AUTH_MODE: z.enum(['none', 'bearer']).default('none'),
   MCP_API_KEY: optionalNonEmpty,
 

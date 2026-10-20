@@ -73,3 +73,22 @@ List my Spotify playback devices.
 `jamrelay connect client claude-code` detects the local CLI and offers the exact registration operation for confirmation. In Docker it prints a PowerShell-compatible host command; the container cannot configure the host. `claude mcp get jamrelay` verifies registration only. After `/mcp` browser OAuth and actual tool discovery, run `jamrelay connect client claude-code --verify`. Music-account authorization and connection grants remain separate.
 
 `jamrelay connect client claude-desktop` describes the remote Connector flow. It does not install or simulate a local Claude Desktop extension, and it rejects private localhost for the cloud Connector.
+
+## Local Claude Desktop
+
+`jamrelay connect client claude-desktop` can configure the local stdio integration on Windows/macOS after confirmation. It merges only JamRelay into `claude_desktop_config.json`, preserves unrelated settings and backs up the file. It uses host Node.js/npx and the optional external `mcp-remote@0.15.1` bridge; this is separate from cloud Connectors. The generated entry is:
+
+```json
+{
+  "mcpServers": {
+    "jamrelay": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote@0.15.1", "http://127.0.0.1:5267/mcp", "--allow-http"]
+    }
+  }
+}
+```
+
+Use your actual host port. Restart Claude Desktop and complete browser OAuth. Docker prints the host-side configuration and does not edit host files. Native desktop execution still needs owner testing; configuration alone is not verified discovery. Remote Connectors require public HTTPS and connect from Anthropic's cloud, including when configured in Desktop. Choose automatic registration (DCR), or your pre-registered OAuth client; JamRelay does not currently implement OAuth client-ID metadata documents.
+
+Sources: [Claude remote network requirements](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp), [mcp-remote stdio bridge](https://github.com/punkpeye/mcp-remote).

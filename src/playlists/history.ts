@@ -1,3 +1,4 @@
+import { toolContext } from '../mcp/context.js';
 import { createHash } from 'node:crypto';
 import { getDatabase, isDatabaseInitialized } from '../db/database.js';
 import { findTrackProviderMapping, indexCanonicalTrack } from '../db/state.js';
@@ -162,6 +163,12 @@ export function listHistory(input: {
     where.push('(spotify_track_id=? OR provider_track_id=? OR lower(title) LIKE ?)');
     args.push(input.track, input.track, '%' + input.track.toLowerCase() + '%');
   }
+  const access = toolContext.get()?.mcpAccess;
+  if (access) {
+    const ids = access.connectionIds ?? [];
+    where.push(`connection_id IN (${ids.map(() => '?').join(',') || 'NULL'})`);
+    args.push(...ids);
+  }
   if (input.source) {
     where.push('source=?');
     args.push(input.source);
@@ -188,11 +195,16 @@ export function historyStats(trackIds: Array<string | number>) {
   const canonicalIds = [...new Set([...canonicalFor.values()])];
   const canonicalMarks = canonicalIds.map(() => '?').join(',') || 'NULL';
   const refMarks = trackIds.map(() => '?').join(',');
+  const access = toolContext.get()?.mcpAccess;
+  const ids = access?.connectionIds ?? [];
+  const grantFilter = access
+    ? ` AND connection_id IN (${ids.map(() => '?').join(',') || 'NULL'})`
+    : '';
   const rows = db()
     .prepare(
-      `SELECT canonical_track_id canonicalId,provider_track_id providerTrackId,spotify_track_id legacyId,COUNT(*) plays,MAX(occurred_at) lastPlayed FROM listening_events WHERE canonical_track_id IN (${canonicalMarks}) OR provider_track_id IN (${refMarks}) OR spotify_track_id IN (${refMarks}) GROUP BY canonical_track_id,provider_track_id,spotify_track_id`,
+      `SELECT canonical_track_id canonicalId,provider_track_id providerTrackId,spotify_track_id legacyId,COUNT(*) plays,MAX(occurred_at) lastPlayed FROM listening_events WHERE (canonical_track_id IN (${canonicalMarks}) OR provider_track_id IN (${refMarks}) OR spotify_track_id IN (${refMarks}))${grantFilter} GROUP BY canonical_track_id,provider_track_id,spotify_track_id`,
     )
-    .all(...canonicalIds, ...trackIds, ...trackIds) as any[];
+    .all(...canonicalIds, ...trackIds, ...trackIds, ...(access ? ids : [])) as any[];
   const out = new Map<string | number, any>();
   for (const row of rows) {
     const requested = [

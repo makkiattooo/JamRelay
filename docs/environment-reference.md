@@ -143,7 +143,7 @@ description: Generated reference for variables documented in .env.example.
 ### `JAMRELAY_TOOLSET`
 
 - **Sensitive:** no
-- **Example/default in `.env.example`:** `all`
+- **Example/default in `.env.example`:** `essential`
 
 ### `JAMRELAY_DATA_DIR`
 
