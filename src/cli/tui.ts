@@ -223,8 +223,10 @@ function progressMarker() {
   return `[JR] [${'#'.repeat(filled)}${'-'.repeat(10 - filled)}] ${context.step}/${context.total}`;
 }
 
-function frame(title: string, body: string, subtitle?: string, scroll = 0) {
-  clearScreen();
+function frame(title: string, body: string, subtitle?: string, scroll = 0, redraw = false) {
+  // Redraws move the cursor home instead of clearing, so typing does not flicker the whole panel.
+  if (redraw && ansiEnabled()) process.stdout.write('[H');
+  else clearScreen();
   const geometry = panelGeometry();
   const bodyLines = wrapText(body, geometry.contentWidth);
   const rendered = panelText(title, bodyLines, subtitle ?? '', scroll);
@@ -390,6 +392,7 @@ export async function promptText(label: string, fallback = '', options: PromptOp
   const displayValue = () => (options.secret ? '•'.repeat(value.length) : value);
   const draw = () => {
     if (!ansi && drawn) return;
+    const redraw = drawn;
     drawn = true;
     const visibleContext = contextViewport();
     const geometry = panelGeometry();
@@ -422,6 +425,7 @@ export async function promptText(label: string, fallback = '', options: PromptOp
         ? `${word('default')}: ${fallback} | ${word('inputHint')}`
         : word('inputHint'),
       scroll,
+      redraw,
     );
     if (ansi && output.isTTY) {
       const row = Math.min(geometry.rows, rendered.bodyStart + inputLine - scroll);
