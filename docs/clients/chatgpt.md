@@ -44,7 +44,7 @@ Server URL: https://mcp.example.com/mcp
 Authentication: OAuth
 ```
 
-If the form requests an icon, try the square JamRelay PNG files: [light icon](../../assets/brand/masters/jamrelay-icon-black-transparent-1024.png) or [dark icon](../../assets/brand/masters/jamrelay-icon-white-transparent-1024.png). The files are 1024×1024 PNGs; follow any size or format limits shown by ChatGPT.
+If the form requests an icon, try the square JamRelay PNG files: [light icon](https://raw.githubusercontent.com/makkiattooo/JamRelay/main/assets/brand/masters/jamrelay-icon-black-transparent-1024.png) or [dark icon](https://raw.githubusercontent.com/makkiattooo/JamRelay/main/assets/brand/masters/jamrelay-icon-white-transparent-1024.png). The files are 1024×1024 PNGs; follow any size or format limits shown by ChatGPT.
 
 ChatGPT runs the connector from its hosted service. A local `127.0.0.1` or private LAN URL will not work. Use a publicly reachable HTTPS origin from `jamrelay connectivity` (a tunnel or reverse proxy is sufficient) and keep `/mcp` on the server URL. If you open **Advanced OAuth settings**, configure the endpoints below for that same origin:
 

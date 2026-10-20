@@ -17,7 +17,7 @@ Server URL: https://mcp.example.com/mcp
 Authentication: OAuth
 ```
 
-Jeśli formularz umożliwia dodanie ikony, wypróbuj kwadratowy plik PNG: [ikona jasna](../../../assets/brand/masters/jamrelay-icon-black-transparent-1024.png) lub [ikona ciemna](../../../assets/brand/masters/jamrelay-icon-white-transparent-1024.png). Obie mają 1024×1024; zastosuj limity rozmiaru i formatu pokazane przez ChatGPT.
+Jeśli formularz umożliwia dodanie ikony, wypróbuj kwadratowy plik PNG: [ikona jasna](https://raw.githubusercontent.com/makkiattooo/JamRelay/main/assets/brand/masters/jamrelay-icon-black-transparent-1024.png) lub [ikona ciemna](https://raw.githubusercontent.com/makkiattooo/JamRelay/main/assets/brand/masters/jamrelay-icon-white-transparent-1024.png). Obie mają 1024×1024; zastosuj limity rozmiaru i formatu pokazane przez ChatGPT.
 
 ChatGPT łączy się z serwerem ze swojej infrastruktury. Prywatny adres `127.0.0.1` ani LAN nie będzie dostępny. Użyj publicznego HTTPS skonfigurowanego przez `jamrelay connectivity` (może to być tunel lub reverse proxy) i podaj adres serwera zakończony `/mcp`.
 
