@@ -99,7 +99,7 @@ default is `http://localhost:5267/mcp`; remote access requires reachable HTTPS.
 - [Security](docs/security.md)
 
 Provider integrations require individual credentials and authorization; live
-verification is separate from automated tests. See the [release review notes](docs/release-1.5.5.md).
+verification is separate from automated tests. See the [release review notes](docs/deployment/release-candidate.md).
 
 English is canonical. Entry points are available in [Polski](docs/pl/index.md),
 [Deutsch](docs/de/index.md), [Français](docs/fr/index.md) and

@@ -134,12 +134,16 @@ try {
   });
   assert.equal(created.isError, undefined);
   const id = created.structuredContent.job_id;
-  runner = new JobRunner({
-    resolve: async () => {
-      throw new Error('Direct fixture must not make a network request');
+  runner = new JobRunner(
+    {
+      resolve: async () => {
+        throw new Error('Direct fixture must not make a network request');
+      },
+      hasConnection: (id, provider) => id === 'fixture-main' && provider === 'fixture',
     },
-    hasConnection: (id, provider) => id === 'fixture-main' && provider === 'fixture',
-  });
+    undefined,
+    grantStore,
+  );
   runner.start();
   const ready = Date.now() + 3000;
   while (getJob(id).payload.phase !== 'ready_to_commit' && Date.now() < ready)

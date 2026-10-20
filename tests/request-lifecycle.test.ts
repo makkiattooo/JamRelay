@@ -7,9 +7,14 @@ describe('provider request lifecycle', () => {
 
   it('propagates a cancelled MCP context to the provider fetch', async () => {
     const controller = new AbortController();
+    let started!: () => void;
+    const fetchStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
     const fetchMock = vi.fn(
       (_url: string, init: RequestInit) =>
         new Promise<Response>((_resolve, reject) => {
+          started();
           if (init.signal?.aborted) {
             reject(new Error('aborted'));
             return;
@@ -30,6 +35,7 @@ describe('provider request lifecycle', () => {
       },
       () => client.request('/me/player'),
     );
+    await fetchStarted;
     controller.abort();
     await expect(request).rejects.toThrow('aborted');
     expect(fetchMock).toHaveBeenCalledTimes(1);

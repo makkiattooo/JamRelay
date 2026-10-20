@@ -1,6 +1,6 @@
 # Owner release gate
 
-JamRelay 1.5.5 is prepared on `codex/jamrelay-work`. Nothing in this checklist authorizes publication. Do not merge, tag, publish, deploy or send email until the owner explicitly approves those actions.
+JamRelay 1.5.8 is prepared on `codex/jamrelay-work`. Nothing in this checklist authorizes publication. Do not merge, tag, publish, deploy or send email until the owner explicitly approves those actions.
 
 ## Spotify and Claude Code acceptance
 
@@ -8,7 +8,7 @@ Use the newly built source/image with your existing private `/data` and configur
 
 1. Stop the service and set/migrate the owner password: `docker compose stop jamrelay`, then `docker compose run --rm jamrelay owner password`.
 2. Configure your own Spotify application: `docker compose run --rm jamrelay connect provider spotify`. Register the exact printed callback in Spotify. Existing credentials can be retained; they are distinct from account authorization.
-3. Run `docker compose up -d --build --wait`. Verify `http://127.0.0.1:15268/health` reports version 1.5.5 and current schema. Run `docker compose run --rm jamrelay onboard`; health/MCP protection should pass, DNS/TLS should show N/A for local HTTP, and it must not request shutdown for read-only steps.
+3. Run `docker compose up -d --build --wait`. Verify `http://127.0.0.1:15268/health` reports version 1.5.8 and current schema. Run `docker compose run --rm jamrelay onboard`; health/MCP protection should pass, DNS/TLS should show N/A for local HTTP, and it must not request shutdown for read-only steps.
 4. Sign in at `http://127.0.0.1:15268/owner/login`, open `/auth/providers/spotify/start`, approve and complete Spotify OAuth. Run `docker compose run --rm jamrelay connections list` to inspect saved records; that alone is not a live API test.
 5. On Windows HOST PowerShell run `claude mcp add --transport http jamrelay http://127.0.0.1:15268/mcp` (inspect an existing registration with `claude mcp get jamrelay` first). In Claude Code run `/mcp`, complete browser OAuth, choose the Spotify connection and keep read-only permissions initially.
 6. Request tool discovery, `get_connections`, account identity, `get_my_playlists`, `get_playlist_tracks`, and current playback with an active eligible Spotify device. Re-run `jamrelay connect client claude-code --verify` through Compose to check actual server-observed discovery.
@@ -27,8 +27,8 @@ npm audit --omit=dev
 npm pack --dry-run
 npm pack
 npm login
-npm publish jamrelay-1.5.5.tgz --access public
-npm view jamrelay@1.5.5 version repository.url dist.integrity
+npm publish jamrelay-1.5.8.tgz --access public
+npm view jamrelay@1.5.8 version repository.url dist.integrity
 ```
 
 Install in a clean directory and confirm `jamrelay --version` before announcing availability. npm account ownership, name availability and required 2FA/provenance settings must be confirmed by the owner; `npm pack` proves none of those.
@@ -36,13 +36,13 @@ Install in a clean directory and confirm `jamrelay --version` before announcing 
 Creating this tag triggers the existing GHCR publication workflow. Only after tag/publication approval:
 
 ```bash
-git tag -a v1.5.5 -m 'JamRelay v1.5.5'
-git push origin v1.5.5
+git tag -a v1.5.8 -m 'JamRelay v1.5.8'
+git push origin v1.5.8
 ```
 
-Wait for `Container release` to publish `ghcr.io/makkiattooo/jamrelay:1.5.5` for `linux/amd64` and `linux/arm64`. Verify the manifest and run the released image with an isolated persistent volume. The workflow also supports an explicit manual publish input. Default manual dispatch builds without pushing.
+Wait for `Container release` to publish `ghcr.io/makkiattooo/jamrelay:1.5.8` for `linux/amd64` and `linux/arm64`. Verify the manifest and run the released image with an isolated persistent volume. The workflow also supports an explicit manual publish input. Default manual dispatch builds without pushing.
 
-Create the GitHub Release only after approval, titled `JamRelay v1.5.5`, using [the prepared notes](/release-1.5.5). Do not announce general availability until actual packages and their public installation paths have been verified.
+Create the GitHub Release only after approval, titled `JamRelay v1.5.8`, using notes describing the current authorization, provider and backup fixes, together with the owner password and client integration changes since 1.2.0. Do not announce general availability until actual packages and their public installation paths have been verified.
 
 Docker Hub namespace/account is not established here. No Docker Hub login or push is configured or attempted. Once the owner supplies and authorizes the actual namespace, mirror the approved multi-architecture release with their credentials; do not guess an account or buy a builder.
 

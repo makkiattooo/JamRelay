@@ -116,14 +116,18 @@ export function mergeClientConfig(path: string, client: FileClient, endpoint: st
 }
 export function desktopConfigPath() {
   return process.platform === 'win32'
-    ? join(process.env.APPDATA || homedir(), 'Claude', 'claude_desktop_config.json')
+    ? join(
+        process.env.APPDATA || join(homedir(), 'AppData', 'Roaming'),
+        'Claude',
+        'claude_desktop_config.json',
+      )
     : process.platform === 'darwin'
       ? join(homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json')
       : undefined;
 }
 export function vscodeUserConfigPath() {
   return process.platform === 'win32'
-    ? join(process.env.APPDATA || homedir(), 'Code', 'User', 'mcp.json')
+    ? join(process.env.APPDATA || join(homedir(), 'AppData', 'Roaming'), 'Code', 'User', 'mcp.json')
     : process.platform === 'darwin'
       ? join(homedir(), 'Library', 'Application Support', 'Code', 'User', 'mcp.json')
       : join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'Code', 'User', 'mcp.json');

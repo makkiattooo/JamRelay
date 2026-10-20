@@ -73,9 +73,6 @@ export class SpotifyClient {
     return { total: current.total - before.total, by_endpoint: byEndpoint };
   }
   async request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T | null> {
-    if (init.method && !['GET', 'HEAD'].includes(init.method.toUpperCase()))
-      await McpPermissionEngine.enforceWrite(['spotify-default']);
-    else await McpPermissionEngine.enforce(undefined, ['spotify-default']);
     let retryCount = 0;
     let forcedRefreshPerformed = false;
     let forceRefresh = false;
@@ -139,6 +136,10 @@ export class SpotifyClient {
           endpointKey,
           (this.apiCallsByEndpoint.get(endpointKey) ?? 0) + 1,
         );
+        assertQueueJobActive();
+        if (init.method && !['GET', 'HEAD'].includes(init.method.toUpperCase()))
+          await McpPermissionEngine.enforceWrite(['spotify-default']);
+        else await McpPermissionEngine.enforce(undefined, ['spotify-default']);
         response = await fetch('https://api.spotify.com/v1' + requestPath, {
           ...init,
           headers,

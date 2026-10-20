@@ -1,3 +1,4 @@
+import { McpPermissionEngine } from '../mcp/permissions.js';
 import { assertQueueJobActive } from '../db/jobs.js';
 import { retryAfterSeconds } from '../providers/retry-after.js';
 import { ProviderApiError } from '../providers/errors.js';
@@ -25,6 +26,9 @@ export class SoundCloudClient {
     try {
       const parentSignal = toolContext.get()?.signal;
       assertQueueJobActive();
+      if (init.method && !['GET', 'HEAD'].includes(init.method.toUpperCase()))
+        await McpPermissionEngine.enforceWrite([this.connectionId]);
+      else await McpPermissionEngine.enforce(undefined, [this.connectionId]);
       const response = await fetch('https://api.soundcloud.com' + path, {
         ...init,
         headers: { accept: 'application/json', Authorization: 'OAuth ' + token, ...init.headers },

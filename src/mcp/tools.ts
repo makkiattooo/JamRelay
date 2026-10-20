@@ -601,6 +601,7 @@ export function registerTools(
               signal,
               deadlineAt,
               operation: name,
+              writeAllowed: !metadata.readOnly,
               mcpAccess:
                 effectiveConnectionId &&
                 parentContext?.mcpAccess &&

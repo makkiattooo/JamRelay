@@ -1,4 +1,4 @@
-import { toolContext, type McpAccess } from './context.js';
+import { toolContext, intersectAccess, type McpAccess } from './context.js';
 import { getToolSecurityMetadata } from './tool-manifest.js';
 
 export const MCP_PERMISSIONS = [
@@ -40,18 +40,15 @@ export class McpPermissionEngine {
   }
   static async current(): Promise<McpAccess | undefined> {
     const context = toolContext.get();
+    if (context?.resolveAccess && !context.mcpAccess) throw new Error('CLIENT_REVOKED');
     if (!context?.mcpAccess) return undefined; // trusted local operator, not an MCP request
     if (!context.resolveAccess) return context.mcpAccess;
     const access = await context.resolveAccess();
     if (!access) throw new Error('CLIENT_REVOKED');
-    // A nested operation may narrow its target but can never expand the original grant.
-    const allowed = context.mcpAccess.connectionIds;
-    return {
-      ...access,
-      connectionIds: access.connectionIds?.filter((id) => !allowed || allowed.includes(id)),
-    };
+    return intersectAccess(context.mcpAccess, access);
   }
   static async enforceWrite(connections: string[] = [], destructive = false) {
+    if (toolContext.get()?.writeAllowed === false) throw new Error('PERMISSION_NOT_GRANTED');
     const access = await this.enforce(undefined, connections);
     if (access) {
       const metadata = getToolSecurityMetadata(toolContext.get()?.operation ?? '');

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, expect, it } from 'vitest';
 import { createApp } from '../src/index.js';
-import { initializeDatabase, closeDatabase } from '../src/db/database.js';
+import { initializeDatabase, closeDatabase, getDatabase } from '../src/db/database.js';
 import { McpOAuthStore } from '../src/mcp/oauth.js';
 import { ProviderRegistry } from '../src/providers/registry.js';
 import { toolContext } from '../src/mcp/context.js';
@@ -211,6 +211,12 @@ it('rechecks a changed grant during a running operation and before durable work'
       { title: 'test', artist: 'fixture' },
     ]),
   );
+  const broken = await toolContext.run(context, async () =>
+    createJob('bulk_add_tracks', { provider: 'fixture', connection_id: 'account-a' }, [
+      { title: 'test' },
+    ]),
+  );
+  getDatabase().prepare('UPDATE jobs SET authorization_json=NULL WHERE id=?').run(broken);
   await toolContext.run(context, async () => {
     await McpPermissionEngine.enforceWrite(['account-a']);
     await new McpOAuthStore(join(directory, 'oauth.json')).updateGrant(
@@ -235,11 +241,69 @@ it('rechecks a changed grant during a running operation and before durable work'
   );
   runner.start();
   try {
-    for (let i = 0; i < 100 && getJob(id).status !== 'failed'; i++)
+    for (
+      let i = 0;
+      i < 100 && (getJob(id).status !== 'failed' || getJob(broken).status !== 'failed');
+      i++
+    )
       await new Promise((r) => setTimeout(r, 10));
     expect(getJob(id).lastErrorCode).toBe('PERMISSION_NOT_GRANTED');
+    expect(getJob(broken).lastErrorCode).toBe('CLIENT_REVOKED');
     expect(called).toBe(false);
   } finally {
     await runner.stop();
   }
+});
+
+it('never broadens a running or nested MCP authorization when the owner expands a grant', async () => {
+  const initial = {
+    clientId: 'a',
+    permissions: ['catalog.read'],
+    connectionIds: ['account-a'],
+    tools: ['search_tracks'],
+  };
+  const expanded = {
+    clientId: 'a',
+    permissions: ['catalog.read', 'playlist.write'],
+    connectionIds: ['account-a', 'account-b'],
+  };
+  const context = {
+    requestId: 'ceiling',
+    signal: new AbortController().signal,
+    deadlineAt: Date.now() + 1000,
+    operation: 'search_tracks',
+    mcpAccess: initial,
+    resolveAccess: async () => expanded,
+  };
+  await toolContext.run(context, async () => {
+    expect(await McpPermissionEngine.current()).toMatchObject(initial);
+    await expect(
+      toolContext.run({ ...context, mcpAccess: expanded, operation: 'create_playlist' }, () =>
+        McpPermissionEngine.enforceWrite(['account-a']),
+      ),
+    ).rejects.toThrow('PERMISSION_NOT_GRANTED');
+    const { mcpAccess: _access, resolveAccess: _resolve, ...nested } = context;
+    await expect(
+      toolContext.run({ ...nested, operation: 'create_playlist' }, () =>
+        McpPermissionEngine.enforceWrite(['account-a']),
+      ),
+    ).rejects.toThrow('PERMISSION_NOT_GRANTED');
+  });
+  await toolContext.run({ ...context, mcpAccess: expanded, writeAllowed: false }, async () => {
+    await expect(
+      toolContext.run(
+        { ...context, mcpAccess: expanded, operation: 'create_playlist', writeAllowed: true },
+        () => McpPermissionEngine.enforceWrite(['account-a']),
+      ),
+    ).rejects.toThrow('PERMISSION_NOT_GRANTED');
+  });
+  await toolContext.run(
+    { ...context, resolveAccess: async () => ({ ...expanded, clientId: 'forged' }) },
+    async () => {
+      await expect(McpPermissionEngine.current()).rejects.toThrow('CLIENT_REVOKED');
+    },
+  );
+  await toolContext.run({ ...context, mcpAccess: undefined }, async () => {
+    await expect(McpPermissionEngine.current()).rejects.toThrow('CLIENT_REVOKED');
+  });
 });

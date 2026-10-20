@@ -179,6 +179,11 @@ export class JobRunner {
     }
     try {
       const saved = job.authorization ? JSON.parse(job.authorization) : undefined;
+      if (
+        job.ownerClientId &&
+        (!saved || saved.clientId !== job.ownerClientId || !this.permissionStore)
+      )
+        throw new Error('CLIENT_REVOKED');
       const resolveAccess =
         job.ownerClientId && this.permissionStore
           ? () => this.permissionStore!.policyFor(job.ownerClientId, saved?.issuedAt)

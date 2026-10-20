@@ -29,8 +29,8 @@ Alternatively, run `npm pack` and install the archive printed by npm with `npm i
 Check both exact version and official repository metadata:
 
 ```bash
-npm view jamrelay@1.5.5 version repository.url
-npm install -g jamrelay@1.5.5
+npm view jamrelay@1.5.8 version repository.url
+npm install -g jamrelay@1.5.8
 jamrelay setup
 jamrelay connect provider spotify
 jamrelay start
@@ -51,7 +51,7 @@ docker compose run --rm jamrelay onboard
 
 Set `JAMRELAY_PORT` in your host environment to change the published port. Use the exact host-facing MCP URL printed by the wizard. Compose probes the internal service separately; client configuration must use the host address. Persistent `/data` contains private configuration and encrypted credentials. Do not delete its volume during an upgrade.
 
-After an approved GHCR release exists, use `ghcr.io/makkiattooo/jamrelay:1.5.5` with a persistent `/data` volume. Do not assume an image exists before checking official publication.
+After an approved GHCR release exists, use `ghcr.io/makkiattooo/jamrelay:1.5.8` with a persistent `/data` volume. Do not assume an image exists before checking official publication.
 
 ## Connect a client
 

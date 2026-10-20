@@ -67,6 +67,7 @@ type State = {
       tools?: string[];
       lastActiveAt?: number;
       revokedAt?: number;
+      tokensRevokedBefore?: number;
       updatedAt: number;
     }
   >;
@@ -332,6 +333,8 @@ export class McpOAuthStore {
   }
 
   private revoked(clientId: string, issuedAt?: number) {
+    const floor = this.state.grants[clientId]?.tokensRevokedBefore ?? 0;
+    if (floor && (issuedAt ?? 0) <= floor) return true;
     if (!isDatabaseInitialized()) return false;
     const row = getDatabase()
       .prepare('SELECT revoked_at FROM operator_client_revocations WHERE client_id=?')
@@ -410,7 +413,16 @@ export class McpOAuthStore {
         permissions: [...new Set(permissions)],
         tools,
         lastActiveAt: this.state.grants[clientId]?.lastActiveAt,
-        updatedAt: Math.max(Date.now(), revokedAt + 1),
+        tokensRevokedBefore:
+          this.state.grants[clientId]?.tokensRevokedBefore ??
+          this.state.grants[clientId]?.revokedAt,
+        updatedAt: Math.max(
+          Date.now(),
+          revokedAt + 1,
+          (this.state.grants[clientId]?.revokedAt ??
+            this.state.grants[clientId]?.tokensRevokedBefore ??
+            0) + 1,
+        ),
       };
       await this.save();
     });
@@ -460,6 +472,7 @@ export class McpOAuthStore {
       const grant = this.state.grants[clientId];
       if (!grant) return false;
       grant.revokedAt = Date.now();
+      grant.tokensRevokedBefore = Math.max(grant.tokensRevokedBefore ?? 0, grant.revokedAt);
       await this.save();
       return true;
     });
@@ -486,6 +499,7 @@ export class McpOAuthStore {
         record.expiresAt <= Date.now() ||
         record.clientId !== clientId ||
         this.revoked(clientId, record.issuedAt) ||
+        !this.state.grants[clientId] ||
         Boolean(this.state.grants[clientId]?.revokedAt) ||
         (resource && record.resource && record.resource !== resource)
       ) {
@@ -498,16 +512,7 @@ export class McpOAuthStore {
   }
 
   async validAccess(value: string, resource?: string) {
-    return this.transaction(async () => {
-      await this.load();
-      this.pruneExpired();
-      const record = this.state.access[digest(value)];
-      return Boolean(
-        record &&
-        record.expiresAt > Date.now() &&
-        (!resource || !record.resource || record.resource === resource),
-      );
-    });
+    return Boolean(await this.accessPolicy(value, resource));
   }
 
   async registerDynamicClient(input: {

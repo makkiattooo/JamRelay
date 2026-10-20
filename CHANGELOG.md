@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.8 — 2026-10-20
+
+- Keep refreshed and nested MCP grants within the original authorization; recheck provider requests and reject owned jobs without live authorization.
+- Keep revoked access/refresh tokens invalid after a new grant, including installations without an open database.
+- Correct YouTube REST paths, playlist item removal/reordering and partial metadata updates; reject incomplete backup manifests.
+- Update release commands and Windows configuration path fallbacks.
+
 ## 1.5.7
 
 - Centralize model-independent MCP permissions, live per-registration scope/account/tool edits and revocation, including durable work. Filter discovery by grants and provider capabilities; default new installations to the essential profile.

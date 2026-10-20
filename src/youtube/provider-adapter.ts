@@ -2,6 +2,7 @@ import type { MusicCandidate } from '../music/normalize.js';
 import type { ProviderConnection } from '../providers/types.js';
 import type { YouTubeAuth } from './auth.js';
 import { YouTubeClient } from './client.js';
+import { ProviderApiError, CapabilityUnavailableError } from '../providers/errors.js';
 import { mapLimit } from '../utils/concurrency.js';
 const video = (x: any): MusicCandidate | null => {
   const s = x?.snippet ?? {};
@@ -94,9 +95,11 @@ export class YouTubeProviderAdapter implements ProviderConnection {
             quota_cost: r.quotaCost,
           })),
       getPlaylist: async (id: string) =>
-        this.client
-          .request('playlists.list', { part: 'snippet,status', id })
-          .then((r) => playlist(r.value.items?.[0])),
+        this.client.request('playlists.list', { part: 'snippet,status', id }).then((r) => {
+          if (!r.value.items?.[0])
+            throw new ProviderApiError(404, 'Playlist not found', 'youtube', connectionId);
+          return playlist(r.value.items[0]);
+        }),
       getPlaylistTracks: async (id: string, options: any = {}) =>
         this.client
           .request('playlistItems.list', {
@@ -113,6 +116,31 @@ export class YouTubeProviderAdapter implements ProviderConnection {
             quota_cost: r.quotaCost,
           })),
     };
+    const playlistItems = async (playlistId: string) => {
+      const items: any[] = [];
+      const seen = new Set<string>();
+      let pageToken: string | undefined;
+      do {
+        const { value } = await this.client.request('playlistItems.list', {
+          part: 'snippet,contentDetails',
+          playlistId,
+          maxResults: 50,
+          pageToken,
+        });
+        items.push(...(value.items ?? []));
+        pageToken = value.nextPageToken;
+        if (pageToken && seen.has(pageToken)) throw new Error('youtube_pagination_cycle');
+        if (pageToken) seen.add(pageToken);
+      } while (pageToken);
+      return items;
+    };
+    const invalidItem = () =>
+      new ProviderApiError(
+        400,
+        'Playlist item or position does not belong to the selected playlist',
+        'youtube',
+        connectionId,
+      );
     this.playlistWrite = {
       createPlaylist: async (input: any) =>
         this.client
@@ -135,36 +163,96 @@ export class YouTubeProviderAdapter implements ProviderConnection {
             { snippet: { playlistId: id, resourceId: { kind: 'youtube#video', videoId } } },
           ),
         ).then(() => ({ added: ids.length, quota_cost: ids.length * 50 })),
-      removeTracks: async (_playlistId: string, itemIds: string[]) => {
-        await mapLimit(itemIds, { concurrency: 8 }, (itemId) =>
-          this.client.request('playlistItems.delete', { id: itemId }),
+      removeTracks: async (playlistId: string, ids: string[]) => {
+        const items = await playlistItems(playlistId);
+        const selected = items.filter(
+          (item) => ids.includes(item.contentDetails?.videoId) || ids.includes(item.id),
         );
-        return { removed: itemIds.length, quota_cost: itemIds.length * 50 };
+        if (
+          ids.some(
+            (id) => !selected.some((item) => item.id === id || item.contentDetails?.videoId === id),
+          )
+        )
+          throw invalidItem();
+        await mapLimit(selected, { concurrency: 1 }, (item) =>
+          this.client.request('playlistItems.delete', { id: item.id }),
+        );
+        return { removed: selected.length, quota_cost: selected.length * 50 };
       },
       reorderTracks: async (playlistId: string, input: any) => {
-        const itemId = String(input.playlist_item_id ?? input.id ?? '');
-        if (!itemId) throw new Error('youtube_playlist_item_id_required');
+        if ((input.range_length ?? 1) !== 1)
+          throw new CapabilityUnavailableError(
+            'playlist.reorder.multiple',
+            'youtube',
+            connectionId,
+          );
+        const items = await playlistItems(playlistId);
+        const itemId = input.playlist_item_id ?? input.id;
+        const index = itemId
+          ? items.findIndex((item) => item.id === itemId)
+          : Number(input.range_start);
+        const destination = Number(input.insert_before ?? input.position);
+        if (
+          !Number.isInteger(index) ||
+          index < 0 ||
+          index >= items.length ||
+          !Number.isInteger(destination) ||
+          destination < 0 ||
+          destination > items.length
+        )
+          throw invalidItem();
+        const item = items[index];
+        const position =
+          input.insert_before !== undefined && destination > index ? destination - 1 : destination;
         return this.client.request(
           'playlistItems.update',
           { part: 'snippet' },
-          { id: itemId, snippet: { playlistId, position: Number(input.position) } },
+          {
+            id: item.id,
+            snippet: {
+              playlistId,
+              position,
+              resourceId: item.snippet.resourceId ?? {
+                kind: 'youtube#video',
+                videoId: item.contentDetails.videoId,
+              },
+            },
+          },
         );
       },
       replaceTracks: async () => {
         throw new Error('youtube_playlist_replace_unsupported');
       },
-      updatePlaylist: async (id: string, input: any) =>
-        this.client
+      updatePlaylist: async (id: string, input: any) => {
+        const { value } = await this.client.request('playlists.list', {
+          part: 'snippet,status',
+          id,
+        });
+        const current = value.items?.[0];
+        if (!current)
+          throw new ProviderApiError(404, 'Playlist not found', 'youtube', connectionId);
+        return this.client
           .request(
             'playlists.update',
             { part: 'snippet,status' },
             {
               id,
-              snippet: { title: input.name, description: input.description ?? '' },
-              status: { privacyStatus: input.public ? 'public' : 'private' },
+              snippet: {
+                title: input.name ?? current.snippet.title,
+                description: input.description ?? current.snippet.description ?? '',
+              },
+              status: {
+                privacyStatus:
+                  input.public === undefined
+                    ? current.status.privacyStatus
+                    : input.public
+                      ? 'public'
+                      : 'private',
+              },
             },
           )
-          .then((r) => playlist(r.value)),
+          .then((r) => playlist(r.value));
+      },
     };
   }
 }
