@@ -68,13 +68,7 @@ Copy the callback displayed by ChatGPT **exactly**. JamRelay validates redirect 
 
 ## Owner approval
 
-When ChatGPT starts authorization, JamRelay displays the owner approval page. Enter:
-
-```dotenv
-MCP_OAUTH_OWNER_SECRET=...
-```
-
-That secret is local to JamRelay and is never given to ChatGPT or Spotify.
+When ChatGPT starts authorization, enter the configured owner password on the JamRelay approval page. Recovery/legacy `MCP_OAUTH_OWNER_SECRET` remains an alternative. Set or migrate the password with `jamrelay owner password` while stopped. Neither credential is given to ChatGPT or Spotify. New grants default to read access; opt into writes only when needed.
 
 ## Verify
 

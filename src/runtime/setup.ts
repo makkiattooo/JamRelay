@@ -1,3 +1,4 @@
+import { hashOwnerPassword, passwordProblem, validPasswordHash } from '../mcp/owner-password.js';
 import { randomBytes } from 'node:crypto';
 import { existsSync, accessSync, constants, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve, isAbsolute, join } from 'node:path';
@@ -14,6 +15,7 @@ import {
 import {
   clearScreen,
   promptConfirm,
+  promptText as passwordPrompt,
   promptText,
   selectOption,
   setTuiContext,
@@ -34,6 +36,8 @@ export const supportedNode = () => {
 };
 export function validateSettings(settings: Record<string, string>) {
   const config = getConfig(settings);
+  if (config.MCP_OWNER_PASSWORD_HASH && !validPasswordHash(config.MCP_OWNER_PASSWORD_HASH))
+    throw new Error('Invalid owner password hash. Use jamrelay owner password.');
   const url = new URL(config.PUBLIC_BASE_URL);
   if (url.username || url.password || url.search || url.hash || url.pathname !== '/')
     throw new Error('Public URL must be an origin without credentials, path, query or fragment.');
@@ -198,6 +202,13 @@ export async function setup(nonInteractive = false, reconfigure = false) {
       );
     settings.TOKEN_ENCRYPTION_KEY ||= randomBytes(32).toString('base64');
     settings.MCP_OAUTH_OWNER_SECRET ||= randomBytes(32).toString('base64url');
+    if (
+      !nonInteractive &&
+      !settings.MCP_OWNER_PASSWORD_HASH &&
+      (await confirm(t('Create an owner password?'), true))
+    ) {
+      settings.MCP_OWNER_PASSWORD_HASH = await promptOwnerPassword();
+    }
     settings.HOST ||= settings.JAMRELAY_INSTALL_MODE === 'docker' ? '0.0.0.0' : '127.0.0.1';
     settings.PORT ||= '5267';
     settings.PUBLIC_BASE_URL ||= localBaseUrl({ ...process.env, PORT: settings.PORT });
@@ -257,6 +268,7 @@ export async function setup(nonInteractive = false, reconfigure = false) {
         ),
       );
     const origin = effectiveBaseUrl(settings, effectiveEnv);
+    settings.PUBLIC_BASE_URL = origin;
     const providers = ['spotify', 'soundcloud', 'apple-music', 'youtube'];
     if (!nonInteractive) setTuiContext({ step: 3, total: 6, language });
     const config = validateSettings(settings);
@@ -429,4 +441,42 @@ export async function doctor(json = false) {
       : `${t('Configuration')}: ${paths.config}\n${t('Errors')}:\n${errors.map((e) => '  ' + knownMessage(e)).join('\n') || '  0'}\n${t('Warnings')}:\n${warnings.map((e) => '  ' + knownMessage(e)).join('\n') || '  0'}\n${t('State')}: ${errors.length ? t('Errors') : t('OK')}`,
   );
   return errors.length ? 1 : 0;
+}
+
+export async function promptOwnerPassword() {
+  for (;;) {
+    const password = await passwordPrompt('Owner password (12–256 characters)', '', {
+      secret: true,
+    });
+    const problem = passwordProblem(password);
+    if (problem) {
+      showPanel('Password', problem);
+      continue;
+    }
+    const confirmation = await passwordPrompt('Confirm owner password', '', { secret: true });
+    if (password !== confirmation) {
+      showPanel('Password', 'Passwords do not match. Try again.');
+      continue;
+    }
+    return hashOwnerPassword(password);
+  }
+}
+
+/** Explicit offline migration/reset; keeps recovery secret, encryption key and OAuth data. */
+export async function setOwnerPassword() {
+  const { loadInstallation } = await import('./installation.js');
+  const paths = loadInstallation();
+  if (!existsSync(paths.config)) throw new Error('Run jamrelay setup first.');
+  const unlock = await lockInstallation(paths.config);
+  try {
+    const settings = readSettings(paths.config);
+    settings.MCP_OWNER_PASSWORD_HASH = await promptOwnerPassword();
+    saveSettings(paths.config, settings);
+    showPanel(
+      'Owner password saved',
+      'Start JamRelay and sign in with your password. Recovery secret and all existing credentials are preserved.',
+    );
+  } finally {
+    unlock();
+  }
 }

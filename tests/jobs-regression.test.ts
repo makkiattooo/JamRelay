@@ -317,7 +317,7 @@ describe('Express MCP body limit', () => {
   async function request(payload: unknown) {
     await setup();
     const app = createApp(cfg, {
-      auth: { connected: async () => false } as any,
+      auth: { connected: async () => true } as any,
       client: { request: async () => null, json: async () => null } as any,
       logger: { info() {}, warn() {} } as any,
     });

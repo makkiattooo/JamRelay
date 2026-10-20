@@ -1,3 +1,4 @@
+import { ownerCredentialMatches } from './owner-password.js';
 import { getDatabase, isDatabaseInitialized } from '../db/database.js';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
@@ -156,7 +157,7 @@ const normalizeStaticClient = (input: StaticClientInput): OAuthClient => ({
   source: 'static',
 });
 
-class StaticOAuthClientRegistry {
+export class StaticOAuthClientRegistry {
   private loaded = false;
   private clients = new Map<string, OAuthClient>();
 
@@ -183,6 +184,11 @@ class StaticOAuthClientRegistry {
       this.loaded = false;
       throw error;
     }
+  }
+
+  async list() {
+    await this.load();
+    return [...this.clients.values()].map(({ clientId, clientName }) => ({ clientId, clientName }));
   }
 
   async get(clientId: string) {
@@ -372,6 +378,15 @@ export class McpOAuthStore {
     await this.load();
     return Object.values(this.state.grants).map((grant) => ({ ...grant }));
   }
+  async authenticationEvidence(clientId: string) {
+    await this.load();
+    return Object.values(this.state.access).some(
+      (record) =>
+        record.clientId === clientId &&
+        record.expiresAt > Date.now() &&
+        !this.revoked(clientId, record.issuedAt),
+    );
+  }
   async listClients() {
     await this.load();
     return Object.values(this.state.clients).map((c) => ({
@@ -491,7 +506,11 @@ export class McpOAuthStore {
 
 type OAuthConfig = Pick<
   Config,
-  'PUBLIC_BASE_URL' | 'MCP_OAUTH_OWNER_SECRET' | 'MCP_OAUTH_CLIENTS_PATH' | 'MCP_OAUTH_DCR_ENABLED'
+  | 'PUBLIC_BASE_URL'
+  | 'MCP_OAUTH_OWNER_SECRET'
+  | 'MCP_OAUTH_CLIENTS_PATH'
+  | 'MCP_OAUTH_DCR_ENABLED'
+  | 'MCP_OWNER_PASSWORD_HASH'
 >;
 
 const authenticateClient = (
@@ -784,11 +803,16 @@ export function registerMcpOAuthRoutes(
       'diagnostics.read',
     ];
 
+    const previousGrant = await store.getGrant(client.clientId);
+    const activeGrant = previousGrant?.revokedAt ? null : previousGrant;
     return headers.type('html').send(
       renderAuthorizePage({
         clientName: client.clientName,
         fields,
         permissions: permissionOptions,
+        hasPassword: Boolean(cfg.MCP_OWNER_PASSWORD_HASH),
+        selectedPermissions: activeGrant?.permissions,
+        selectedConnections: activeGrant?.connectionIds,
         connections: connectionOptions(),
       }),
     );
@@ -827,7 +851,7 @@ export function registerMcpOAuthRoutes(
         renderOAuthErrorPage({
           title: 'Invalid OAuth request',
           message:
-            'The authorization request could not be validated. Start the connection again from ChatGPT.',
+            'The authorization request could not be validated. Start the connection again from your AI client.',
         }),
       );
     if (body.decision === 'cancel') {
@@ -837,11 +861,20 @@ export function registerMcpOAuthRoutes(
       if (body.state) redirect.searchParams.set('state', body.state);
       return res.redirect(302, redirect.toString());
     }
-    if (!same(body.owner_secret ?? '', cfg.MCP_OAUTH_OWNER_SECRET))
+    if (req.header('origin') && req.header('origin') !== origin)
+      return headers.status(403).send(
+        renderOAuthErrorPage({
+          title: 'Invalid origin',
+          message: 'Restart authorization from your MCP client.',
+        }),
+      );
+    if (
+      !(await ownerCredentialMatches(body, cfg.MCP_OAUTH_OWNER_SECRET, cfg.MCP_OWNER_PASSWORD_HASH))
+    )
       return headers.status(401).send(
         renderOAuthErrorPage({
-          title: 'Invalid owner secret',
-          message: 'The owner secret did not match. Check it and try again.',
+          title: 'Invalid owner credentials',
+          message: 'The password or recovery secret did not match. Try again.',
         }),
       );
 

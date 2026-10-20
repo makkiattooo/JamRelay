@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.5
+
+- Add masked owner password setup/reset with salted scrypt hashing and retained recovery/legacy access. Preserve encryption keys, OAuth stores and provider credentials.
+- Correct OAuth client branding, read-only permission defaults and actionable account/grant errors.
+- Separate Compose-internal health checks from host-facing client URLs; local DNS/TLS are N/A.
+- Add confirmed local client configuration with backups and honest registration/authentication/discovery states, backed by migration 0013 for actual MCP discovery evidence.
+- Repair TUI language-selection CI and add an isolated Docker image/network/authentication smoke job. Prepare npm/GHCR and a free self-hosted Agensi skill; publication and live provider acceptance remain owner-gated.
+
 ## 1.5.4
 
 - Replace setup, configuration and guided connection prompts with a shared keyboard-driven terminal UI.

@@ -54,9 +54,10 @@ jamrelay setup
 jamrelay start
 ```
 
-The terminal wizard configures storage, owner security and optional providers.
+The terminal wizard configures storage, a masked owner password and optional providers.
 You obtain provider developer credentials yourself and authorize accounts
-separately through the owner consent flow.
+separately through the owner consent flow. Existing installations can stop the
+server and run `jamrelay owner password` without changing encryption keys.
 
 **Public distribution is pending.** For a development checkout or candidate
 archive, follow [installation](docs/installation.md). The same page covers the
@@ -78,7 +79,10 @@ requires an eligible account and active device.
 ## Connect your AI agent
 
 Add the MCP endpoint shown by setup to a compatible client, complete owner
-OAuth consent, then request its tool list to verify the connection. The local
+OAuth consent, then request its tool list to verify the connection. `jamrelay connect client
+claude-code` can register a local Claude Code installation after confirmation;
+inside Docker it prints the exact host-side command. Use `--verify` afterward
+to check actual OAuth authentication and tool discovery. The local
 default is `http://localhost:5267/mcp`; remote access requires reachable HTTPS.
 
 [ChatGPT](docs/clients/chatgpt.md) · [Claude](docs/clients/claude.md) ·
@@ -93,6 +97,9 @@ default is `http://localhost:5267/mcp`; remote access requires reachable HTTPS.
 - [Operations and backups](docs/operations.md)
 - [Generated MCP tool reference](docs/tools-reference.md)
 - [Security](docs/security.md)
+
+Provider integrations require individual credentials and authorization; live
+verification is separate from automated tests. See the [release review notes](docs/release-1.5.5.md).
 
 English is canonical. Entry points are available in [Polski](docs/pl/index.md),
 [Deutsch](docs/de/index.md), [Français](docs/fr/index.md) and

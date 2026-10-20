@@ -58,6 +58,9 @@ const page = (x: any, map: (value: any) => unknown) => ({
 });
 export type SoundCloudAdapterOptions = { connectionId?: string; displayName?: string };
 export class SoundCloudProviderAdapter implements ProviderConnection {
+  async isAuthorized() {
+    return this.auth?.connected ? this.auth.connected() : true;
+  }
   readonly summary;
   readonly identity: IdentityCapability;
   readonly catalog: CatalogCapability;

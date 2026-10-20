@@ -1,8 +1,12 @@
+import { ownerCredentialFields } from './owner-password.js';
 type AuthorizePageData = {
   clientName: string;
   fields: Record<string, string>;
   connections?: Array<{ id: string; provider: string; name: string }>;
   permissions?: string[];
+  selectedPermissions?: string[];
+  selectedConnections?: string[];
+  hasPassword?: boolean;
 };
 
 type ErrorPageData = {
@@ -71,6 +75,9 @@ export const renderAuthorizePage = ({
   fields,
   connections = [],
   permissions = [],
+  selectedPermissions,
+  selectedConnections,
+  hasPassword = false,
 }: AuthorizePageData) => {
   const hiddenFields = Object.entries(fields)
     .map(
@@ -79,10 +86,38 @@ export const renderAuthorizePage = ({
     )
     .join('');
 
-  return `${pageStart('Connect ChatGPT to JamRelay')}
+  const title = 'Connect an AI client to JamRelay';
+  const selected = new Set(
+    selectedPermissions ?? permissions.filter((p) => p.endsWith('.read') || p === 'transfer.plan'),
+  );
+  const descriptions: Record<string, string> = {
+    'library.write': 'Save or remove items in your library.',
+    'playlist.write': 'Create, add to and reorder playlists.',
+    'playback.control': 'Start, pause or change playback and volume.',
+    'transfer.execute': 'Write playlists to a selected destination account.',
+    'playlist.destructive': 'Remove, replace or restore playlist contents. Review previews first.',
+  };
+  const groups = [
+    ['Read-only access', permissions.filter((p) => p.endsWith('.read') || p === 'transfer.plan')],
+    [
+      'Optional library and playlist modifications',
+      permissions.filter((p) => ['library.write', 'playlist.write'].includes(p)),
+    ],
+    ['Optional playback control', permissions.filter((p) => p === 'playback.control')],
+    ['Optional transfer execution', permissions.filter((p) => p === 'transfer.execute')],
+    ['Optional destructive operations', permissions.filter((p) => p === 'playlist.destructive')],
+  ] as const;
+  const permissionSections = groups
+    .filter(([, entries]) => entries.length)
+    .map(
+      ([label, entries]) =>
+        `<section class="permissions"><p class="permissions-title">${escapeHtml(label)}</p><ul>${entries.map((x) => `<li><label><input type="checkbox" name="permissions" value="${escapeHtml(x)}"${selected.has(x) ? ' checked' : ''}> ${escapeHtml(x)}${descriptions[x] ? `<br><small>${escapeHtml(descriptions[x])}</small>` : ''}</label></li>`).join('')}</ul></section>`,
+    )
+    .join('');
+  return `${pageStart(title)}
   <main class="card">
     <div class="brand">${logo}<span>${brandName}</span></div>
-    <h1>Connect ChatGPT to JamRelay</h1>
+    <h1>${escapeHtml(title)}</h1>
     <p class="intro"><span class="client">${escapeHtml(clientName)}</span> is requesting access to your JamRelay account.</p>
     <section class="permissions" aria-labelledby="permissions-title">
       <p class="permissions-title" id="permissions-title">This connection can</p>
@@ -93,10 +128,9 @@ export const renderAuthorizePage = ({
     </section>
     <form method="post" action="/oauth/authorize">
       ${hiddenFields}
-      ${connections.length ? `<section class="permissions"><p class="permissions-title">Provider connections</p><ul>${connections.map((x) => `<li><label><input type="checkbox" name="connection_ids" value="${escapeHtml(x.id)}" checked> ${escapeHtml(x.provider)} / ${escapeHtml(x.name)}</label></li>`).join('')}</ul></section>` : ''}
-      ${permissions.length ? `<section class="permissions"><p class="permissions-title">Allowed operation groups</p><ul>${permissions.map((x) => `<li><label><input type="checkbox" name="permissions" value="${escapeHtml(x)}" checked> ${escapeHtml(x)}</label></li>`).join('')}</ul></section>` : ''}
-      <label for="owner-secret">Owner secret</label>
-      <input id="owner-secret" name="owner_secret" type="password" required autocomplete="current-password">
+      ${connections.length ? `<section class="permissions"><p class="permissions-title">Provider connections</p><ul>${connections.map((x) => `<li><label><input type="checkbox" name="connection_ids" value="${escapeHtml(x.id)}"${!selectedConnections || selectedConnections.includes(x.id) ? ' checked' : ''}> ${escapeHtml(x.provider)} / ${escapeHtml(x.name)}</label></li>`).join('')}</ul></section>` : ''}
+      ${permissionSections}
+      ${ownerCredentialFields(hasPassword)}
       <div class="actions">
         <button class="primary" type="submit">Authorize access</button>
         <button class="cancel" type="submit" name="decision" value="cancel" formnovalidate>Cancel</button>

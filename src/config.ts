@@ -98,6 +98,7 @@ const schema = z.object({
 
   // One owner approval secret protects every OAuth client registration type.
   MCP_OAUTH_OWNER_SECRET: optionalNonEmpty,
+  MCP_OWNER_PASSWORD_HASH: optionalNonEmpty,
   MCP_OAUTH_STORE_PATH: dataPath('mcp-oauth.json'),
 
   // Optional static multi-client registry. A missing file is treated as empty.

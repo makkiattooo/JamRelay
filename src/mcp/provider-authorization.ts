@@ -1,3 +1,4 @@
+import { ownerCredentialMatches, ownerCredentialFields } from './owner-password.js';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type express from 'express';
 import { OwnerSessionStore } from './owner-session.js';
@@ -55,9 +56,14 @@ export class ProviderInitiations {
   }
 }
 
-export function registerOwnerAuthentication(app: express.Express, secret: string, baseUrl: string) {
+export function registerOwnerAuthentication(
+  app: express.Express,
+  secret: string,
+  baseUrl: string,
+  passwordHash?: string,
+) {
   const sessions = new OwnerSessionStore();
-  const secure = new URL(baseUrl).protocol === 'https:' || process.env.NODE_ENV === 'production';
+  const secure = new URL(baseUrl).protocol === 'https:';
   const attrs = `; Path=/; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`;
   const cookie = (req: express.Request, name: string) =>
     (req.header('cookie') ?? '')
@@ -91,11 +97,11 @@ export function registerOwnerAuthentication(app: express.Express, secret: string
       .send(
         authPage(
           'Owner authentication',
-          `<form method="post" action="/owner/login"><input type="hidden" name="csrf_token" value="${nonce}"><label>Owner secret <input type="password" name="owner_secret" required autocomplete="current-password"></label><button>Sign in</button></form>`,
+          `<form method="post" action="/owner/login"><input type="hidden" name="csrf_token" value="${nonce}">${ownerCredentialFields(Boolean(passwordHash))}<button>Sign in</button></form>`,
         ),
       );
   });
-  app.post('/owner/login', (req, res) => {
+  app.post('/owner/login', async (req, res) => {
     if (!allowed(req))
       return res.status(429).set('Retry-After', '300').json({ error: 'RATE_LIMITED' });
     const nonce = cookie(req, 'jamrelay_login');
@@ -106,7 +112,12 @@ export function registerOwnerAuthentication(app: express.Express, secret: string
       (origin && origin !== new URL(baseUrl).origin)
     )
       return res.status(403).json({ error: 'CSRF_REQUIRED' });
-    const session = sessions.authenticate(String(req.body?.owner_secret ?? ''), secret);
+    if (!(await ownerCredentialMatches(req.body ?? {}, secret, passwordHash)))
+      return res.status(401).json({
+        error: 'OWNER_AUTH_REQUIRED',
+        message: 'Invalid owner credentials. Try again or use recovery.',
+      });
+    const session = sessions.authenticate(secret, secret);
     if (!session) return res.status(401).json({ error: 'OWNER_AUTH_REQUIRED' });
     sessions.revoke(cookie(req, 'jamrelay_owner'));
     return res

@@ -1,3 +1,4 @@
+import { probeOrigin, probeOrigins, isLoopbackHttp } from './network-context.js';
 import { resolve4, resolve6 } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { domainToASCII } from 'node:url';
@@ -22,11 +23,16 @@ import {
   showPanel,
   terminalLink,
 } from './tui.js';
-import { localBaseUrl } from '../config.js';
+import { effectiveBaseUrl, localBaseUrl } from '../config.js';
 
 type Method = (typeof connectivityMethodSchema)['options'][number];
 type DomainMethod = 'cloudflare-tunnel' | 'direct-proxy' | 'existing-proxy';
-type Checks = { dns: boolean; https: boolean; health: boolean; mcpProtected: boolean };
+type Checks = {
+  dns: boolean | null;
+  https: boolean | null;
+  health: boolean;
+  mcpProtected: boolean;
+};
 const execFileAsync = promisify(execFile);
 const PORTAL = {
   cloudflare: 'https://dash.cloudflare.com/',
@@ -825,8 +831,10 @@ function safeOrigin(value: string, secure: boolean) {
 
 export async function verifyEndpoint(origin: string, local = false): Promise<Checks> {
   const url = new URL(origin);
-  let dns = local || isIP(url.hostname) !== 0;
-  if (!dns) {
+  const localHttp = isLoopbackHttp(origin);
+  let target = new URL(probeOrigin(origin));
+  let dns: boolean | null = localHttp ? null : isIP(url.hostname) !== 0;
+  if (dns === false) {
     try {
       await Promise.any([resolve4(url.hostname), resolve6(url.hostname)]);
       dns = true;
@@ -835,20 +843,34 @@ export async function verifyEndpoint(origin: string, local = false): Promise<Che
     }
   }
   let health = false;
-  let https = local ? url.protocol === 'http:' || url.protocol === 'https:' : false;
-  try {
-    const response = await fetch(new URL('/health', url), {
-      signal: AbortSignal.timeout(8000),
-      redirect: 'manual',
-    });
-    health = response.status === 200;
-    if (url.protocol === 'https:') https = response.status > 0;
-  } catch {
-    /* DNS, TLS, firewall, proxy and tunnel errors are reported below. */
+  let https: boolean | null = localHttp ? null : false;
+  void local;
+  for (const candidate of probeOrigins(origin)) {
+    target = new URL(candidate);
+    try {
+      const response = await fetch(new URL('/health', target), {
+        signal: AbortSignal.timeout(8000),
+        redirect: 'manual',
+      });
+      const body = (await response.json().catch(() => null)) as {
+        status?: string;
+        version?: string;
+        database?: { schemaState?: string };
+      } | null;
+      health =
+        response.status === 200 &&
+        body?.status === 'ok' &&
+        typeof body.version === 'string' &&
+        body.database?.schemaState === 'current';
+      if (url.protocol === 'https:') https = response.status > 0;
+    } catch {
+      /* DNS, TLS, firewall, proxy and tunnel errors are reported below. */
+    }
+    if (health) break;
   }
   let mcpProtected = false;
   try {
-    const response = await fetch(new URL('/mcp', url), {
+    const response = await fetch(new URL('/mcp', target), {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -888,6 +910,7 @@ export function providerRedirectUris(origin: string) {
 
 async function saveOrigin(origin: string) {
   const paths = loadInstallation();
+  if (effectiveBaseUrl(readSettings(paths.config)) === origin) return;
   if (process.env.PUBLIC_BASE_URL && process.env.PUBLIC_BASE_URL !== origin)
     throw new Error(
       'PUBLIC_BASE_URL is set in the environment. Update that environment value before using the saved origin.',
@@ -895,7 +918,6 @@ async function saveOrigin(origin: string) {
   const release = await lockInstallation(paths.config);
   try {
     const settings = readSettings(paths.config);
-    if (settings.PUBLIC_BASE_URL === origin) return;
     settings.PUBLIC_BASE_URL = origin;
     saveSettings(paths.config, settings);
   } finally {
@@ -960,9 +982,10 @@ function printReadyChecks(checks: Checks, language: Language) {
   showPanel(
     t('checkTitle', language),
     rows
-      .map(
-        ([condition, okKey, badKey]) =>
-          `${condition ? '✓' : '✗'} ${t(condition ? okKey : badKey, language)}`,
+      .map(([condition, okKey, badKey]) =>
+        condition === null
+          ? `${okKey === 'dnsOk' ? 'DNS' : 'TLS'}: N/A — local connection`
+          : `${condition ? '✓' : '✗'} ${t(condition ? okKey : badKey, language)}`,
       )
       .join('\n'),
   );
@@ -980,7 +1003,8 @@ async function verifyAndSave(
 ) {
   const checks = await verifyEndpoint(origin, local);
   printReadyChecks(checks, language);
-  const verified = checks.dns && checks.https && checks.health && checks.mcpProtected;
+  const verified =
+    checks.dns !== false && checks.https !== false && checks.health && checks.mcpProtected;
   await persist(
     method,
     origin,
@@ -992,7 +1016,10 @@ async function verifyAndSave(
     zone,
   );
   if (!verified) {
-    showPanel(t('pending', language), `${t('recovery', language)}\n\n${t('errors', language)}`);
+    showPanel(
+      t('pending', language),
+      `${t('recovery', language)}\n\n${t('errors', language)}${process.env.JAMRELAY_INSTALL_MODE === 'docker' && isLoopbackHttp(origin) ? `\nProbe from Docker: ${probeOrigin(origin)}. On the host run docker compose up -d --wait; check that both containers share the Compose network. Client URL: ${origin}/mcp.` : ''}`,
+    );
     return false;
   }
   try {
@@ -1255,7 +1282,7 @@ export async function showConnectivityStatus(json = false) {
   if (origin && state.status !== 'pending') {
     const checks = await verifyEndpoint(origin, state.status === 'local');
     printReadyChecks(checks, language);
-    return Object.values(checks).every(Boolean) ? 0 : 1;
+    return Object.values(checks).every((value) => value !== false) ? 0 : 1;
   }
   return 1;
 }

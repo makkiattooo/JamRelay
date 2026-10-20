@@ -36,6 +36,11 @@ jobs:
         with:
           context: .
           platforms: linux/amd64,linux/arm64
+          build-args: JAMRELAY_VERSION=${{ steps.version.outputs.version }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/makkiattooo/JamRelay
+            org.opencontainers.image.licenses=AGPL-3.0-only
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
           push: ${{ github.ref_type == 'tag' || inputs.publish }}
           tags: ghcr.io/makkiattooo/jamrelay:${{ steps.version.outputs.version }}
           cache-from: type=gha

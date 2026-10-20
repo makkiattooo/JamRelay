@@ -179,7 +179,7 @@ for (const variable of variables) {
     last = variable.section;
   }
   envDoc.push(`### \`${variable.name}\``, '');
-  const sensitive = /(SECRET|TOKEN_ENCRYPTION_KEY|API_KEY)/.test(variable.name);
+  const sensitive = /(SECRET|PASSWORD|TOKEN_ENCRYPTION_KEY|API_KEY)/.test(variable.name);
   envDoc.push(`- **Sensitive:** ${sensitive ? 'yes' : 'no'}`);
   envDoc.push(
     `- **Example/default in \`.env.example\`:** ${variable.value ? `\`${variable.value}\`` : '_empty_'}`,

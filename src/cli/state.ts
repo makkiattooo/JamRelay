@@ -28,8 +28,8 @@ export const connectivityStateSchema = z
     registrar: z.string().nullable().default(null),
     checks: z
       .object({
-        dns: z.boolean().default(false),
-        https: z.boolean().default(false),
+        dns: z.boolean().nullable().default(false),
+        https: z.boolean().nullable().default(false),
         health: z.boolean().default(false),
         mcpProtected: z.boolean().default(false),
       })
@@ -53,7 +53,30 @@ export const cliStateSchema = z
         }),
       )
       .default({}),
-    guidedClients: z.enum(['chatgpt', 'claude', 'cursor', 'vscode', 'generic']).array().default([]),
+    guidedClients: z
+      .enum(['chatgpt', 'claude', 'claude-code', 'claude-desktop', 'cursor', 'vscode', 'generic'])
+      .array()
+      .default([]),
+    clientSetup: z
+      .record(
+        z.string(),
+        z.object({
+          status: z.enum([
+            'not_configured',
+            'configuration_generated',
+            'configured',
+            'authentication_required',
+            'authenticated',
+            'verified',
+            'failed',
+          ]),
+          endpoint: z.string().url(),
+          detail: z.string(),
+          clientId: z.string().optional(),
+          updatedAt: z.number(),
+        }),
+      )
+      .default({}),
     connectivity: connectivityStateSchema.default({
       method: null,
       status: 'pending',
@@ -75,6 +98,7 @@ export const defaultState = (): CliState => ({
   lastPassiveAttempt: 0,
   notices: {},
   guidedClients: [],
+  clientSetup: {},
   connectivity: connectivityStateSchema.parse({}),
 });
 export function cliPaths() {

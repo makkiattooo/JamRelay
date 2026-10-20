@@ -28,7 +28,9 @@ const run = (...args: string[]) => runOperator(args, (s) => lines.push(s));
 describe('local operator CLI', () => {
   it('reports status, validates usage and closes database', async () => {
     expect(await run('status', '--json')).toBe(0);
-    expect(JSON.parse(lines.pop()!).database.currentVersion).toContain('0012');
+    const database = JSON.parse(lines.pop()!).database;
+    expect(database.currentVersion).toBe(database.expectedVersion);
+    expect(database.schemaState).toBe('current');
     expect(await run('unknown')).toBe(2);
     expect(await run('jobs', 'inspect', '999')).toBe(1);
   });

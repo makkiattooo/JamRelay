@@ -1,3 +1,4 @@
+import { recordDiscovery } from './mcp/client-evidence.js';
 import express from 'express';
 import { timingSafeEqual } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
@@ -186,6 +187,7 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
     app,
     cfg.MCP_OAUTH_OWNER_SECRET ?? '',
     cfg.PUBLIC_BASE_URL,
+    cfg.MCP_OWNER_PASSWORD_HASH,
   );
   const initiations = new ProviderInitiations();
   app.get('/health', async (_req, res) => {
@@ -337,7 +339,9 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
           'playlist.read',
           'playlist.write',
           'playlist.destructive',
+          'playback.read',
           'playback.control',
+          'personalization.read',
           'diagnostics.read',
           'transfer.plan',
           'transfer.execute',
@@ -375,6 +379,28 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
           ),
         new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required.'),
       );
+    // Only successful authenticated tools/list responses count as verified discovery.
+    if (req.body?.method === 'tools/list' && access.clientId !== 'api-key') {
+      let captured = '';
+      const append = (chunk: unknown) => {
+        if (captured.length > 262144) return;
+        if (typeof chunk === 'string') captured += chunk;
+        else if (chunk instanceof Uint8Array) captured += Buffer.from(chunk).toString('utf8');
+      };
+      const originalWrite = res.write.bind(res);
+      const originalEnd = res.end.bind(res);
+      res.write = ((...args: Parameters<typeof res.write>) => {
+        append(args[0]);
+        return originalWrite(...args);
+      }) as typeof res.write;
+      res.end = ((...args: Parameters<typeof res.end>) => {
+        append(args[0]);
+        return originalEnd(...args);
+      }) as typeof res.end;
+      res.once('finish', () => {
+        if (res.statusCode === 200) recordDiscovery(access.clientId, captured);
+      });
+    }
     const started = Date.now();
     res.on('finish', () =>
       logger.info(

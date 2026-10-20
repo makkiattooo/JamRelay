@@ -1,3 +1,5 @@
+import { probeHealth } from './cli/network-context.js';
+import { effectiveBaseUrl } from './config.js';
 import { installationPaths } from './runtime/installation.js';
 import { knownMessage, translator, currentLanguage } from './cli/i18n/index.js';
 import { APP_VERSION } from './version.js';
@@ -50,11 +52,9 @@ export async function runOperator(
       result = {
         version: APP_VERSION,
         configuration: installationPaths().config,
-        runtime: await fetch(`http://127.0.0.1:${process.env.PORT || 5267}/health`, {
-          signal: AbortSignal.timeout(500),
-        })
-          .then((r) => (r.ok ? 'reachable' : 'unhealthy'))
-          .catch(() => 'not reachable on loopback'),
+        runtime: await probeHealth(effectiveBaseUrl(process.env))
+          .then((ok) => (ok ? 'reachable' : 'unhealthy'))
+          .catch(() => 'not reachable in this network context'),
         database: getDatabaseStatus(),
         providers_configured: [
           'SPOTIFY_CLIENT_ID',

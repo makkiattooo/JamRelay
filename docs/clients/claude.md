@@ -35,7 +35,7 @@ With DCR, Claude registers its callback with JamRelay automatically. If you inst
 
 ## Claude Code
 
-Claude Code supports automatic OAuth discovery for remote HTTP MCP servers. Add the server, then authenticate from `/mcp`:
+Claude Code supports automatic OAuth discovery for remote HTTP MCP servers. Add the server on the host, then authenticate from `/mcp`. Local Claude Code can use the host loopback URL printed by setup (including a custom Docker-published port); remote cloud connectors require public HTTPS:
 
 ```bash
 claude mcp add --transport http jamrelay https://mcp.example.com/mcp
@@ -67,3 +67,9 @@ List my Spotify playback devices.
 - https://claude.com/docs/connectors/building
 - https://code.claude.com/docs/en/mcp
 - https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp
+
+## Verified stages
+
+`jamrelay connect client claude-code` detects the local CLI and offers the exact registration operation for confirmation. In Docker it prints a PowerShell-compatible host command; the container cannot configure the host. `claude mcp get jamrelay` verifies registration only. After `/mcp` browser OAuth and actual tool discovery, run `jamrelay connect client claude-code --verify`. Music-account authorization and connection grants remain separate.
+
+`jamrelay connect client claude-desktop` describes the remote Connector flow. It does not install or simulate a local Claude Desktop extension, and it rejects private localhost for the cloud Connector.

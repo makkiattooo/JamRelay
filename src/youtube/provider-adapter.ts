@@ -32,6 +32,9 @@ const playlist = (x: any) => ({
   },
 });
 export class YouTubeProviderAdapter implements ProviderConnection {
+  async isAuthorized() {
+    return this.auth?.connected ? this.auth.connected() : true;
+  }
   readonly summary;
   readonly catalog;
   readonly playlistRead;

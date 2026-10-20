@@ -66,7 +66,11 @@ describe('guided connectivity setup', () => {
   it('requires a reachable local health endpoint and an authentication challenge at MCP', async () => {
     const server = createServer((request, response) => {
       if (request.url === '/health') {
-        response.writeHead(200).end('{}');
+        response
+          .writeHead(200)
+          .end(
+            JSON.stringify({ status: 'ok', version: 'test', database: { schemaState: 'current' } }),
+          );
       } else if (request.url === '/mcp') {
         response.writeHead(401).end();
       } else response.writeHead(404).end();
@@ -76,8 +80,8 @@ describe('guided connectivity setup', () => {
       const address = server.address();
       if (!address || typeof address === 'string') throw new Error('Test server did not bind');
       await expect(verifyEndpoint(`http://127.0.0.1:${address.port}`, true)).resolves.toEqual({
-        dns: true,
-        https: true,
+        dns: null,
+        https: null,
         health: true,
         mcpProtected: true,
       });

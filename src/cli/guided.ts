@@ -1,3 +1,5 @@
+import { installClient, verifyClient, type InstallClient } from './client-installation.js';
+import { probeHealth } from './network-context.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { stdin } from 'node:process';
@@ -21,7 +23,6 @@ import {
   lockInstallation,
 } from '../runtime/installation.js';
 import { validateSettings } from '../runtime/setup.js';
-import { EncryptedCredentialStore } from '../providers/credential-store.js';
 
 const execFileAsync = promisify(execFile);
 type Provider = 'spotify' | 'soundcloud' | 'apple-music' | 'youtube';
@@ -573,36 +574,11 @@ async function choose<T extends string>(title: string, items: readonly T[]) {
 }
 
 async function reachable(base: string) {
-  const candidates = [
-    base,
-    `http://127.0.0.1:${process.env.PORT || '5267'}`,
-    localBaseUrl(),
-    ...(process.env.JAMRELAY_INSTALL_MODE === 'docker' ? ['http://jamrelay:5267'] : []),
-  ];
-  const origins = [...new Set(candidates)];
-  const deadline = Date.now() + 6000;
-  while (Date.now() < deadline) {
-    for (const origin of origins) {
-      try {
-        const response = await fetch(new URL('/health', origin), {
-          signal: AbortSignal.timeout(350),
-        });
-        if (response.ok) return true;
-      } catch {
-        /* Retry boundedly while Compose or the local process finishes starting. */
-      }
-    }
-    await new Promise((resolvePromise) => setTimeout(resolvePromise, 250));
+  try {
+    return await probeHealth(base);
+  } catch {
+    return false;
   }
-  return false;
-}
-
-async function storeFor(path: string) {
-  const raw = process.env.TOKEN_ENCRYPTION_KEY;
-  if (!raw) return [] as string[];
-  return (await new EncryptedCredentialStore(path, raw).list()).map(
-    (record) => record.connectionId,
-  );
 }
 
 function providerConfigured(provider: Provider, settings: Record<string, string>) {
@@ -656,6 +632,17 @@ export async function connectProvider(provider: Provider) {
       const prefix = provider === 'soundcloud' ? 'SOUNDCLOUD' : provider.toUpperCase();
       callback = saved[`${prefix}_REDIRECT_URI`] || callback;
     }
+  }
+  if (
+    !replace &&
+    provider !== 'apple-music' &&
+    new URL(callback).origin !== new URL(origin).origin
+  ) {
+    showPanel(
+      'Provider callback needs review',
+      `Saved callback: ${callback}\nCurrent server: ${origin}\nRegister the exact current callback in the provider developer application. To update saved credentials/callback, stop JamRelay and run this command again with Replace credentials. No existing credentials were changed.`,
+    );
+    return;
   }
   if (replace && (await reachable(origin))) {
     showPanel(
@@ -712,82 +699,18 @@ export async function connectProvider(provider: Provider) {
   }
 }
 
-export async function connectClient(client: Client) {
+export async function connectClient(client: Client | InstallClient, verify = false) {
   if (!stdin.isTTY) throw new Error('Interactive setup requires a terminal.');
   loadInstallation();
-  const language = currentLanguage();
-  setTuiContext({ step: 6, total: 6, language });
-  const origin = effectiveBaseUrl(
-    Object.fromEntries(
-      Object.entries(process.env).filter(
-        (entry): entry is [string, string] => entry[1] !== undefined,
-      ),
-    ),
-  );
-  const mcp = `${origin}/mcp`;
-  const online = await reachable(origin);
-  const providerNames = Object.keys(providerRows) as Provider[];
-  const configured = providerNames.filter((p) =>
-    p === 'apple-music'
-      ? Boolean(process.env.APPLE_MUSIC_TEAM_ID)
-      : Boolean(process.env[`${p === 'soundcloud' ? 'SOUNDCLOUD' : p.toUpperCase()}_CLIENT_ID`]),
-  );
-  const authorized = await storeFor(process.env.PROVIDER_CREDENTIAL_STORE_PATH || '');
-  const status = `${online ? '✓' : '○'} ${online ? tr('online') : tr('offline')}\n${tr('providersLabel')}: ${configured.length ? configured.join(', ') : tr('notConfigured')}\n${tr('accountAuth')}: ${authorized.length ? authorized.join(', ') : tr('notConfigured')}`;
-  const offline = !online
-    ? `${tr('offline')}. ${process.env.JAMRELAY_INSTALL_MODE === 'docker' ? tr('offlineNext') : tr('offlineStart')}`
-    : '';
-  const config =
-    client === 'cursor'
-      ? `.cursor/mcp.json\n${JSON.stringify({ mcpServers: { jamrelay: { url: mcp } } }, null, 2)}`
-      : client === 'vscode'
-        ? `mcp.json\n${JSON.stringify({ servers: { jamrelay: { type: 'http', url: mcp } } }, null, 2)}`
-        : '';
-  const localWarning = ['localhost', '127.0.0.1'].includes(new URL(origin).hostname)
-    ? tr('localWarning')
-    : '';
-  showPanel(
-    client,
-    [
-      status,
-      offline,
-      tr('addAt'),
-      clientInstructions[language][client],
-      `${clientLabels[language].endpoint}: ${mcp}\n${clientLabels[language].transport}\n${tr('auth')}`,
-      config,
-      client === 'chatgpt' ? tr('chatgptLimit') : '',
-      localWarning,
-      `${tr('health')}: ${online ? clientLabels[language].verified : clientLabels[language].pending}\n${tr('tools')}`,
-    ]
-      .filter(Boolean)
-      .join('\n\n'),
-  );
-  const { changeState } = await import('./state.js');
-  const previousConfig = process.env.JAMRELAY_CONFIG_PATH;
-  process.env.JAMRELAY_CONFIG_PATH = installationPaths().config;
-  try {
-    await changeState((state) => {
-      state.guidedClients = [...new Set([...state.guidedClients, client])];
-    });
-  } finally {
-    if (previousConfig === undefined) delete process.env.JAMRELAY_CONFIG_PATH;
-    else process.env.JAMRELAY_CONFIG_PATH = previousConfig;
-  }
-  const shouldOpen = await choose(tr('openClient'), [tr('openBrowser'), tr('instructionOnly')]);
-  if (shouldOpen === tr('openBrowser')) {
-    const url =
-      client === 'chatgpt'
-        ? 'https://help.openai.com/en/articles/12584461-developer-mode-and-full-mcp-connectors-in-chatgpt'
-        : client === 'claude'
-          ? 'https://support.anthropic.com/en/articles/11503834-building-custom-integrations-via-remote-mcp-servers'
-          : client === 'cursor'
-            ? 'https://cursor.com/docs/context/model-context-protocol'
-            : client === 'vscode'
-              ? 'https://code.visualstudio.com/docs/agent-customization/mcp-servers'
-              : mcp;
-    if (!(await openBrowser(url))) showPanel(tr('openClient'), url);
-  }
-  showPanel(tr('done'), tr('done'));
+  let selected: InstallClient;
+  if (client === 'claude') {
+    const picked = await choose('Claude client', ['Claude Code', 'Claude Desktop']);
+    if (!picked) return;
+    selected = picked === 'Claude Code' ? 'claude-code' : 'claude-desktop';
+  } else selected = client;
+  const endpoint = `${effectiveBaseUrl(process.env)}/mcp`;
+  if (verify) return verifyClient(selected, endpoint);
+  return installClient(selected, endpoint);
 }
 
 export async function onboard() {
@@ -806,7 +729,8 @@ export async function onboard() {
   if (selectedProvider) await connectProvider(selectedProvider);
   const clientChoice = await choose(tr('client'), [
     'ChatGPT',
-    'Claude',
+    'Claude Code',
+    'Claude Desktop',
     'Cursor',
     'VS Code',
     tr('genericClient'),
@@ -814,21 +738,32 @@ export async function onboard() {
   ]);
   const client =
     (
-      { ChatGPT: 'chatgpt', Claude: 'claude', Cursor: 'cursor', 'VS Code': 'vscode' } as Record<
-        string,
-        Client
-      >
+      {
+        ChatGPT: 'chatgpt',
+        'Claude Code': 'claude-code',
+        'Claude Desktop': 'claude-desktop',
+        Cursor: 'cursor',
+        'VS Code': 'vscode',
+      } as Record<string, InstallClient>
     )[clientChoice ?? ''] ?? (clientChoice === tr('genericClient') ? 'generic' : undefined);
   if (client) await connectClient(client);
-  showPanel(tr('done'), tr('done'));
+  if (!client)
+    showPanel(
+      tr('status'),
+      'Onboarding is resumable. No client configuration or authentication was verified.',
+    );
 }
 
-export async function guidedConnect(kind: 'provider' | 'client', name: string) {
+export async function guidedConnect(kind: 'provider' | 'client', name: string, verify = false) {
   if (kind === 'provider') {
     if (!Object.hasOwn(providerRows, name)) throw new Error('Unknown provider');
     return connectProvider(name as Provider);
   }
-  if (!['chatgpt', 'claude', 'cursor', 'vscode', 'generic'].includes(name))
+  if (
+    !['chatgpt', 'claude', 'claude-code', 'claude-desktop', 'cursor', 'vscode', 'generic'].includes(
+      name,
+    )
+  )
     throw new Error('Unknown client');
-  return connectClient(name as Client);
+  return connectClient(name as Client | InstallClient, verify);
 }

@@ -51,24 +51,55 @@ export function sendApiError(res: Response, error: ApiError) {
 
 export function toApiError(error: unknown): ApiError {
   if (error instanceof ApiError) return error;
+  if (error instanceof Error && error.message === 'provider_connection_conflict')
+    return new ApiError(
+      400,
+      'PROVIDER_TARGET_CONFLICT',
+      'The selected provider and connection do not match. Use get_connections to select one consistent target.',
+    );
+  if (error instanceof Error && error.message === 'NO_MUSIC_ACCOUNTS')
+    return new ApiError(
+      409,
+      'NO_MUSIC_ACCOUNTS',
+      'No music account is configured. The owner should run jamrelay connect provider spotify (or another provider), authorize their account, then approve the client connection again.',
+    );
+  if (error instanceof Error && error.message === 'MUSIC_ACCOUNT_AUTH_REQUIRED')
+    return new ApiError(
+      401,
+      'MUSIC_ACCOUNT_AUTH_REQUIRED',
+      'The selected music account needs authorization. The owner should sign in at /owner/login, approve the provider authorization, then retry.',
+    );
   if (error instanceof Error && error.message === 'PERMISSION_NOT_GRANTED')
-    return new ApiError(403, 'PERMISSION_NOT_GRANTED', 'The MCP grant lacks this permission.');
+    return new ApiError(
+      403,
+      'PERMISSION_NOT_GRANTED',
+      'The owner must approve this operation group in the MCP client OAuth consent. Reconnect the client and request only the permissions needed.',
+    );
   if (error instanceof Error && error.message === 'CONNECTION_NOT_GRANTED')
     return new ApiError(
       403,
       'CONNECTION_NOT_GRANTED',
-      'The MCP grant does not include this connection.',
+      'No selected music connection is available to this client. Ask the owner to authorize a music account, then reconnect this MCP client and approve that connection.',
     );
   if (error instanceof Error && ['JOB_ACCESS_DENIED', 'CLIENT_REVOKED'].includes(error.message))
     return new ApiError(403, error.message, 'The MCP client cannot access this job.');
   if (error instanceof Error && error.message === 'CONNECTION_UNAVAILABLE')
-    return new ApiError(409, 'CONNECTION_UNAVAILABLE', 'The selected connection is unavailable.');
+    return new ApiError(
+      409,
+      'CONNECTION_UNAVAILABLE',
+      'The selected connection is unavailable. Ask the owner to check account authorization and provider configuration.',
+    );
   if (error instanceof CapabilityUnavailableError)
-    return new ApiError(501, 'CAPABILITY_UNAVAILABLE', error.message, {
-      capability: error.capability,
-      ...(error.provider ? { provider: error.provider } : {}),
-      ...(error.connectionId ? { connection_id: error.connectionId } : {}),
-    });
+    return new ApiError(
+      501,
+      'CAPABILITY_UNAVAILABLE',
+      'This provider does not support the requested operation, or no authorized account can perform it. Check get_capabilities and provider authorization.',
+      {
+        capability: error.capability,
+        ...(error.provider ? { provider: error.provider } : {}),
+        ...(error.connectionId ? { connection_id: error.connectionId } : {}),
+      },
+    );
   if (error instanceof ProviderSelectionError)
     return new ApiError(409, 'PROVIDER_TARGET_REQUIRED', error.message, {
       operation: error.operation,
@@ -124,8 +155,17 @@ export function toApiError(error: unknown): ApiError {
         error.retryAfter,
       );
     if (error.status === 401)
-      return new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required.');
-    if (error.status === 403) return new ApiError(403, 'ACCESS_DENIED', 'Access denied.');
+      return new ApiError(
+        401,
+        'AUTH_REQUIRED',
+        'Music account authorization expired or is missing. Ask the owner to authorize the provider again.',
+      );
+    if (error.status === 403)
+      return new ApiError(
+        403,
+        'ACCESS_DENIED',
+        'The provider rejected the operation. Check provider scopes, app access restrictions, playlist ownership and account eligibility.',
+      );
     if (error.status === 404) return new ApiError(404, 'RESOURCE_NOT_FOUND', 'Resource not found.');
     if (error.status >= 500)
       return new ApiError(

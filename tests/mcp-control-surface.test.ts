@@ -53,10 +53,10 @@ describe('MCP provider control surface and toolsets', () => {
     const registry = new ProviderRegistry();
     registry.register(connection('spotify-default', 'spotify', { catalog: true }) as any);
     const tools = registered(registry, 'core');
-    await expect(
-      tools
-        .get('get_capabilities')!
-        .callback({ provider: 'beta', connection_id: 'spotify-default' }),
-    ).rejects.toThrow('provider_connection_conflict');
+    const result = await tools
+      .get('get_capabilities')!
+      .callback({ provider: 'beta', connection_id: 'spotify-default' });
+    expect(result.isError).toBe(true);
+    expect(JSON.parse(result.content[0].text).error).toBe('PROVIDER_TARGET_CONFLICT');
   });
 });

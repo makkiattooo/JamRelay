@@ -486,7 +486,10 @@ export function registerTools(
       return target;
     }
     const allowed = access.connectionIds ?? [];
-    if (!allowed.length) throw new Error('CONNECTION_NOT_GRANTED');
+    if (!allowed.length) {
+      if (!readRegistry.listConnections().length) throw new Error('NO_MUSIC_ACCOUNTS');
+      throw new Error('CONNECTION_NOT_GRANTED');
+    }
     const requested =
       args?.connection_id ?? args?.source_connection_id ?? args?.destination_connection_id;
     if (requested && !allowed.includes(requested)) throw new Error('CONNECTION_NOT_GRANTED');
@@ -509,7 +512,7 @@ export function registerTools(
       args.read_fallback = false;
       return allowed[0];
     }
-    return undefined;
+    return requested;
   };
   const validateTarget = (a: any) => {
     if (
@@ -524,7 +527,6 @@ export function registerTools(
       const registrationMetadata = getToolSecurityMetadata(name);
       if (!registrationMetadata) throw new Error(`TOOL_SECURITY_METADATA_MISSING:${name}`);
       const wrapped = async (...args: any[]) => {
-        validateTarget(args[0]);
         const parentContext = toolContext.get();
         const requestId = parentContext?.requestId ?? `req_${globalThis.crypto.randomUUID()}`;
         const controller = new AbortController();
@@ -556,7 +558,15 @@ export function registerTools(
           };
         }
         try {
+          await readRegistry.refreshAuthorization?.();
           effectiveConnectionId = enforceAccess(name, args[0]);
+          validateTarget(args[0]);
+          if (effectiveConnectionId) {
+            const connection = readRegistry.getConnection(effectiveConnectionId);
+            if (!connection) throw new Error('CONNECTION_UNAVAILABLE');
+            if (connection.summary.connected === false)
+              throw new Error('MUSIC_ACCOUNT_AUTH_REQUIRED');
+          }
         } catch (error) {
           const normalized = toApiError(error);
           clearTimeout(timer);
@@ -608,6 +618,18 @@ export function registerTools(
             },
             'MCP tool succeeded',
           );
+          if (
+            name === 'get_connections' &&
+            Array.isArray((result as any)?.structuredContent) &&
+            !(result as any).structuredContent.length
+          ) {
+            (result as any).content.push({
+              type: 'text',
+              text: readRegistry.listConnections().length
+                ? 'No music accounts are visible to this client. Ask the owner to authorize a provider account and approve its connection in this client OAuth grant.'
+                : 'No music accounts are configured. The owner should run jamrelay connect provider spotify (or another provider), authorize the music account, then reconnect this MCP client.',
+            });
+          }
           return result;
         } catch (error) {
           const normalized = toApiError(error);
@@ -695,7 +717,12 @@ export function registerTools(
           return {
             connection_id: connection.connectionId,
             provider: connection.provider,
-            status: connection.connected === false ? 'disconnected' : 'connected',
+            status:
+              connection.connected === false
+                ? 'authentication_required'
+                : connection.connected === true
+                  ? 'authenticated'
+                  : 'not_live_verified',
             capabilities: connection.capabilities,
             default: connection.connectionId === (preferred.read ?? connections[0]?.connectionId),
             preferred_read: connection.connectionId === preferred.read,

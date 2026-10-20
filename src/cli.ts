@@ -10,6 +10,7 @@ export function cliHelp() {
   return `JamRelay — ${t('self-hosted music MCP server')}
 ${t('Usage')}: jamrelay <command>
   setup [--yes]       ${t('Configure installation (interactive; --yes uses environment)')}
+  owner password     Set or change the owner password (stop server first)
   config             ${t('Safely reconfigure existing installation')}
   onboard             ${t('Resume guided provider and AI client setup')}
   connect provider|client NAME  ${t('Configure a music provider or MCP client')}
@@ -53,6 +54,10 @@ export async function runCli(args: string[]) {
       if (code === 0) await information.passiveHint(args);
       return code;
     }
+    if (command === 'owner' && rest.length === 1 && rest[0] === 'password') {
+      await (await import('./runtime/setup.js')).setOwnerPassword();
+      return 0;
+    }
     if (command === 'setup' || command === 'config') {
       if (rest.some((s) => s !== '--yes')) {
         console.error(help);
@@ -85,13 +90,21 @@ export async function runCli(args: string[]) {
     }
     if (command === 'connect') {
       const [kind, name, ...extra] = rest;
-      if (!['provider', 'client'].includes(kind) || !name || extra.length) {
+      if (
+        !['provider', 'client'].includes(kind) ||
+        !name ||
+        extra.some((arg) => kind !== 'client' || arg !== '--verify')
+      ) {
         console.error(knownMessage('connect provider|client NAME'));
         return 2;
       }
       await (
         await import('./cli/guided.js')
-      ).guidedConnect(kind as 'provider' | 'client', name.toLowerCase());
+      ).guidedConnect(
+        kind as 'provider' | 'client',
+        name.toLowerCase(),
+        extra.includes('--verify'),
+      );
       return 0;
     }
     if (

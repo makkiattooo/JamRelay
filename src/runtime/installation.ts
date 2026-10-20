@@ -1,3 +1,4 @@
+import { effectiveBaseUrl } from '../config.js';
 import {
   existsSync,
   readFileSync,
@@ -50,6 +51,8 @@ export function loadInstallation() {
   const saved = readSettings(paths.config);
   for (const [key, value] of Object.entries(saved))
     if (process.env[key] === undefined) process.env[key] = value;
+  if (process.env.PUBLIC_BASE_URL)
+    process.env.PUBLIC_BASE_URL = effectiveBaseUrl(saved, process.env);
   process.env.JAMRELAY_DATA_DIR ||= paths.data;
   const data = process.env.JAMRELAY_DATA_DIR;
   // Preserve legacy production defaults; managed installations persist all paths explicitly.

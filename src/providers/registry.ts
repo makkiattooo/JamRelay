@@ -48,6 +48,20 @@ export class ProviderRegistry {
     return { read: this.preferredReadConnectionId, write: this.preferredWriteConnectionId };
   }
 
+  async refreshAuthorization() {
+    await Promise.all(
+      [...this.connections.values()].map(async (connection) => {
+        if (connection.isAuthorized) {
+          try {
+            connection.summary.connected = await connection.isAuthorized();
+          } catch {
+            connection.summary.connected = false;
+          }
+        }
+      }),
+    );
+  }
+
   listConnections(): ProviderConnectionSummary[] {
     return [...this.connections.values()].map(({ summary }) => ({
       ...summary,

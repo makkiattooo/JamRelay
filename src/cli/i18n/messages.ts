@@ -2,6 +2,13 @@
 // Placeholders are positional and never contain translated technical identifiers.
 const rows = [
   [
+    'Create an owner password?',
+    'Utworzyć hasło właściciela?',
+    'Ein Inhaberpasswort erstellen?',
+    'Créer un mot de passe propriétaire ?',
+    '¿Crear una contraseña de propietario?',
+  ],
+  [
     'No official published image/tag found.',
     'Nie znaleziono oficjalnie opublikowanego obrazu ani tagu.',
     'Kein offiziell veröffentlichtes Image oder Tag gefunden.',

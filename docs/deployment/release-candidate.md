@@ -1,142 +1,53 @@
-> Historical release information. For 1.4.0 use the [upgrade and operations guide](/operations); web management routes and anonymous provider authorization are no longer available.
+# Owner release gate
 
----
+JamRelay 1.5.5 is prepared on `codex/jamrelay-work`. Nothing in this checklist authorizes publication. Do not merge, tag, publish, deploy or send email until the owner explicitly approves those actions.
 
-title: Release candidate checklist
----
+## Spotify and Claude Code acceptance
 
-# Release candidate checklist
+Use the newly built source/image with your existing private `/data` and configuration preserved. For the Windows Compose installation, keep `JAMRELAY_PORT=15268` in the host environment (or your chosen published port).
 
-This checklist documents the JamRelay v1.3.0 release candidate.
+1. Stop the service and set/migrate the owner password: `docker compose stop jamrelay`, then `docker compose run --rm jamrelay owner password`.
+2. Configure your own Spotify application: `docker compose run --rm jamrelay connect provider spotify`. Register the exact printed callback in Spotify. Existing credentials can be retained; they are distinct from account authorization.
+3. Run `docker compose up -d --build --wait`. Verify `http://127.0.0.1:15268/health` reports version 1.5.5 and current schema. Run `docker compose run --rm jamrelay onboard`; health/MCP protection should pass, DNS/TLS should show N/A for local HTTP, and it must not request shutdown for read-only steps.
+4. Sign in at `http://127.0.0.1:15268/owner/login`, open `/auth/providers/spotify/start`, approve and complete Spotify OAuth. Run `docker compose run --rm jamrelay connections list` to inspect saved records; that alone is not a live API test.
+5. On Windows HOST PowerShell run `claude mcp add --transport http jamrelay http://127.0.0.1:15268/mcp` (inspect an existing registration with `claude mcp get jamrelay` first). In Claude Code run `/mcp`, complete browser OAuth, choose the Spotify connection and keep read-only permissions initially.
+6. Request tool discovery, `get_connections`, account identity, `get_my_playlists`, `get_playlist_tracks`, and current playback with an active eligible Spotify device. Re-run `jamrelay connect client claude-code --verify` through Compose to check actual server-observed discovery.
+7. Reauthorize with playlist writes and destructive permission only for a disposable test playlist. Explicitly create that playlist, add one chosen test track, inspect it, remove the test track and inspect again. Do not test on an important playlist.
 
-Automated gates use mocked providers and controlled fixtures. They do not replace manual verification against real provider accounts, production deployment infrastructure or hosted MCP clients.
+Record the actual outcomes. Never infer live Spotify success from fixture tests.
 
-## 1. Create and verify a backup
+## After explicit release approval
 
-Before upgrading production, create an application-aware backup:
-
-```bash
-npm run backup
-```
-
-Also preserve separately:
-
-- `TOKEN_ENCRYPTION_KEY`;
-- deployment `.env` or secret-manager configuration;
-- provider server credentials;
-- MCP OAuth static client configuration where used;
-- Cloudflare Tunnel credentials where used.
-
-The encryption key is required to recover encrypted provider credentials.
-
-Do not store the encryption key inside an ordinary application backup archive.
-
-## 2. Run the release gate
-
-From a clean checkout:
+Use the approved commit and review green CI including `docker-smoke`. Merge into `main` only when approved. Pull the resulting release commit, then run:
 
 ```bash
 npm ci
-npm run check
+npm run release:check
+npm audit --omit=dev
+npm pack --dry-run
+npm pack
+npm login
+npm publish jamrelay-1.5.5.tgz --access public
+npm view jamrelay@1.5.5 version repository.url dist.integrity
 ```
 
-Do not treat separate successful `lint`, `typecheck`, `test` and `build` commands as equivalent to the complete release gate.
+Install in a clean directory and confirm `jamrelay --version` before announcing availability. npm account ownership, name availability and required 2FA/provenance settings must be confirmed by the owner; `npm pack` proves none of those.
 
-If the documentation build fails only because of a known local sandbox or filesystem-policy limitation, rerun the complete release gate in a normal filesystem environment such as CI or the deployment host before tagging the release.
-
-## 3. Upgrade
-
-1. Take and verify the backup.
-2. Deploy the new image or checkout with the same persistent `/data` volume.
-3. Keep the existing encryption key and deployment secrets.
-4. Allow startup to apply forward migrations.
-5. Confirm `/health`.
-6. Confirm database schema state is `current`.
-7. Verify provider connection status.
-8. Verify MCP client grants.
-9. Perform a read-only MCP smoke test.
-10. Only then test provider writes.
-
-SQLite migrations remain forward-only; application rollback does not automatically reverse an already-applied database migration.
-
-Verify:
-
-- owner login and logout;
-- CSRF protection on state-changing actions;
-- Overview without provider API storms;
-- Connections and connection details;
-- preferred read/write controls;
-- provider disconnect behavior;
-- MCP Clients and grants;
-- Jobs and job details;
-- supported cancel/resume actions;
-- Diagnostics and rate-limit state;
-- Tools and System Status;
-- backup-related UI does not expose `TOKEN_ENCRYPTION_KEY`.
-
-Inspect page source during at least one production-like check and confirm no provider tokens, MCP tokens or deployment secrets are present.
-
-## 5. Provider verification
-
-| Provider    | Operation                       | Expected result                                                                          |
-| ----------- | ------------------------------- | ---------------------------------------------------------------------------------------- |
-| Spotify     | OAuth                           | Callback completes, encrypted credentials persist and reconnect reuses the connection.   |
-| Spotify     | Catalog and playlist reads      | Reads return normalized data with provider and connection provenance.                    |
-| Spotify     | Large playlist read             | Full playlist is returned and pagination does not truncate after the first page.         |
-| Spotify     | Playlist writes                 | Explicitly targeted writes succeed and ambiguous writes fail closed.                     |
-| Spotify     | Playback                        | Playback works only when account, device and provider capability allow it.               |
-| SoundCloud  | Catalog and playlist operations | Supported operations succeed and unsupported operations fail with a capability error.    |
-| Apple Music | Developer/User Token flow       | Tokens remain separate and supported library operations work.                            |
-| Apple Music | Unsupported playlist operations | Unsupported granular operations fail before unsafe provider I/O.                         |
-| YouTube     | OAuth                           | OAuth persists encrypted credentials and concurrent reads do not create a refresh storm. |
-| YouTube     | Owned playlists                 | Playlist/video operations respect provider capabilities and quota behavior.              |
-| YouTube     | Bulk playlist work              | Concurrency remains bounded and ordering behavior remains correct.                       |
-
-## 6. Playlist workflow verification
-
-Use at least one playlist larger than a single provider page.
-
-Verify complete state reads, correct cache/revision behavior, safety snapshots, deterministic ordered writes, full-result verification, fail-closed capability checks, cancellation and rate-limit backpressure.
-
-For cross-provider transfer also verify complete destination state and complete source planning.
-
-## 7. Durable jobs verification
-
-Verify per-item progress, bounded concurrency, resume after restart, valid cancellation, rate-limit waiting, graceful shutdown and protection against blindly repeating uncertain external writes.
-
-## 8. Backup verification
-
-Create a backup using:
+Creating this tag triggers the existing GHCR publication workflow. Only after tag/publication approval:
 
 ```bash
-npm run backup
+git tag -a v1.5.5 -m 'JamRelay v1.5.5'
+git push origin v1.5.5
 ```
 
-Verify the backup succeeds, resulting SQLite state opens correctly, credential storage follows the documented backup model, the encryption key is not silently embedded and restore documentation matches the generated layout.
+Wait for `Container release` to publish `ghcr.io/makkiattooo/jamrelay:1.5.5` for `linux/amd64` and `linux/arm64`. Verify the manifest and run the released image with an isolated persistent volume. The workflow also supports an explicit manual publish input. Default manual dispatch builds without pushing.
 
-## 9. MCP authorization verification
+Create the GitHub Release only after approval, titled `JamRelay v1.5.5`, using [the prepared notes](/release-1.5.5). Do not announce general availability until actual packages and their public installation paths have been verified.
 
-Verify read-only grants cannot mutate providers, destructive operations require destructive permission, connection grants remain isolated, provider/connection conflicts fail closed, transfer requires destination grants and every registered tool has explicit authorization metadata.
+Docker Hub namespace/account is not established here. No Docker Hub login or push is configured or attempted. Once the owner supplies and authorizes the actual namespace, mirror the approved multi-architecture release with their credentials; do not guess an account or buy a builder.
 
-## 10. Deployment checks
+## Agensi
 
-## Rollback
+The free package source is `marketplace/jamrelay`, with `SKILL.md`, installation instructions and an MCP config template. Its ZIP can be built with Python's standard library; include paths relative to that directory and no runtime data. It matches the configuration/instructions model described by Joeri; marketplace acceptance itself is not verified.
 
-Application rollback is not database rollback.
-
-If the previous image remains compatible with the current forward-migrated database, roll back the application image while preserving the current persistent state.
-
-Do not overwrite a newer database with an older backup merely because an application image was rolled back.
-
-If data restoration is unavoidable, stop JamRelay, preserve the current state directory, restore one complete matching backup and matching encryption key, validate the restored state, verify owner login/provider status and reopen writes only after validation.
-
-## Release approval
-
-A v1.3.0 release candidate is ready for tagging only when:
-
-- `npm ci` succeeds;
-- `npm run check` succeeds in a normal release environment;
-- required live-provider checks are complete;
-- production-like MCP authentication is verified;
-- backup and restore procedures are verified;
-- no unresolved release-blocking regression remains.
+The English “ready for a free listing” reply is deliberately pending. Prepare it only after the exact npm version, GHCR image, GitHub Release links and final ZIP have been publicly confirmed. Reply in the existing Agensi thread from the project owner's account, attach the ZIP, identify the project as free/open source and self-hosted, and disclose the unverified provider limitations. Do not send automatically.

@@ -29,6 +29,18 @@ JAMRELAY_LANGUAGE=de jamrelay setup --yes
 
 PowerShell: `$env:JAMRELAY_LANGUAGE = 'pl'`, then `jamrelay --help`. For Docker Compose, pass `-e JAMRELAY_LANGUAGE=fr` to `docker compose run --rm`. `setup --yes` never asks questions and saves the environment/saved/locale default. Localized confirmations also accept English `yes/no`. Command names, flags, provider IDs, URLs, JSON keys and machine-readable values remain unchanged; `--json` preserves the English interface. Provider data and release/notice content retain their original language.
 
+## Owner password
+
+Interactive setup offers masked password entry and confirmation (12–256 characters). Only a salted scrypt hash is saved in private configuration. Noninteractive `setup --yes` does not prompt and retains recovery-secret access. Existing installations can migrate or reset while stopped:
+
+```bash
+jamrelay owner password
+# Compose, after docker compose stop jamrelay:
+docker compose run --rm jamrelay owner password
+```
+
+Restart afterward. Encryption keys, recovery secret, provider tokens and OAuth grants are preserved. On `/owner/login` and OAuth consent use the password, or expand the recovery/legacy-secret alternative. Keep secrets out of AI chat and client configuration.
+
 ## Guided integrations
 
 Configure application credentials before starting the server (or stop it before changing saved credentials):
@@ -39,7 +51,7 @@ jamrelay start
 jamrelay onboard
 ```
 
-For Docker Compose, run setup and provider configuration with `docker compose run --rm jamrelay setup` and `docker compose run --rm jamrelay connect provider spotify`, then start the service with `docker compose up -d`. Re-run `jamrelay onboard` (or `docker compose run --rm jamrelay onboard`) to continue. Provider authorization uses the existing owner login and OAuth consent page. `jamrelay connect client chatgpt|claude|cursor|vscode|generic` prints client-specific setup steps and the exact `/mcp` URL. A cloud client cannot reach private `localhost`; use an eligible secure tunnel or a reachable HTTPS endpoint.
+For Docker Compose, run setup and provider configuration with `docker compose run --rm jamrelay setup` and `docker compose run --rm jamrelay connect provider spotify`, then start the service with `docker compose up -d`. Re-run `jamrelay onboard` (or `docker compose run --rm jamrelay onboard`) to continue. Provider authorization uses the existing owner login and OAuth consent page. `jamrelay connect client chatgpt|claude-code|claude-desktop|cursor|vscode|generic` provides client-specific configuration (the `claude` alias asks which application). Local Claude Code registration and Cursor/VS Code JSON edits require confirmation, preserve other settings and back up files. Docker only prints host-side commands. Add `--verify` after browser authentication and tool discovery to check server-observed evidence. The CLI reports generated/configured/authenticated/verified states separately and the exact `/mcp` URL. A cloud client cannot reach private `localhost`; use an eligible secure tunnel or a reachable HTTPS endpoint.
 
 ## Development candidate archive
 
