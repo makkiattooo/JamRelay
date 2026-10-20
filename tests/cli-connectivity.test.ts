@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createServer } from 'node:http';
+import { APP_VERSION } from '../src/version.js';
 import { languages } from '../src/cli/i18n/index.js';
 import {
   connectivityTranslations,
@@ -69,7 +70,7 @@ describe('guided connectivity setup', () => {
         response
           .writeHead(200)
           .end(
-            JSON.stringify({ status: 'ok', version: 'test', database: { schemaState: 'current' } }),
+            JSON.stringify({ status: 'ok', version: APP_VERSION, database: { schemaState: 'current' } }),
           );
       } else if (request.url === '/mcp') {
         response.writeHead(401).end();

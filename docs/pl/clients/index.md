@@ -26,14 +26,17 @@ confidential OAuth clients      ✅
 CIMD                            jeszcze nie reklamowane
 ```
 
-| Klient            | Remote HTTP | OAuth | Zalecany tryb                     | Status                             |
-| ----------------- | ----------- | ----- | --------------------------------- | ---------------------------------- |
-| ChatGPT           | ✅          | ✅    | static OAuth                      | zweryfikowane end-to-end           |
-| Claude            | ✅          | ✅    | DCR                               | ścieżka protokołu zaimplementowana |
-| Gemini CLI        | ✅          | ✅    | DCR                               | ścieżka protokołu zaimplementowana |
-| Cursor            | ✅          | ✅    | DCR lub static OAuth              | ścieżka protokołu zaimplementowana |
-| VS Code / Copilot | ✅          | ✅    | DCR                               | ścieżka protokołu zaimplementowana |
-| Windsurf          | ✅          | ✅    | OAuth discovery / Bearer fallback | niezweryfikowane end-to-end        |
-| MCP Inspector     | ✅          | ✅    | OAuth lub Bearer                  | narzędzie testowe                  |
+| Klient              | Remote HTTP | OAuth | Zalecany tryb                     | Status                             |
+| ------------------- | ----------- | ----- | --------------------------------- | ---------------------------------- |
+| ChatGPT             | ✅          | ✅    | static OAuth                      | zweryfikowane end-to-end           |
+| Codex CLI / Desktop | ✅          | ✅    | DCR                               | ścieżka protokołu zaimplementowana |
+| Claude              | ✅          | ✅    | DCR                               | ścieżka protokołu zaimplementowana |
+| Gemini CLI          | ✅          | ✅    | DCR                               | ścieżka protokołu zaimplementowana |
+| Cursor              | ✅          | ✅    | DCR lub static OAuth              | ścieżka protokołu zaimplementowana |
+| VS Code / Copilot   | ✅          | ✅    | DCR                               | ścieżka protokołu zaimplementowana |
+| Windsurf            | ✅          | ✅    | OAuth discovery / Bearer fallback | niezweryfikowane end-to-end        |
+| MCP Inspector       | ✅          | ✅    | OAuth lub Bearer                  | narzędzie testowe                  |
 
 „Ścieżka protokołu zaimplementowana” oznacza zgodność z aktualnie udokumentowanym zachowaniem dostawcy, a nie ręczną certyfikację każdego buildu klienta.
+
+Przewodnik: [Codex CLI i Desktop](./codex).

@@ -24,7 +24,7 @@ import {
 import { validateSettings } from '../runtime/setup.js';
 
 type Provider = 'spotify' | 'soundcloud' | 'apple-music' | 'youtube';
-type Client = 'chatgpt' | 'claude' | 'cursor' | 'vscode' | 'generic';
+type Client = 'chatgpt' | 'codex' | 'claude' | 'cursor' | 'vscode' | 'generic';
 
 const providerRows: Record<
   Provider,
@@ -113,6 +113,8 @@ const clientInstructions: Record<Language, Record<Client, string>> = {
   en: {
     chatgpt:
       'ChatGPT: Settings → Apps → Advanced settings → enable developer mode, then create a custom app using the MCP URL. Availability depends on your plan and workspace.',
+    codex:
+      'Codex CLI and Desktop share MCP settings. Run `codex mcp add jamrelay --url URL`, then verify registration with `codex mcp list`. Complete OAuth and request tools before treating the connection as verified.',
     claude:
       'Claude Desktop: Settings → Connectors → Add custom connector. Claude Code: run `claude mcp add --transport http jamrelay URL` in a terminal. Remote MCP requires a reachable HTTPS endpoint.',
     cursor:
@@ -125,6 +127,8 @@ const clientInstructions: Record<Language, Record<Client, string>> = {
   pl: {
     chatgpt:
       'ChatGPT: Ustawienia → Aplikacje → Ustawienia zaawansowane → włącz tryb deweloperski, a następnie utwórz własną aplikację z podanym adresem MCP. Dostępność zależy od planu i obszaru roboczego.',
+    codex:
+      'Codex CLI i Desktop współdzielą ustawienia MCP. Uruchom `codex mcp add jamrelay --url URL`, a rejestrację sprawdź przez `codex mcp list`. Dokończ OAuth i wyświetl narzędzia, zanim uznasz połączenie za zweryfikowane.',
     claude:
       'Claude Desktop: Ustawienia → Connectors → Add custom connector. Claude Code: w terminalu uruchom `claude mcp add --transport http jamrelay URL`. Zdalny MCP wymaga osiągalnego HTTPS.',
     cursor:
@@ -137,6 +141,8 @@ const clientInstructions: Record<Language, Record<Client, string>> = {
   de: {
     chatgpt:
       'ChatGPT: Einstellungen → Apps → Erweiterte Einstellungen → Entwicklermodus aktivieren und anschließend eine eigene App mit der MCP-URL erstellen. Die Verfügbarkeit hängt von Tarif und Arbeitsbereich ab.',
+    codex:
+      'Codex CLI und Desktop teilen die MCP-Einstellungen. Führe `codex mcp add jamrelay --url URL` aus und prüfe die Registrierung mit `codex mcp list`. Schließe OAuth ab und rufe die Tools ab, bevor du die Verbindung als verifiziert betrachtest.',
     claude:
       'Claude Desktop: Einstellungen → Connectors → Add custom connector. Claude Code: `claude mcp add --transport http jamrelay URL` im Terminal ausführen. Remote-MCP benötigt einen erreichbaren HTTPS-Endpunkt.',
     cursor:
@@ -149,6 +155,8 @@ const clientInstructions: Record<Language, Record<Client, string>> = {
   fr: {
     chatgpt:
       'ChatGPT : Paramètres → Apps → Paramètres avancés → activez le mode développeur, puis créez une application personnalisée avec l’URL MCP. La disponibilité dépend de l’offre et de l’espace de travail.',
+    codex:
+      'Codex CLI et Desktop partagent les paramètres MCP. Exécutez `codex mcp add jamrelay --url URL`, puis vérifiez avec `codex mcp list`. Terminez OAuth et demandez les outils avant de considérer la connexion vérifiée.',
     claude:
       'Claude Desktop : Paramètres → Connectors → Add custom connector. Claude Code : lancez `claude mcp add --transport http jamrelay URL` dans un terminal. Le MCP distant nécessite un endpoint HTTPS accessible.',
     cursor:
@@ -161,6 +169,8 @@ const clientInstructions: Record<Language, Record<Client, string>> = {
   es: {
     chatgpt:
       'ChatGPT: Configuración → Apps → Ajustes avanzados → activa el modo de desarrollador y crea una aplicación personalizada con la URL MCP. La disponibilidad depende del plan y del espacio de trabajo.',
+    codex:
+      'Codex CLI y Desktop comparten la configuración MCP. Ejecuta `codex mcp add jamrelay --url URL` y comprueba el registro con `codex mcp list`. Completa OAuth y solicita las herramientas antes de considerar verificada la conexión.',
     claude:
       'Claude Desktop: Configuración → Connectors → Add custom connector. Claude Code: ejecuta `claude mcp add --transport http jamrelay URL` en un terminal. MCP remoto requiere un endpoint HTTPS accesible.',
     cursor:
@@ -232,6 +242,8 @@ const copy: Record<Language, Record<string, string>> = {
     create: 'Create the developer application at',
     requirements: 'Requirements',
     callback: 'Register this exact callback URL',
+    spotifyFields:
+      'In the Spotify form use App name: JamRelay. App description: “Connect your music services to AI assistants through a self-hosted MCP server.” Website is optional; you may use https://github.com/makkiattooo/JamRelay. Redirect URI: copy the exact URL below. Select Web API when asked which API/SDK to use. Then create the app, open Settings → Users Management and allowlist your Spotify account. Development Mode requires Premium for the app owner and allows up to 5 authorized accounts.',
     clientSecret: 'Client secret',
     clientId: 'Client ID',
     team: 'Apple Team ID',
@@ -294,6 +306,8 @@ const copy: Record<Language, Record<string, string>> = {
     create: 'Utwórz aplikację deweloperską:',
     requirements: 'Wymagania',
     callback: 'Zarejestruj dokładnie ten adres zwrotny',
+    spotifyFields:
+      'W formularzu Spotify wpisz: App name: JamRelay. App description: „Łączy usługi muzyczne z asystentami AI przez samodzielnie hostowany serwer MCP.” Website jest opcjonalne; możesz podać https://github.com/makkiattooo/JamRelay. Redirect URI: skopiuj dokładny adres poniżej. Przy pytaniu o API/SDK wybierz Web API. Utwórz aplikację, otwórz Settings → Users Management i dodaj swoje konto Spotify do listy. Tryb Development wymaga Premium u właściciela aplikacji i pozwala na maksymalnie 5 autoryzowanych kont.',
     clientSecret: 'Sekret aplikacji',
     clientId: 'Identyfikator aplikacji',
     team: 'Apple Team ID',
@@ -359,6 +373,8 @@ const copy: Record<Language, Record<string, string>> = {
     create: 'Entwickleranwendung erstellen:',
     requirements: 'Voraussetzungen',
     callback: 'Diese genaue Rückrufadresse registrieren',
+    spotifyFields:
+      'Im Spotify-Formular: App name: JamRelay. App description: „Verbindet Musikdienste über einen selbst gehosteten MCP-Server mit KI-Assistenten.“ Website ist optional; du kannst https://github.com/makkiattooo/JamRelay verwenden. Redirect URI: die genaue URL unten kopieren. Bei API/SDK Web API auswählen. Danach die App erstellen, Settings → Users Management öffnen und dein Spotify-Konto zur Allowlist hinzufügen. Development Mode erfordert Premium für den App-Inhaber und erlaubt bis zu 5 autorisierte Konten.',
     clientSecret: 'Anwendungsgeheimnis',
     clientId: 'Anwendungs-ID',
     team: 'Apple Team ID',
@@ -423,6 +439,8 @@ const copy: Record<Language, Record<string, string>> = {
     create: 'Créer l’application développeur sur',
     requirements: 'Conditions',
     callback: 'Enregistrer exactement cette URL de retour',
+    spotifyFields:
+      'Dans le formulaire Spotify : App name : JamRelay. App description : « Connecte les services musicaux aux assistants IA via un serveur MCP auto-hébergé. » Le Website est facultatif ; vous pouvez utiliser https://github.com/makkiattooo/JamRelay. Redirect URI : copiez exactement l’URL ci-dessous. Choisissez Web API pour API/SDK. Créez ensuite l’application, ouvrez Settings → Users Management et ajoutez votre compte Spotify à la liste. Le mode Development exige Premium pour le propriétaire de l’application et autorise jusqu’à 5 comptes.',
     clientSecret: 'Secret de l’application',
     clientId: 'Identifiant de l’application',
     team: 'Apple Team ID',
@@ -487,6 +505,8 @@ const copy: Record<Language, Record<string, string>> = {
     create: 'Crea la aplicación de desarrollador en',
     requirements: 'Requisitos',
     callback: 'Registra exactamente esta URL de retorno',
+    spotifyFields:
+      'En el formulario de Spotify: App name: JamRelay. App description: “Conecta servicios de música con asistentes de IA mediante un servidor MCP autohospedado.” Website es opcional; puedes usar https://github.com/makkiattooo/JamRelay. Redirect URI: copia exactamente la URL siguiente. Elige Web API en API/SDK. Después crea la aplicación, abre Settings → Users Management y añade tu cuenta de Spotify a la lista permitida. Development Mode requiere Premium para el propietario y permite hasta 5 cuentas autorizadas.',
     clientSecret: 'Secreto de la aplicación',
     clientId: 'ID de la aplicación',
     team: 'Apple Team ID',
@@ -639,7 +659,7 @@ export async function connectProvider(provider: Provider) {
     provider === 'apple-music' ? tr('callbackNotUsed') : `${tr('callback')}:\n${callback}`;
   showPanel(
     p.name,
-    `${p.name}\n\n${tr('requirements')}\n${requirements[currentLanguage()][provider]}\n\n${tr('create')} ${terminalLink(p.portal)}\n\n${callbackDetails}\n\n${tr('docs')}: ${p.docs}${p.rules ? `\n${p.rules}` : ''}`,
+    `${p.name}\n\n${tr('requirements')}\n${requirements[currentLanguage()][provider]}${provider === 'spotify' ? `\n\n${tr('spotifyFields')}` : ''}\n\n${tr('create')} ${terminalLink(p.portal)}\n\n${callbackDetails}\n\n${tr('docs')}: ${p.docs}${p.rules ? `\n${p.rules}` : ''}`,
   );
   if (provider === 'apple-music')
     showPanel(p.name, `${requirements[currentLanguage()][provider]}\n\n${tr('appleToken')}`);
@@ -719,6 +739,7 @@ export async function onboard() {
   if (selectedProvider) await connectProvider(selectedProvider);
   const clientChoice = await choose(tr('client'), [
     'ChatGPT',
+    'Codex (CLI and Desktop)',
     'Claude Code',
     'Claude Desktop',
     'Cursor',
@@ -730,6 +751,7 @@ export async function onboard() {
     (
       {
         ChatGPT: 'chatgpt',
+        'Codex (CLI and Desktop)': 'codex',
         'Claude Code': 'claude-code',
         'Claude Desktop': 'claude-desktop',
         Cursor: 'cursor',
@@ -750,9 +772,16 @@ export async function guidedConnect(kind: 'provider' | 'client', name: string, v
     return connectProvider(name as Provider);
   }
   if (
-    !['chatgpt', 'claude', 'claude-code', 'claude-desktop', 'cursor', 'vscode', 'generic'].includes(
-      name,
-    )
+    ![
+      'chatgpt',
+      'codex',
+      'claude',
+      'claude-code',
+      'claude-desktop',
+      'cursor',
+      'vscode',
+      'generic',
+    ].includes(name)
   )
     throw new Error('Unknown client');
   return connectClient(name as Client | InstallClient, verify);

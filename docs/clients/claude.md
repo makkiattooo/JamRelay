@@ -7,6 +7,10 @@ description: Connect JamRelay to Claude hosted surfaces or Claude Code using rem
 
 Claude supports remote MCP connectors with OAuth. JamRelay supports the registration paths Claude currently documents: **Dynamic Client Registration (DCR)** and pre-configured client credentials.
 
+## Claude plugin package
+
+The repository includes a ready-to-upload skills-only package at [`marketplace/jamrelay-claude-plugin-1.5.9.zip`](../../marketplace/jamrelay-claude-plugin-1.5.9.zip). It contains the required `.claude-plugin/plugin.json` manifest, a JamRelay connection skill, and manual configuration instructions. It does not install or host JamRelay, configure a tunnel, or include credentials. Uploading it is a separate action in Claude's plugin interface; the package is not uploaded automatically.
+
 ## Claude.ai, Claude Desktop, mobile, and Cowork
 
 For hosted Claude surfaces, the simplest JamRelay setup is DCR:

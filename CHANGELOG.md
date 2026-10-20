@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.9 — 2026-10-20
+
+- Add Codex CLI and Desktop MCP onboarding with safe existing-registration checks, manual configuration guidance and documented verification stages.
+- Reject healthy responses from older JamRelay versions during onboarding checks to avoid confusing an existing container with the current build.
+- Improve Spotify application setup guidance with field-by-field examples and the exact configured callback URL.
+- Clarify Windows Docker Compose host commands and safe alternate host-port selection when another installation is using the default port.
+
 ## 1.5.8 — 2026-10-20
 
 - Keep refreshed and nested MCP grants within the original authorization; recheck provider requests and reject owned jobs without live authorization.

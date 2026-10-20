@@ -11,6 +11,7 @@ import {
   languages,
   rememberErrorLanguage,
   languageNames,
+  type Language,
 } from '../cli/i18n/index.js';
 import {
   clearScreen,
@@ -197,7 +198,7 @@ export async function setup(nonInteractive = false, reconfigure = false) {
       !settings.MCP_OWNER_PASSWORD_HASH &&
       (await confirm(t('Create an owner password?'), true))
     ) {
-      settings.MCP_OWNER_PASSWORD_HASH = await promptOwnerPassword();
+      settings.MCP_OWNER_PASSWORD_HASH = await promptOwnerPassword(language);
     }
     settings.HOST ||= settings.JAMRELAY_INSTALL_MODE === 'docker' ? '0.0.0.0' : '127.0.0.1';
     settings.PORT ||= '5267';
@@ -273,7 +274,9 @@ export async function setup(nonInteractive = false, reconfigure = false) {
       mkdirSync(path, { recursive: true, mode: 0o700 });
     }
     if (await portOccupied(config.HOST, config.PORT))
-      throw new Error('Configured port is occupied. Stop the existing server before setup.');
+      throw new Error(
+        `Configured port ${config.PORT} is occupied. Another service or JamRelay version may already be running. Do not stop an installation you need. Choose another port (for example $env:PORT='15269' in Windows PowerShell, then rerun jamrelay setup) or inspect its owner with Get-NetTCPConnection -LocalPort ${config.PORT} -State Listen.`,
+      );
     if (!nonInteractive) {
       stateForSetup = await import('../cli/state.js');
       showPanel(
@@ -318,7 +321,7 @@ export async function setup(nonInteractive = false, reconfigure = false) {
     );
     showPanel(
       t('JamRelay Setup Complete'),
-      `${t('Server setup is complete; music account authorization and AI client setup are still pending.')}\n\n${t('Next')}:\n  ${mode === 'docker' ? 'docker compose up -d --wait' : 'jamrelay start'}\n  jamrelay onboard\n  jamrelay doctor\n\n${t('Health endpoint')}: ${origin}/health\n${t('MCP endpoint')}: ${origin}/mcp\n${t('Providers')}: ${configured.length ? configured.join(', ') + ' (' + t('configured; run connections list to check account authorization') + ')' : t('none')}`,
+      `${t('Server setup is complete; music account authorization and AI client setup are still pending.')}\n\n${t('Next')}:\n${mode === 'docker' ? `${t('Run on the Windows host, from the directory containing compose.yml:')}\n  docker compose up -d --wait\n  docker compose run --rm jamrelay onboard\n  docker compose run --rm jamrelay doctor\n${t('If the host port is occupied, keep the existing service and choose another port:')}\n  $env:JAMRELAY_PORT = "15269"\n  docker compose run --rm jamrelay setup\n  docker compose up -d --wait` : '  jamrelay start\n  jamrelay onboard\n  jamrelay doctor'}\n\n${t('Health endpoint')}: ${origin}/health\n${t('MCP endpoint')}: ${origin}/mcp\n${t('Providers')}: ${configured.length ? configured.join(', ') + ' (' + t('configured; run connections list to check account authorization') + ')' : t('none')}`,
     );
   } catch (error) {
     rememberErrorLanguage(error, language);
@@ -429,19 +432,20 @@ export async function doctor(json = false) {
   return errors.length ? 1 : 0;
 }
 
-export async function promptOwnerPassword() {
+export async function promptOwnerPassword(language = currentLanguage()) {
+  const t = translator(language);
   for (;;) {
-    const password = await passwordPrompt('Owner password (12–256 characters)', '', {
+    const password = await passwordPrompt(t('Owner password (12–256 characters)'), '', {
       secret: true,
     });
     const problem = passwordProblem(password);
     if (problem) {
-      showPanel('Password', problem);
+      showPanel(t('Owner password'), t(problem));
       continue;
     }
-    const confirmation = await passwordPrompt('Confirm owner password', '', { secret: true });
+    const confirmation = await passwordPrompt(t('Confirm owner password'), '', { secret: true });
     if (password !== confirmation) {
-      showPanel('Password', 'Passwords do not match. Try again.');
+      showPanel(t('Owner password'), t('Passwords do not match. Try again.'));
       continue;
     }
     return hashOwnerPassword(password);

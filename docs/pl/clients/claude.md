@@ -6,6 +6,8 @@ sourceHash: 42c6e7c3d97d
 
 # Claude
 
+Gotowa paczka instrukcji dla Claude znajduje się w [`marketplace/jamrelay-claude-plugin-1.5.9.zip`](../../../marketplace/jamrelay-claude-plugin-1.5.9.zip). Zawiera manifest `.claude-plugin/plugin.json`, skill łączenia z JamRelay i ręczne instrukcje konfiguracji MCP. Nie instaluje ani nie hostuje serwera, nie tworzy tunelu i nie zawiera danych logowania. Wgrywanie paczki do Claude jest osobną czynnością; nic nie jest wysyłane automatycznie.
+
 Claude obsługuje zdalne MCP z OAuth. JamRelay wspiera DCR oraz statyczne dane klienta.
 
 ## Claude.ai / Desktop / mobile / Cowork

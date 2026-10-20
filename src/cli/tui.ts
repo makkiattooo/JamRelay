@@ -204,23 +204,38 @@ export async function promptText(label: string, fallback = '', options: PromptOp
   input.resume();
   if (ansi) output.write('\u001b[?1049h\u001b[?25l');
   let drawn = false;
+  const inputRow = () => {
+    const promptContext = options.context ?? lastPanel;
+    const contextLines = promptContext ? promptContext.split('\n').length + 1 : 0;
+    const errorLines = options.error ? 2 : 0;
+    return Math.min((output.rows || 24) - 1, 7 + contextLines + errorLines);
+  };
+  const displayValue = () =>
+    options.secret ? '•'.repeat(value.length) : value || color('2', word('placeholder'));
+  const refreshInput = () => {
+    if (ansi && output.isTTY) {
+      const width = Math.max(1, output.columns || 80);
+      const row = inputRow();
+      // Input is the last content row: replace just that row instead of clearing
+      // and repainting the whole terminal for every typed or pasted character.
+      output.write(`\u001b[${row};1H\u001b[J${displayValue()}`);
+      const cursorRow = Math.min((output.rows || 24) - 1, row + Math.floor(cursor / width));
+      const column = (cursor % width) + 1;
+      output.write(`\u001b[${cursorRow};${column}H\u001b[?25h`);
+    }
+  };
   const draw = () => {
     if (!ansi && drawn) return;
     drawn = true;
     frame(
       label,
-      `${(options.context ?? lastPanel) ? `${options.context ?? lastPanel}\n\n` : ''}${options.error ? `${color('31;1', options.error)}\n\n` : ''}${options.secret ? '•'.repeat(value.length) : value || color('2', word('placeholder'))}`,
+      `${(options.context ?? lastPanel) ? `${options.context ?? lastPanel}\n\n` : ''}${options.error ? `${color('31;1', options.error)}\n\n` : ''}${displayValue()}`,
       fallback && !options.secret ? `${word('default')}: ${fallback}` : word('inputHint'),
     );
     if (ansi && output.isTTY) {
       const width = Math.max(1, output.columns || 80);
-      const column = Math.min(width - 1, Math.max(1, value.length + 1));
-      const promptContext = options.context ?? lastPanel;
-      const contextLines = promptContext ? promptContext.split('\n').length + 1 : 0;
-      const errorLines = options.error ? 2 : 0;
-      const row = Math.min((output.rows || 24) - 1, 7 + contextLines + errorLines);
-      output.write(`\u001b[${row};${column}H`);
-      output.write('\u001b[?25h');
+      const row = Math.min((output.rows || 24) - 1, inputRow() + Math.floor(cursor / width));
+      output.write(`\u001b[${row};${(cursor % width) + 1}H\u001b[?25h`);
     } else output.write('\n> ');
   };
   draw();
@@ -244,6 +259,7 @@ export async function promptText(label: string, fallback = '', options: PromptOp
     };
     const onEnd = () => finish(undefined, new Error('Setup cancelled.'));
     const onKey = (text: string | undefined, key: Key) => {
+      let changed = false;
       if (key.ctrl && (key.name === 'c' || key.name === 'd'))
         return finish(undefined, new Error('Setup cancelled.'));
       if (key.name === 'escape') return finish(undefined, new Error('Setup cancelled.'));
@@ -251,20 +267,32 @@ export async function promptText(label: string, fallback = '', options: PromptOp
       if (key.name === 'backspace' && cursor > 0) {
         value = value.slice(0, cursor - 1) + value.slice(cursor);
         cursor -= 1;
+        changed = true;
         if (!ansi) output.write('\b \b');
-      } else if (key.name === 'delete' && cursor < value.length)
+      } else if (key.name === 'delete' && cursor < value.length) {
         value = value.slice(0, cursor) + value.slice(cursor + 1);
-      else if (key.name === 'left' && ansi) cursor = Math.max(0, cursor - 1);
-      else if (key.name === 'right' && ansi) cursor = Math.min(value.length, cursor + 1);
-      else if (key.name === 'home' && ansi) cursor = 0;
-      else if (key.name === 'end' && ansi) cursor = value.length;
+        changed = true;
+      } else if (key.name === 'left' && ansi) {
+        cursor = Math.max(0, cursor - 1);
+        changed = true;
+      } else if (key.name === 'right' && ansi) {
+        cursor = Math.min(value.length, cursor + 1);
+        changed = true;
+      } else if (key.name === 'home' && ansi) {
+        cursor = 0;
+        changed = true;
+      } else if (key.name === 'end' && ansi) {
+        cursor = value.length;
+        changed = true;
+      }
       else if (text && !key.ctrl && !key.meta && !key.sequence?.startsWith('\u001b')) {
         if (ansi) value = value.slice(0, cursor) + text + value.slice(cursor);
         else value += text;
         cursor += text.length;
+        changed = true;
         if (!ansi) output.write(options.secret ? '•'.repeat(text.length) : text);
       }
-      draw();
+      if (changed && ansi) refreshInput();
     };
     input.on('keypress', onKey);
     input.once('end', onEnd);

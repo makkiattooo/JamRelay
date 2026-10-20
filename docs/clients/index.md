@@ -37,6 +37,7 @@ See [MCP OAuth registration](./oauth-compatibility) for the registration model a
 | Client                 | Remote Streamable HTTP | OAuth | Bearer/custom headers           | Recommended JamRelay mode         | Status                      |
 | ---------------------- | ---------------------- | ----- | ------------------------------- | --------------------------------- | --------------------------- |
 | ChatGPT                | ✅                     | ✅    | custom-app UI is OAuth-oriented | static OAuth                      | previously verified         |
+| Codex CLI + Desktop    | ✅                     | ✅    | ✅                              | DCR                               | protocol path implemented   |
 | Claude hosted surfaces | ✅                     | ✅    | not primary connector path      | DCR                               | protocol path implemented   |
 | Claude Code            | ✅                     | ✅    | dynamic headers also supported  | DCR                               | protocol path implemented   |
 | Gemini CLI             | ✅                     | ✅    | ✅                              | DCR                               | protocol path implemented   |
@@ -64,6 +65,7 @@ Create a private playlist called MCP Test and add two tracks to it.
 ## Client guides
 
 - [ChatGPT](./chatgpt)
+- [Codex CLI and Desktop](./codex)
 - [Claude](./claude)
 - [Gemini CLI](./gemini)
 - [Cursor](./cursor)

@@ -23,6 +23,7 @@ import {
   terminalLink,
 } from './tui.js';
 import { effectiveBaseUrl, localBaseUrl } from '../config.js';
+import { APP_VERSION } from '../version.js';
 
 type Method = (typeof connectivityMethodSchema)['options'][number];
 type DomainMethod = 'cloudflare-tunnel' | 'direct-proxy' | 'existing-proxy';
@@ -858,7 +859,7 @@ export async function verifyEndpoint(origin: string, local = false): Promise<Che
       health =
         response.status === 200 &&
         body?.status === 'ok' &&
-        typeof body.version === 'string' &&
+        body.version === APP_VERSION &&
         body.database?.schemaState === 'current';
       if (url.protocol === 'https:') https = response.status > 0;
     } catch {

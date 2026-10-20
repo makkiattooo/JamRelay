@@ -1,3 +1,5 @@
+import { APP_VERSION } from '../version.js';
+
 /** Client URLs describe the host; probes describe where this process runs. */
 export function isLoopbackHttp(origin: string) {
   const url = new URL(origin);
@@ -46,8 +48,6 @@ async function healthyAt(target: string) {
     database?: { schemaState?: string };
   };
   return (
-    body.status === 'ok' &&
-    typeof body.version === 'string' &&
-    body.database?.schemaState === 'current'
+    body.status === 'ok' && body.version === APP_VERSION && body.database?.schemaState === 'current'
   );
 }

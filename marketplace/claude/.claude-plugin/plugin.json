@@ -1,0 +1,10 @@
+{
+  "name": "jamrelay",
+  "version": "1.5.9",
+  "description": "Connect Claude to your self-hosted JamRelay music MCP server.",
+  "author": {
+    "name": "JamRelay contributors"
+  },
+  "repository": "https://github.com/makkiattooo/JamRelay",
+  "license": "AGPL-3.0-only"
+}

@@ -24,7 +24,7 @@ import { openSqlite } from '../runtime/sqlite.js';
 
 const execute = promisify(execFile);
 export type InstallClient =
-  'chatgpt' | 'claude-code' | 'claude-desktop' | 'cursor' | 'vscode' | 'generic';
+  'chatgpt' | 'codex' | 'claude-code' | 'claude-desktop' | 'cursor' | 'vscode' | 'generic';
 type Status = CliState['clientSetup'][string]['status'];
 export const statusLabels: Record<Status, string> = {
   not_configured: 'Not configured',
@@ -134,6 +134,9 @@ export function vscodeUserConfigPath() {
 }
 export function claudeAddArgs(endpoint: string) {
   return ['mcp', 'add', '--transport', 'http', 'jamrelay', endpoint];
+}
+export function codexAddArgs(endpoint: string) {
+  return ['mcp', 'add', 'jamrelay', '--url', endpoint];
 }
 function validEndpoint(endpoint: string) {
   const u = new URL(endpoint);
@@ -255,7 +258,10 @@ export async function installClient(client: InstallClient, endpoint: string) {
         'Remote connector (public HTTPS)',
         'Local stdio bridge (Node.js required)',
       ])) === 'Local stdio bridge (Node.js required)';
-  const command = `claude mcp add --transport http jamrelay ${JSON.stringify(endpoint)}`;
+  const command =
+    client === 'codex'
+      ? `codex mcp add jamrelay --url ${JSON.stringify(endpoint)}`
+      : `claude mcp add --transport http jamrelay ${JSON.stringify(endpoint)}`;
   const fragment =
     client === 'cursor' || client === 'vscode' || desktopBridge
       ? JSON.stringify(clientConfig(client as FileClient, endpoint), null, 2)
@@ -278,24 +284,32 @@ export async function installClient(client: InstallClient, endpoint: string) {
         : vscodeUserConfigPath();
   }
   const instructions =
-    client === 'claude-code'
-      ? `${command}\nThen: claude mcp get jamrelay (registration only). Open Claude Code, run /mcp, authenticate in the browser, then request the JamRelay tool list.`
-      : fragment
-        ? `${desktopBridge ? 'Claude Desktop Settings → Developer → Edit Config (Windows/macOS)' : docker ? (client === 'cursor' ? '~/.cursor/mcp.json or <project>/.cursor/mcp.json' : '<project>/.vscode/mcp.json or MCP: Open User Configuration') : path}\n${fragment}\nEnable the server in the client, complete OAuth and request the tool list.${desktopBridge ? ' Requires host Node.js/npx; this launches the external pinned mcp-remote stdio bridge, which stores its own OAuth tokens. Restart Claude Desktop after editing.' : ''}`
-        : client === 'chatgpt'
-          ? `ChatGPT: create a custom MCP app in developer settings using ${endpoint}. Use the documented pre-registered confidential OAuth client. Availability depends on your plan/workspace. No one-click install is available.`
-          : client === 'claude-desktop'
-            ? `Claude Desktop remote connector: Settings → Connectors → Add custom connector → ${endpoint}. This is the remote connector flow, not a local extension. Availability depends on the client/account. Complete OAuth, then request tools.`
-            : `Use Streamable HTTP and OAuth discovery at ${endpoint}. Configure the client manually, authenticate, then request tools.`;
+    client === 'codex'
+      ? `Codex CLI and Codex Desktop share the user MCP configuration. Run in Windows PowerShell on the host:\n${command}\nThen run: codex mcp list\nIf Codex CLI is unavailable, add this entry to %USERPROFILE%\\.codex\\config.toml:\n[mcp_servers.jamrelay]\nurl = "${endpoint}"\nOpen/restart Codex and approve the JamRelay connection. OAuth authentication happens in the client browser; listing the server only verifies registration.`
+      : client === 'claude-code'
+        ? `${command}\nThen: claude mcp get jamrelay (registration only). Open Claude Code, run /mcp, authenticate in the browser, then request the JamRelay tool list.`
+        : fragment
+          ? `${desktopBridge ? 'Claude Desktop Settings → Developer → Edit Config (Windows/macOS)' : docker ? (client === 'cursor' ? '~/.cursor/mcp.json or <project>/.cursor/mcp.json' : '<project>/.vscode/mcp.json or MCP: Open User Configuration') : path}\n${fragment}\nEnable the server in the client, complete OAuth and request the tool list.${desktopBridge ? ' Requires host Node.js/npx; this launches the external pinned mcp-remote stdio bridge, which stores its own OAuth tokens. Restart Claude Desktop after editing.' : ''}`
+          : client === 'chatgpt'
+            ? `ChatGPT: create a custom MCP app in developer settings using ${endpoint}. Use the documented pre-registered confidential OAuth client. Availability depends on your plan/workspace. No one-click install is available.`
+            : client === 'claude-desktop'
+              ? `Claude Desktop remote connector: Settings → Connectors → Add custom connector → ${endpoint}. This is the remote connector flow, not a local extension. Availability depends on the client/account. Complete OAuth, then request tools.`
+              : `Use Streamable HTTP and OAuth discovery at ${endpoint}. Configure the client manually, authenticate, then request tools.`;
   showPanel(
     'Configuration generated',
     `${docker ? 'Run these commands or edit configuration on your HOST (PowerShell on Windows), outside Docker. This container cannot configure host applications.\n\n' : ''}${instructions}\n\nNo owner password, recovery secret or provider credential belongs in client configuration.`,
   );
   await save(client, endpoint, 'configuration_generated', instructions);
-  if (!docker && path && (['claude-code', 'cursor', 'vscode'].includes(client) || desktopBridge)) {
+  if (
+    !docker &&
+    path &&
+    (['codex', 'claude-code', 'cursor', 'vscode'].includes(client) || desktopBridge)
+  ) {
     let available = true;
-    if (client === 'claude-code')
-      available = await execute('claude', ['--version'], { timeout: 5000 })
+    if (client === 'claude-code' || client === 'codex')
+      available = await execute(client === 'codex' ? 'codex' : 'claude', ['--version'], {
+        timeout: 5000,
+      })
         .then(() => true)
         .catch(() => false);
     const operation =
@@ -306,7 +320,7 @@ export async function installClient(client: InstallClient, endpoint: string) {
       'Review local configuration change',
       available
         ? operation
-        : `Claude CLI was not detected. Install it on the host and run:\n${command}`,
+        : `${client === 'codex' ? 'Codex CLI' : 'Claude CLI'} was not detected. Install it on the host and run:\n${command}`,
     );
     if (
       available &&
@@ -316,18 +330,27 @@ export async function installClient(client: InstallClient, endpoint: string) {
       ])) === 'Apply configuration'
     ) {
       try {
-        if (client === 'claude-code') {
-          const existing = await execute('claude', ['mcp', 'get', 'jamrelay'], {
-            timeout: 10000,
-          }).catch(() => undefined);
-          if (existing && !existing.stdout.includes(endpoint))
-            throw new Error('A different registration exists; preserved.');
-          if (!existing) await execute('claude', claudeAddArgs(endpoint), { timeout: 15000 });
-          const result = await execute('claude', ['mcp', 'get', 'jamrelay'], { timeout: 15000 });
-          if (!result.stdout.includes(endpoint))
-            throw new Error(
-              'Claude registration did not return the expected MCP URL. Inspect claude mcp get jamrelay.',
+        if (client === 'claude-code' || client === 'codex') {
+          const binary = client === 'codex' ? 'codex' : 'claude';
+          const checkArgs = client === 'codex' ? ['mcp', 'list'] : ['mcp', 'get', 'jamrelay'];
+          const existing = await execute(binary, checkArgs, { timeout: 10000 }).catch(
+            () => undefined,
+          );
+          if (existing?.stdout.includes('jamrelay')) {
+            if (!existing.stdout.includes(endpoint))
+              throw new Error('A different registration exists; preserved.');
+          } else {
+            await execute(
+              binary,
+              client === 'codex' ? codexAddArgs(endpoint) : claudeAddArgs(endpoint),
+              {
+                timeout: 15000,
+              },
             );
+          }
+          const result = await execute(binary, checkArgs, { timeout: 15000 });
+          if (!result.stdout.includes('jamrelay') || !result.stdout.includes(endpoint))
+            throw new Error(`${binary} did not report the expected JamRelay MCP URL.`);
         } else mergeClientConfig(path, client as FileClient, endpoint);
         await save(
           client,
@@ -354,15 +377,17 @@ export async function installClient(client: InstallClient, endpoint: string) {
     }
   }
   const documentation =
-    client === 'claude-code'
-      ? 'https://code.claude.com/docs/en/mcp'
-      : client === 'claude-desktop'
-        ? 'https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp'
-        : client === 'cursor'
-          ? 'https://cursor.com/docs/mcp'
-          : client === 'vscode'
-            ? 'https://code.visualstudio.com/docs/agent-customization/mcp-servers'
-            : 'https://github.com/makkiattooo/JamRelay#connecting-an-ai-client';
+    client === 'codex'
+      ? 'https://developers.openai.com/codex/mcp'
+      : client === 'claude-code'
+        ? 'https://code.claude.com/docs/en/mcp'
+        : client === 'claude-desktop'
+          ? 'https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp'
+          : client === 'cursor'
+            ? 'https://cursor.com/docs/mcp'
+            : client === 'vscode'
+              ? 'https://code.visualstudio.com/docs/agent-customization/mcp-servers'
+              : 'https://github.com/makkiattooo/JamRelay#connecting-an-ai-client';
   showPanel('Client documentation', documentation);
   if (
     !docker &&
