@@ -284,8 +284,7 @@ export async function promptText(label: string, fallback = '', options: PromptOp
       } else if (key.name === 'end' && ansi) {
         cursor = value.length;
         changed = true;
-      }
-      else if (text && !key.ctrl && !key.meta && !key.sequence?.startsWith('\u001b')) {
+      } else if (text && !key.ctrl && !key.meta && !key.sequence?.startsWith('\u001b')) {
         if (ansi) value = value.slice(0, cursor) + text + value.slice(cursor);
         else value += text;
         cursor += text.length;

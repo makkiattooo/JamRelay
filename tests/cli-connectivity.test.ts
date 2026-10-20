@@ -67,11 +67,13 @@ describe('guided connectivity setup', () => {
   it('requires a reachable local health endpoint and an authentication challenge at MCP', async () => {
     const server = createServer((request, response) => {
       if (request.url === '/health') {
-        response
-          .writeHead(200)
-          .end(
-            JSON.stringify({ status: 'ok', version: APP_VERSION, database: { schemaState: 'current' } }),
-          );
+        response.writeHead(200).end(
+          JSON.stringify({
+            status: 'ok',
+            version: APP_VERSION,
+            database: { schemaState: 'current' },
+          }),
+        );
       } else if (request.url === '/mcp') {
         response.writeHead(401).end();
       } else response.writeHead(404).end();

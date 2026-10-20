@@ -22,12 +22,7 @@ For local HTTP endpoints, configure a local stdio-to-HTTP bridge in Claude Deskt
   "mcpServers": {
     "jamrelay": {
       "command": "npx",
-      "args": [
-        "-y",
-        "mcp-remote@0.15.1",
-        "http://127.0.0.1:5267/mcp",
-        "--allow-http"
-      ]
+      "args": ["-y", "mcp-remote@0.15.1", "http://127.0.0.1:5267/mcp", "--allow-http"]
     }
   }
 }
