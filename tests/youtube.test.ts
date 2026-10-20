@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { YouTubeProviderAdapter } from '../src/youtube/provider-adapter.js';
-import { YOUTUBE_QUOTA_COST } from '../src/youtube/client.js';
+import { YouTubeClient, YOUTUBE_QUOTA_COST } from '../src/youtube/client.js';
 
 describe('official YouTube Data API provider', () => {
   it('declares video semantics and explicit Data API quota costs', async () => {
@@ -35,15 +35,35 @@ describe('official YouTube Data API provider', () => {
 
   it('uses playlist and playlistItems request shapes', async () => {
     const client = {
-      request: vi
-        .fn()
-        .mockResolvedValue({ value: { id: 'p1', snippet: { title: 'Mix' } }, quotaCost: 50 }),
+      request: vi.fn().mockImplementation(async (method: string) => ({
+        value:
+          method === 'playlistItems.list'
+            ? {
+                items: [1, 2].map((i) => ({
+                  id: `item-${i}`,
+                  contentDetails: { videoId: `v${i}` },
+                  snippet: { resourceId: { kind: 'youtube#video', videoId: `v${i}` } },
+                })),
+              }
+            : method === 'playlists.list'
+              ? {
+                  items: [
+                    {
+                      id: 'p1',
+                      snippet: { title: 'Mix', description: 'Keep' },
+                      status: { privacyStatus: 'public' },
+                    },
+                  ],
+                }
+              : { id: 'p1', snippet: { title: 'Mix' } },
+        quotaCost: 50,
+      })),
     } as any;
     const adapter = new YouTubeProviderAdapter({} as any, client);
     await adapter.playlistWrite.createPlaylist({ name: 'Mix', public: false });
     await adapter.playlistWrite.addTracks('p1', ['v1', 'v2']);
-    await adapter.playlistWrite.removeTracks('p1', ['item-1']);
-    await adapter.playlistWrite.reorderTracks('p1', { playlist_item_id: 'item-2', position: 0 });
+    await adapter.playlistWrite.removeTracks('p1', ['v1']);
+    await adapter.playlistWrite.reorderTracks('p1', { range_start: 1, insert_before: 0 });
     await adapter.playlistWrite.updatePlaylist('p1', { name: 'Updated', public: true });
     expect(client.request).toHaveBeenNthCalledWith(
       1,
@@ -71,7 +91,28 @@ describe('official YouTube Data API provider', () => {
     expect(client.request).toHaveBeenCalledWith(
       'playlistItems.update',
       { part: 'snippet' },
-      expect.any(Object),
+      {
+        id: 'item-2',
+        snippet: {
+          playlistId: 'p1',
+          position: 0,
+          resourceId: { kind: 'youtube#video', videoId: 'v2' },
+        },
+      },
+    );
+    client.request.mockClear();
+    await expect(adapter.playlistWrite.removeTracks('p1', ['foreign-item'])).rejects.toMatchObject({
+      status: 400,
+    });
+    expect(client.request).not.toHaveBeenCalledWith('playlistItems.delete', expect.anything());
+    await adapter.playlistWrite.updatePlaylist('p1', { description: 'Changed' });
+    expect(client.request).toHaveBeenCalledWith(
+      'playlists.update',
+      expect.anything(),
+      expect.objectContaining({
+        snippet: { title: 'Mix', description: 'Changed' },
+        status: { privacyStatus: 'public' },
+      }),
     );
   });
 
@@ -79,4 +120,24 @@ describe('official YouTube Data API provider', () => {
     const adapter = new YouTubeProviderAdapter({} as any, {} as any);
     expect(adapter.summary.metadata).not.toHaveProperty('clientSecret');
   });
+});
+
+it('uses the actual YouTube REST resource path, not the logical method name', async () => {
+  const fetcher = vi
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValue(new Response('{"items":[]}', { status: 200 }));
+  try {
+    await new YouTubeClient({ accessToken: async () => 'test' } as any).request('search.list', {
+      q: 'music',
+    });
+    expect(String(fetcher.mock.calls[0][0])).toBe(
+      'https://www.googleapis.com/youtube/v3/search?q=music',
+    );
+    fetcher.mockResolvedValueOnce(new Response('not-json', { status: 200 }));
+    await expect(
+      new YouTubeClient({ accessToken: async () => 'test' } as any).request('search.list'),
+    ).rejects.toMatchObject({ status: 502 });
+  } finally {
+    fetcher.mockRestore();
+  }
 });

@@ -1,3 +1,4 @@
+import { toolContext } from '../mcp/context.js';
 import { randomUUID } from 'node:crypto';
 import { getDatabase, isDatabaseInitialized } from '../db/database.js';
 export type PlaylistSnapshot = {
@@ -101,6 +102,9 @@ export function loadSnapshot(id: string): PlaylistSnapshot {
     throw Object.assign(new Error('Playlist snapshot was not found.'), {
       code: 'snapshot_not_found',
     });
+  const access = toolContext.get()?.mcpAccess;
+  if (access && !access.connectionIds?.includes(row.connectionId ?? 'spotify-default'))
+    throw new Error('CONNECTION_NOT_GRANTED');
   const items = db
     .prepare(
       'SELECT uri,provider_track_id providerTrackId,provider_uri providerUri,provider_url providerUrl FROM playlist_snapshot_items WHERE snapshot_id=? ORDER BY position',

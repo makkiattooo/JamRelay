@@ -1,3 +1,4 @@
+import { McpOAuthStore } from '../src/mcp/oauth.js';
 import { APP_VERSION } from '../src/version.js';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
@@ -122,6 +123,9 @@ try {
   registry.register({
     summary: { provider: 'fixture', connectionId: 'fixture-main', capabilities: { catalog: true } },
   });
+  const grantStore = new McpOAuthStore(cfg.MCP_OAUTH_STORE_PATH);
+  const legacyGrant = (await grantStore.getGrant('api-key'))!;
+  await grantStore.updateGrant('api-key', ['fixture-main'], legacyGrant.permissions);
   server = createApp(cfg, { registry }).listen(0, '127.0.0.1');
   base = await listening(server);
   const created = await rpc(base, 'tools/call', {
@@ -130,12 +134,16 @@ try {
   });
   assert.equal(created.isError, undefined);
   const id = created.structuredContent.job_id;
-  runner = new JobRunner({
-    resolve: async () => {
-      throw new Error('Direct fixture must not make a network request');
+  runner = new JobRunner(
+    {
+      resolve: async () => {
+        throw new Error('Direct fixture must not make a network request');
+      },
+      hasConnection: (id, provider) => id === 'fixture-main' && provider === 'fixture',
     },
-    hasConnection: (id, provider) => id === 'fixture-main' && provider === 'fixture',
-  });
+    undefined,
+    grantStore,
+  );
   runner.start();
   const ready = Date.now() + 3000;
   while (getJob(id).payload.phase !== 'ready_to_commit' && Date.now() < ready)

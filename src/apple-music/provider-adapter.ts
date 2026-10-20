@@ -34,6 +34,9 @@ const items = (x: any) => ({
 
 export class AppleMusicProviderAdapter implements ProviderConnection {
   readonly client: AppleMusicClient;
+  async isAuthorized() {
+    return this.auth?.connected ? this.auth.connected() : true;
+  }
   readonly summary;
   readonly catalog;
   readonly playlistRead;

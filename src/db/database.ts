@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { runtimePath } from '../runtime/installation.js';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { DatabaseSync } from 'node:sqlite';
+import { openSqlite, type DatabaseSync } from '../runtime/sqlite.js';
 import type { Logger } from 'pino';
 
 export type DatabaseOptions = {
@@ -247,7 +247,7 @@ export function initializeDatabase(options: DatabaseOptions = {}): DatabaseSync 
   if (migrations.length === 0 && !fs.existsSync(resolvedPath))
     throw new Error('No database migrations found');
   fs.mkdirSync(path.dirname(resolvedPath), { recursive: true });
-  const db = new DatabaseSync(resolvedPath);
+  const db = openSqlite(resolvedPath);
   try {
     configureDatabase(db);
     const appliedCount = migrateDatabase(db, migrations, options.logger);

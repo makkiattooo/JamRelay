@@ -3,6 +3,39 @@ import { z } from 'zod';
 export const APP_NAME = 'JamRelay';
 export const DEFAULT_PORT = 5267;
 
+/** Host-published port for Docker. PORT always remains the container listener port. */
+export function hostFacingPort(env: NodeJS.ProcessEnv = process.env) {
+  const raw = env.JAMRELAY_HOST_PORT ?? env.JAMRELAY_PORT ?? env.PORT ?? String(DEFAULT_PORT);
+  const port = Number(raw);
+  return Number.isInteger(port) && port > 0 && port <= 65535 ? port : DEFAULT_PORT;
+}
+
+/** Address a host-side browser, MCP client or tunnel uses to reach JamRelay. */
+export function localBaseUrl(env: NodeJS.ProcessEnv = process.env) {
+  const port = hostFacingPort(env);
+  return `http://127.0.0.1:${port}`;
+}
+
+/** Preserve an explicit origin, but replace the old generated Docker loopback default. */
+export function effectiveBaseUrl(
+  settings: Record<string, string | undefined>,
+  env: NodeJS.ProcessEnv = process.env,
+) {
+  const configured = env.PUBLIC_BASE_URL ?? settings.PUBLIC_BASE_URL;
+  if (!configured) return localBaseUrl(env);
+  if (env.JAMRELAY_INSTALL_MODE === 'docker') {
+    try {
+      const url = new URL(configured);
+      const oldDefault =
+        ['localhost', '127.0.0.1'].includes(url.hostname) && (url.port || '80') === '5267';
+      if (oldDefault && hostFacingPort(env) !== DEFAULT_PORT) return localBaseUrl(env);
+    } catch {
+      // Validation reports malformed origins through the existing config path.
+    }
+  }
+  return new URL(configured).origin;
+}
+
 const defaultDataPath = (file: string) =>
   process.env.NODE_ENV === 'production' ? `/data/${file}` : `./data/${file}`;
 
@@ -48,6 +81,8 @@ const schema = z.object({
   LOG_LEVEL: z.string().default('info'),
   JAMRELAY_TOOLSET: z
     .enum([
+      'essential',
+      'advanced',
       'core',
       'playback',
       'playlists',
@@ -59,12 +94,13 @@ const schema = z.object({
       'dangerous',
       'all',
     ])
-    .default('all'),
+    .default('essential'),
   MCP_AUTH_MODE: z.enum(['none', 'bearer']).default('none'),
   MCP_API_KEY: optionalNonEmpty,
 
   // One owner approval secret protects every OAuth client registration type.
   MCP_OAUTH_OWNER_SECRET: optionalNonEmpty,
+  MCP_OWNER_PASSWORD_HASH: optionalNonEmpty,
   MCP_OAUTH_STORE_PATH: dataPath('mcp-oauth.json'),
 
   // Optional static multi-client registry. A missing file is treated as empty.

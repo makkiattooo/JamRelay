@@ -1,6 +1,7 @@
+import { McpPermissionEngine } from './permissions.js';
 import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
-import { ProviderApiError } from '../providers/errors.js';
+import { CapabilityUnavailableError, ProviderApiError } from '../providers/errors.js';
 import { parseProviderIdentifier } from '../providers/identifiers.js';
 import { chunks } from '../utils/chunks.js';
 import { normalizeText, resolveCandidates } from '../music/normalize.js';
@@ -127,7 +128,6 @@ const BASE_REQUIRED_TOOL_NAMES = [
   'search_albums',
   'get_track',
   'get_artist',
-  'get_artist_top_tracks',
   'get_my_playlists',
   'get_playlist',
   'get_playlist_tracks',
@@ -206,6 +206,23 @@ export const SMART_PLAYLIST_TOOL_NAMES = [
   'optimize_playlist',
 ] as const;
 export const TOOLSET_PROFILES = {
+  essential: [
+    'get_connections',
+    'get_capabilities',
+    'search_tracks',
+    'get_track',
+    'get_my_playlists',
+    'get_playlist',
+    'get_playlist_tracks',
+    'create_playlist',
+    'add_tracks_to_playlist',
+    'remove_tracks_from_playlist',
+    'get_currently_playing',
+    'get_playback_state',
+    'play',
+    'pause',
+  ],
+  advanced: ['*'],
   core: [
     ...BASE_REQUIRED_TOOL_NAMES,
     'get_connections',
@@ -251,7 +268,6 @@ export const TOOLSET_PROFILES = {
     'search_albums',
     'get_track',
     'get_artist',
-    'get_artist_top_tracks',
     'get_top_tracks',
     'get_top_artists',
     'get_recently_played',
@@ -312,7 +328,60 @@ export const TOOLSET_PROFILES = {
 export type ToolsetProfile = keyof typeof TOOLSET_PROFILES;
 export function toolsetIncludes(profile: ToolsetProfile, name: string): boolean {
   const names = TOOLSET_PROFILES[profile] as readonly string[];
+  if (
+    profile === 'advanced' &&
+    ['get_state_diagnostics', 'get_rate_limit_status', 'get_recent_api_errors'].includes(name)
+  )
+    return false;
   return names.includes('*') || names.includes(name);
+}
+function toolAvailable(name: string, ids: string[], registry: ProviderRegistry) {
+  if (
+    [
+      'get_connections',
+      'get_capabilities',
+      'get_job_status',
+      'list_jobs',
+      'cancel_job',
+      'resume_job',
+      'commit_job',
+    ].includes(name)
+  )
+    return true;
+  const metadata = getToolSecurityMetadata(name)!;
+  const permission = metadata.permission;
+  const capability =
+    name === 'create_bulk_job'
+      ? 'catalog'
+      : name === 'get_recently_played'
+        ? 'history'
+        : ['get_top_tracks', 'get_top_artists', 'find_track_exact'].includes(name)
+          ? 'catalog'
+          : permission.startsWith('playback.')
+            ? 'playback'
+            : permission.startsWith('library.')
+              ? 'library'
+              : permission.startsWith('catalog.')
+                ? 'catalog'
+                : permission === 'playlist.write' || permission === 'playlist.destructive'
+                  ? 'playlistWrite'
+                  : permission === 'playlist.read' ||
+                      permission === 'personalization.read' ||
+                      permission.startsWith('transfer.')
+                    ? 'playlistRead'
+                    : undefined;
+  return (
+    !capability ||
+    registry
+      .listConnections()
+      .some(
+        (c) =>
+          ids.includes(c.connectionId) &&
+          (!metadata.providers || metadata.providers.includes(c.provider)) &&
+          c.connected !== false &&
+          c.capabilities[capability as keyof typeof c.capabilities],
+      )
+  );
 }
 export function executionClassForTool(name: string, mutation: boolean): ToolExecutionClass {
   const metadata = getToolSecurityMetadata(name);
@@ -330,6 +399,8 @@ export function registerTools(
   resolver?: TrackResolutionService,
 ) {
   const readRegistry = registry ?? createLegacyProviderRegistry(c);
+  const hasAccounts = () =>
+    readRegistry.hasConfiguredConnections?.() ?? readRegistry.listConnections().length > 0;
   const reads = new ProviderReadServices(readRegistry);
   const playlists = new PlaylistGateway(readRegistry);
   const routing = (a: any): ReadRoutingOptions & Record<string, unknown> => ({
@@ -339,13 +410,25 @@ export function registerTools(
     read_fallback: a.read_fallback,
   });
   const readSchema = {
-    connection_id: z.string().min(1).optional(),
+    connection_id: z
+      .string()
+      .min(1)
+      .describe(
+        'Music account connection ID from get_connections; access is limited by the current OAuth grant.',
+      )
+      .optional(),
     provider: z.string().min(1).optional(),
     preferred_connection_id: z.string().min(1).optional(),
     read_fallback: z.boolean().optional(),
   };
   const writeSchema = {
-    connection_id: z.string().min(1).optional(),
+    connection_id: z
+      .string()
+      .min(1)
+      .describe(
+        'Music account connection ID from get_connections; access is limited by the current OAuth grant.',
+      )
+      .optional(),
     provider: z.string().min(1).optional(),
     preferred_connection_id: z.string().min(1).optional(),
   };
@@ -361,100 +444,6 @@ export function registerTools(
     ...(result.provenance.fallback ? { read_fallback: true } : {}),
   });
   const original = s.registerTool.bind(s);
-  /* const legacyPermissionForTool = (name: string) => {
-    if (['get_connections', 'get_capabilities'].includes(name)) return 'diagnostics.read';
-    if (
-      [
-        'search_tracks',
-        'search_artists',
-        'search_albums',
-        'get_track',
-        'get_artist',
-        'get_playlist_stats',
-      ].includes(name)
-    )
-      return 'catalog.read';
-    if (
-      [
-        'get_my_playlists',
-        'get_playlist',
-        'get_playlist_tracks',
-        'get_playlist_chapters',
-        'chapterize_playlist',
-      ].includes(name)
-    )
-      return 'playlist.read';
-    if (
-      [
-        'get_top_tracks',
-        'get_top_artists',
-        'get_recently_played',
-        'get_saved_tracks',
-        'check_saved_tracks',
-        'find_track_exact',
-        'remember_track',
-      ].includes(name)
-    )
-      return 'library.read';
-    if (['get_currently_playing', 'get_playback_state', 'get_devices'].includes(name))
-      return 'playback.read';
-    if (['save_tracks', 'remove_saved_tracks'].includes(name)) return 'library.write';
-    if (
-      [
-        'play',
-        'pause',
-        'next_track',
-        'previous_track',
-        'seek',
-        'set_volume',
-        'transfer_playback',
-        'play_playlist_chapter',
-        'resume_playlist_chapter',
-      ].includes(name)
-    )
-      return 'playback.control';
-    if (
-      PLAYLIST_PERSONALIZATION_TOOL_NAMES.includes(
-        name as (typeof PLAYLIST_PERSONALIZATION_TOOL_NAMES)[number],
-      )
-    )
-      return 'personalization.read';
-    if (
-      [
-        'get_state_diagnostics',
-        'get_rate_limit_status',
-        'get_recent_api_errors',
-        'get_job_status',
-        'list_jobs',
-      ].includes(name)
-    )
-      return 'diagnostics.read';
-    if (['create_bulk_job', 'resume_job', 'commit_job', 'cancel_job'].includes(name))
-      return 'playlist.write';
-    if (
-      [
-        'create_playlist',
-        'add_tracks_to_playlist',
-        'update_playlist_details',
-        'reorder_playlist_tracks',
-      ].includes(name)
-    )
-      return 'playlist.write';
-    if (
-      [
-        'remove_tracks_from_playlist',
-        'replace_playlist_tracks',
-        'deduplicate_playlist',
-        'restore_playlist_snapshot',
-        'undo_last_playlist_change',
-      ].includes(name)
-    )
-      return 'playlist.destructive';
-    if (name === 'plan_playlist_transfer') return 'transfer.plan';
-    if (['execute_playlist_transfer', 'sync_playlist_transfer'].includes(name))
-      return 'transfer.execute';
-    return undefined;
-  }; */
   const permissionForTool = (name: string) => getToolSecurityMetadata(name)?.permission;
   const enforceAccess = (name: string, args: any) => {
     const access = toolContext.get()?.mcpAccess;
@@ -463,7 +452,18 @@ export function registerTools(
     // Access-controlled requests must never treat missing metadata as public.
     // This deliberately fails closed while a tool is being added to the catalog.
     if (!permission) throw new Error('TOOL_SECURITY_METADATA_MISSING');
-    if (!access.permissions?.includes(permission)) throw new Error('PERMISSION_NOT_GRANTED');
+    McpPermissionEngine.assert(
+      access,
+      name,
+      [
+        args?.connection_id,
+        args?.source_connection_id,
+        args?.destination_connection_id,
+        args?.preferred_connection_id,
+        args?.transfer_plan?.source_connection_id,
+        args?.transfer_plan?.destination_connection_id,
+      ].filter((id): id is string => typeof id === 'string'),
+    );
     if (name === 'get_connections') return undefined;
     if (['get_job_status', 'list_jobs', 'resume_job', 'commit_job', 'cancel_job'].includes(name))
       return undefined;
@@ -486,9 +486,15 @@ export function registerTools(
       return target;
     }
     const allowed = access.connectionIds ?? [];
-    if (!allowed.length) throw new Error('CONNECTION_NOT_GRANTED');
+    if (!allowed.length) {
+      if (!hasAccounts()) throw new Error('NO_MUSIC_ACCOUNTS');
+      throw new Error('CONNECTION_NOT_GRANTED');
+    }
     const requested =
-      args?.connection_id ?? args?.source_connection_id ?? args?.destination_connection_id;
+      args?.connection_id ??
+      args?.source_connection_id ??
+      args?.destination_connection_id ??
+      args?.transfer_plan?.destination_connection_id;
     if (requested && !allowed.includes(requested)) throw new Error('CONNECTION_NOT_GRANTED');
     if (requested) return requested;
     const writePermission = [
@@ -509,7 +515,7 @@ export function registerTools(
       args.read_fallback = false;
       return allowed[0];
     }
-    return undefined;
+    return requested;
   };
   const validateTarget = (a: any) => {
     if (
@@ -524,7 +530,6 @@ export function registerTools(
       const registrationMetadata = getToolSecurityMetadata(name);
       if (!registrationMetadata) throw new Error(`TOOL_SECURITY_METADATA_MISSING:${name}`);
       const wrapped = async (...args: any[]) => {
-        validateTarget(args[0]);
         const parentContext = toolContext.get();
         const requestId = parentContext?.requestId ?? `req_${globalThis.crypto.randomUUID()}`;
         const controller = new AbortController();
@@ -556,7 +561,22 @@ export function registerTools(
           };
         }
         try {
+          await McpPermissionEngine.enforce(name);
+          await readRegistry.refreshAuthorization?.();
           effectiveConnectionId = enforceAccess(name, args[0]);
+          validateTarget(args[0]);
+          if (effectiveConnectionId) {
+            const connection = readRegistry.getConnection(effectiveConnectionId);
+            if (!connection) throw new Error('CONNECTION_UNAVAILABLE');
+            if (metadata.providers && !metadata.providers.includes(connection.summary.provider))
+              throw new CapabilityUnavailableError(
+                name,
+                connection.summary.provider,
+                effectiveConnectionId,
+              );
+            if (connection.summary.connected === false)
+              throw new Error('MUSIC_ACCOUNT_AUTH_REQUIRED');
+          }
         } catch (error) {
           const normalized = toApiError(error);
           clearTimeout(timer);
@@ -581,10 +601,14 @@ export function registerTools(
               signal,
               deadlineAt,
               operation: name,
+              writeAllowed: !metadata.readOnly,
               mcpAccess:
-                effectiveConnectionId && parentContext?.mcpAccess
+                effectiveConnectionId &&
+                parentContext?.mcpAccess &&
+                !name.includes('playlist_transfer')
                   ? { ...parentContext.mcpAccess, connectionIds: [effectiveConnectionId] }
                   : parentContext?.mcpAccess,
+              resolveAccess: parentContext?.resolveAccess,
               singleflight: parentContext?.singleflight,
             },
             async () =>
@@ -608,6 +632,25 @@ export function registerTools(
             },
             'MCP tool succeeded',
           );
+          if (
+            name === 'get_connections' &&
+            Array.isArray((result as any)?.structuredContent) &&
+            !(result as any).structuredContent.length
+          ) {
+            (result as any).content.push({
+              type: 'text',
+              text: hasAccounts()
+                ? 'No music accounts are visible to this client. Ask the owner to authorize a provider account and approve its connection in this client OAuth grant.'
+                : 'No music accounts are configured. The owner should run jamrelay connect provider spotify (or another provider), authorize the music account, then reconnect this MCP client.',
+            });
+          }
+          if (
+            (result as any)?.structuredContent?.error ||
+            (result as any)?.structuredContent?.ok === false ||
+            (result as any)?.structuredContent?.status === 'failed' ||
+            (result as any)?.structuredContent?.partial_failure
+          )
+            (result as any).isError = true;
           return result;
         } catch (error) {
           const normalized = toApiError(error);
@@ -658,7 +701,12 @@ export function registerTools(
         }
       };
       if (!toolsetIncludes(toolset, name)) return undefined;
-      return original(
+      const access = toolContext.get()?.mcpAccess;
+      const enabled =
+        !access ||
+        (McpPermissionEngine.allows(access, name) &&
+          toolAvailable(name, access.connectionIds ?? [], readRegistry));
+      const registered = original(
         name,
         {
           ...config,
@@ -672,6 +720,8 @@ export function registerTools(
         },
         wrapped,
       );
+      if (!enabled) registered?.disable();
+      return registered;
     },
   } as unknown as McpServer;
   s.registerTool(
@@ -695,7 +745,12 @@ export function registerTools(
           return {
             connection_id: connection.connectionId,
             provider: connection.provider,
-            status: connection.connected === false ? 'disconnected' : 'connected',
+            status:
+              connection.connected === false
+                ? 'authentication_required'
+                : connection.connected === true
+                  ? 'authenticated'
+                  : 'not_live_verified',
             capabilities: connection.capabilities,
             default: connection.connectionId === (preferred.read ?? connections[0]?.connectionId),
             preferred_read: connection.connectionId === preferred.read,
@@ -865,7 +920,13 @@ export function registerTools(
       description: 'Describe supported provider operations and explain unavailable capabilities.',
       inputSchema: {
         provider: z.string().min(1).optional(),
-        connection_id: z.string().min(1).optional(),
+        connection_id: z
+          .string()
+          .min(1)
+          .describe(
+            'Music account connection ID from get_connections; access is limited by the current OAuth grant.',
+          )
+          .optional(),
       },
     },
     async (a: any) => {
@@ -964,25 +1025,6 @@ export function registerTools(
         );
       },
     );
-  s.registerTool(
-    'get_artist_top_tracks',
-    {
-      title: 'Get artist top tracks',
-      description:
-        'Spotify removed the official endpoint in February 2026; this tool returns a structured platform limitation.',
-      inputSchema: { artist_id: id },
-    },
-    async () =>
-      out({
-        ok: false,
-        error: {
-          type: 'spotify_feature_removed',
-          code: 'artist_top_tracks_endpoint_removed',
-          message: 'Spotify removed Get Artist Top Tracks in February 2026.',
-          removed_by_spotify: true,
-        },
-      }),
-  );
   s.registerTool(
     'get_my_playlists',
     {

@@ -1,8 +1,12 @@
+import { ownerCredentialFields } from './owner-password.js';
 type AuthorizePageData = {
   clientName: string;
   fields: Record<string, string>;
   connections?: Array<{ id: string; provider: string; name: string }>;
   permissions?: string[];
+  selectedPermissions?: string[];
+  selectedConnections?: string[];
+  hasPassword?: boolean;
 };
 
 type ErrorPageData = {
@@ -51,6 +55,15 @@ const pageStart = (title: string) => `<!doctype html>
     .cancel:hover { color: #c9d1d9; }
     .error { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 24px; padding: 2px 0 2px 12px; border-left: 2px solid #da3633; color: #c9d1d9; font-size: 14px; line-height: 1.5; }
     .error-icon { flex: 0 0 auto; color: #f85149; font-weight: 700; }
+    .auth-form { display: grid; gap: 18px; }
+    .auth-form > label, .credential-field { display: grid; gap: 8px; margin: 0; color: #c9d1d9; font-size: 14px; font-weight: 600; }
+    input[type="password"] { min-height: 44px; }
+    details.recovery { padding: 14px; border: 1px solid #30363d; border-radius: 8px; background: #0d1117; }
+    details.recovery summary { color: #8b949e; font-size: 13px; cursor: pointer; }
+    details.recovery p { margin: 12px 0; color: #8b949e; font-size: 13px; line-height: 1.5; }
+    .primary:focus-visible, summary:focus-visible, input:focus-visible { outline: 2px solid #2fbbd0; outline-offset: 3px; }
+    .primary { background: #168da2; }
+    .primary:hover { background: #1aa5bb; }
     footer { margin-top: 28px; color: #6e7681; font-size: 12px; text-align: center; }
     @media (max-width: 520px) { .card { padding: 28px 22px; } body { padding: 14px; } }
   </style>
@@ -62,15 +75,27 @@ const pageEnd = `</body>
 </html>`;
 
 const logo =
-  '<img src="/assets/icons/jamrelay-icon-dark.png.png" alt="JamRelay" width="32" height="32">';
+  '<img src="/assets/icons/jamrelay-icon-dark.png" alt="JamRelay" width="32" height="32">';
 
 const brandName = 'JamRelay Connect';
+
+export const renderStandaloneAuthPage = (title: string, body: string) => `${pageStart(title)}
+  <main class="card">
+    <div class="brand">${logo}<span>${brandName}</span></div>
+    <h1>${escapeHtml(title)}</h1>
+    ${body}
+    <footer>JamRelay · Secure owner access</footer>
+  </main>
+${pageEnd}`;
 
 export const renderAuthorizePage = ({
   clientName,
   fields,
   connections = [],
   permissions = [],
+  selectedPermissions,
+  selectedConnections,
+  hasPassword = false,
 }: AuthorizePageData) => {
   const hiddenFields = Object.entries(fields)
     .map(
@@ -79,11 +104,40 @@ export const renderAuthorizePage = ({
     )
     .join('');
 
-  return `${pageStart('Connect ChatGPT to JamRelay')}
+  const title = 'Connect an AI client to JamRelay';
+  const selected = new Set(
+    selectedPermissions ?? permissions.filter((p) => p.endsWith('.read') || p === 'transfer.plan'),
+  );
+  const descriptions: Record<string, string> = {
+    'library.write': 'Save or remove items in your library.',
+    'playlist.write': 'Create, add to and reorder playlists.',
+    'playback.control': 'Start, pause or change playback and volume.',
+    'transfer.execute': 'Write playlists to a selected destination account.',
+    'playlist.destructive': 'Remove, replace or restore playlist contents. Review previews first.',
+  };
+  const groups = [
+    ['Read-only access', permissions.filter((p) => p.endsWith('.read') || p === 'transfer.plan')],
+    [
+      'Optional library and playlist modifications',
+      permissions.filter((p) => ['library.write', 'playlist.write'].includes(p)),
+    ],
+    ['Optional playback control', permissions.filter((p) => p === 'playback.control')],
+    ['Optional transfer execution', permissions.filter((p) => p === 'transfer.execute')],
+    ['Optional destructive operations', permissions.filter((p) => p === 'playlist.destructive')],
+  ] as const;
+  const permissionSections = groups
+    .filter(([, entries]) => entries.length)
+    .map(
+      ([label, entries]) =>
+        `<section class="permissions"><p class="permissions-title">${escapeHtml(label)}</p><ul>${entries.map((x) => `<li><label><input type="checkbox" name="permissions" value="${escapeHtml(x)}"${selected.has(x) ? ' checked' : ''}> ${escapeHtml(x)}${descriptions[x] ? `<br><small>${escapeHtml(descriptions[x])}</small>` : ''}</label></li>`).join('')}</ul></section>`,
+    )
+    .join('');
+  return `${pageStart(title)}
   <main class="card">
     <div class="brand">${logo}<span>${brandName}</span></div>
-    <h1>Connect ChatGPT to JamRelay</h1>
+    <h1>${escapeHtml(title)}</h1>
     <p class="intro"><span class="client">${escapeHtml(clientName)}</span> is requesting access to your JamRelay account.</p>
+    <p class="intro">OAuth registration: <code>${escapeHtml(fields.client_id ?? 'unknown')}</code>. The displayed client name is supplied by its registration.</p>
     <section class="permissions" aria-labelledby="permissions-title">
       <p class="permissions-title" id="permissions-title">This connection can</p>
       <ul>
@@ -93,10 +147,9 @@ export const renderAuthorizePage = ({
     </section>
     <form method="post" action="/oauth/authorize">
       ${hiddenFields}
-      ${connections.length ? `<section class="permissions"><p class="permissions-title">Provider connections</p><ul>${connections.map((x) => `<li><label><input type="checkbox" name="connection_ids" value="${escapeHtml(x.id)}" checked> ${escapeHtml(x.provider)} / ${escapeHtml(x.name)}</label></li>`).join('')}</ul></section>` : ''}
-      ${permissions.length ? `<section class="permissions"><p class="permissions-title">Allowed operation groups</p><ul>${permissions.map((x) => `<li><label><input type="checkbox" name="permissions" value="${escapeHtml(x)}" checked> ${escapeHtml(x)}</label></li>`).join('')}</ul></section>` : ''}
-      <label for="owner-secret">Owner secret</label>
-      <input id="owner-secret" name="owner_secret" type="password" required autocomplete="current-password">
+      ${connections.length ? `<section class="permissions"><p class="permissions-title">Provider connections</p><ul>${connections.map((x) => `<li><label><input type="checkbox" name="connection_ids" value="${escapeHtml(x.id)}"${selectedConnections?.includes(x.id) ? ' checked' : ''}> ${escapeHtml(x.provider)} / ${escapeHtml(x.name)}</label></li>`).join('')}</ul></section>` : ''}
+      ${permissionSections}
+      ${ownerCredentialFields(hasPassword)}
       <div class="actions">
         <button class="primary" type="submit">Authorize access</button>
         <button class="cancel" type="submit" name="decision" value="cancel" formnovalidate>Cancel</button>
@@ -119,7 +172,7 @@ ${pageEnd}`;
 export const oauthPageHeaders = {
   'Cache-Control': 'no-store',
   Pragma: 'no-cache',
-  'Referrer-Policy': 'no-referrer',
+  'Referrer-Policy': 'same-origin',
   'Content-Security-Policy':
     "default-src 'none'; img-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
 };

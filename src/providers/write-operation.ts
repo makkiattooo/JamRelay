@@ -1,3 +1,4 @@
+import { McpPermissionEngine } from '../mcp/permissions.js';
 import { toolContext } from '../mcp/context.js';
 import { isJobCancelled } from '../db/jobs.js';
 import { chunks } from '../utils/chunks.js';
@@ -46,6 +47,7 @@ export async function writeChunks<T>(
       const context = toolContext.get();
       if (context?.signal.aborted || (context?.queueJobId && isJobCancelled(context.queueJobId)))
         throw new Error('OPERATION_CANCELLED');
+      await McpPermissionEngine.enforce();
       const result = await write(parts[i], i);
       written += parts[i].length;
       last_snapshot_id = result?.snapshot_id ?? last_snapshot_id;

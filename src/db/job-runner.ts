@@ -1,3 +1,5 @@
+import { McpPermissionEngine } from '../mcp/permissions.js';
+import type { McpOAuthStore } from '../mcp/oauth.js';
 import { getDatabase } from './database.js';
 import { toolContext } from '../mcp/context.js';
 import { getRateLimit, recordRateLimit } from './state.js';
@@ -106,6 +108,7 @@ export class JobRunner {
       info?: (x: unknown, message: string) => void;
       warn?: (x: unknown, message: string) => void;
     },
+    private permissionStore?: McpOAuthStore,
   ) {
     for (const type of JOB_TYPES)
       this.executors.set(type, (execution) => this.resolveItems(execution));
@@ -175,7 +178,30 @@ export class JobRunner {
       return;
     }
     try {
-      await executor({ id, provider, connectionId, signal });
+      const saved = job.authorization ? JSON.parse(job.authorization) : undefined;
+      if (
+        job.ownerClientId &&
+        (!saved || saved.clientId !== job.ownerClientId || !this.permissionStore)
+      )
+        throw new Error('CLIENT_REVOKED');
+      const resolveAccess =
+        job.ownerClientId && this.permissionStore
+          ? () => this.permissionStore!.policyFor(job.ownerClientId, saved?.issuedAt)
+          : undefined;
+      await toolContext.run(
+        {
+          requestId: `job_${id}`,
+          signal,
+          deadlineAt: Date.now() + 300_000,
+          operation: saved?.tool ?? 'create_bulk_job',
+          mcpAccess: saved,
+          resolveAccess,
+        },
+        async () => {
+          await McpPermissionEngine.enforce(undefined, [connectionId]);
+          await executor({ id, provider, connectionId, signal });
+        },
+      );
     } catch (error) {
       if (signal.aborted || isJobCancelled(id)) return;
       const e = error as {
@@ -198,6 +224,13 @@ export class JobRunner {
           'waiting',
           Math.max(Date.now() + seconds * 1000, state?.blockedUntil ?? 0),
         );
+      } else if (
+        ['CLIENT_REVOKED', 'PERMISSION_NOT_GRANTED', 'CONNECTION_NOT_GRANTED'].includes(
+          e.message ?? '',
+        )
+      ) {
+        recordJobError(id, e.message!);
+        setJobStatus(id, 'failed');
       } else {
         recordJobError(
           id,
@@ -218,14 +251,16 @@ export class JobRunner {
     updateJobPayload(id, { ...job.payload, phase: 'resolving' });
     for (const item of getNextJobItems(id, 25)) {
       if (signal.aborted || isJobCancelled(id)) return;
+      await McpPermissionEngine.enforce(undefined, [connectionId]);
       const input = JSON.parse(item.payload) as Record<string, unknown>;
       const resolution = await toolContext.run(
         {
+          ...toolContext.get(),
           requestId: `job_${id}`,
           queueJobId: id,
           signal,
           deadlineAt: Date.now() + 60_000,
-          operation: `job:${job.type}`,
+          operation: toolContext.get()?.operation ?? 'create_bulk_job',
         },
         async () => {
           if (typeof input.id === 'string' || typeof input.uri === 'string') {

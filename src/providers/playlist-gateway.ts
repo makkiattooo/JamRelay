@@ -1,3 +1,4 @@
+import { McpPermissionEngine } from '../mcp/permissions.js';
 import { ProviderSelectionError } from './errors.js';
 import type { ProviderRegistry } from './registry.js';
 import type { ProviderConnection } from './types.js';
@@ -39,7 +40,10 @@ export class PlaylistGateway {
         'write',
         [connection.summary.connectionId],
       );
-    return operation(connection);
+    return McpPermissionEngine.enforceWrite(
+      [connection.summary.connectionId],
+      ['remove', 'replace'].includes(operationName),
+    ).then(() => operation(connection));
   }
 
   assertSupported(operation: PlaylistOperation, options: PlaylistWriteTarget = {}) {
@@ -74,15 +78,21 @@ export class PlaylistGateway {
 
   list(options: Record<string, unknown> = {}) {
     const connection = this.resolveReadTarget(options);
-    return connection.playlistRead!.listPlaylists(options);
+    return McpPermissionEngine.enforce(undefined, [connection.summary.connectionId]).then(() =>
+      connection.playlistRead!.listPlaylists(options),
+    );
   }
   get(id: string, options: Record<string, unknown> = {}) {
     const connection = this.resolveReadTarget(options);
-    return connection.playlistRead!.getPlaylist(id, options);
+    return McpPermissionEngine.enforce(undefined, [connection.summary.connectionId]).then(() =>
+      connection.playlistRead!.getPlaylist(id, options),
+    );
   }
   items(id: string, options: Record<string, unknown> = {}) {
     const connection = this.resolveReadTarget(options);
-    return connection.playlistRead!.getPlaylistTracks(id, options);
+    return McpPermissionEngine.enforce(undefined, [connection.summary.connectionId]).then(() =>
+      connection.playlistRead!.getPlaylistTracks(id, options),
+    );
   }
   create(input: unknown, options: PlaylistWriteTarget = {}) {
     return this.write(options, 'create', (c) => c.playlistWrite!.createPlaylist(input));

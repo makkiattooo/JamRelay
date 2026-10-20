@@ -10,6 +10,8 @@ services:
       JAMRELAY_INSTALL_MODE: docker
       JAMRELAY_CONFIG_PATH: /data/jamrelay.env
       JAMRELAY_DATA_DIR: /data
+      JAMRELAY_SERVICE_URL: http://jamrelay:5267
+      JAMRELAY_HOST_PORT: ${JAMRELAY_PORT:-5267}
       HOST: 0.0.0.0
       PORT: 5267
     ports:

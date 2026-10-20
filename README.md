@@ -52,11 +52,15 @@ Requires **Node.js 22.13 or later**. Once the official npm package is published:
 npm install -g jamrelay
 jamrelay setup
 jamrelay start
+jamrelay onboard
 ```
 
-The terminal wizard configures storage, owner security and optional providers.
+The setup command configures storage and a masked owner password, then exits. Run
+`jamrelay onboard` to configure network access, music connections and MCP clients
+or open the management menu.
 You obtain provider developer credentials yourself and authorize accounts
-separately through the owner consent flow.
+separately through the owner consent flow. Existing installations can stop the
+server and run `jamrelay owner password` without changing encryption keys.
 
 **Public distribution is pending.** For a development checkout or candidate
 archive, follow [installation](docs/installation.md). The same page covers the
@@ -78,7 +82,10 @@ requires an eligible account and active device.
 ## Connect your AI agent
 
 Add the MCP endpoint shown by setup to a compatible client, complete owner
-OAuth consent, then request its tool list to verify the connection. The local
+OAuth consent, then request its tool list to verify the connection. `jamrelay connect client
+claude-code` can register a local Claude Code installation after confirmation;
+inside Docker it prints the exact host-side command. Use `--verify` afterward
+to check actual OAuth authentication and tool discovery. The local
 default is `http://localhost:5267/mcp`; remote access requires reachable HTTPS.
 
 [ChatGPT](docs/clients/chatgpt.md) · [Claude](docs/clients/claude.md) ·
@@ -93,6 +100,9 @@ default is `http://localhost:5267/mcp`; remote access requires reachable HTTPS.
 - [Operations and backups](docs/operations.md)
 - [Generated MCP tool reference](docs/tools-reference.md)
 - [Security](docs/security.md)
+
+Provider integrations require individual credentials and authorization; live
+verification is separate from automated tests. See the [release review notes](docs/deployment/release-candidate.md).
 
 English is canonical. Entry points are available in [Polski](docs/pl/index.md),
 [Deutsch](docs/de/index.md), [Français](docs/fr/index.md) and
@@ -111,3 +121,24 @@ JamRelay is licensed under [AGPL-3.0-only](LICENSE); see
 
 This is an unofficial community project, unaffiliated with music providers or
 AI platform vendors. Provider terms and API limitations still apply.
+
+### Manage MCP permissions
+
+Permissions belong to authenticated OAuth registrations, independently of the model or application name. New approvals default to read-only and require explicit account selection. Existing grants, credentials and database migrations are preserved.
+
+```bash
+jamrelay clients list
+jamrelay clients show CLIENT_ID
+jamrelay clients permissions CLIENT_ID
+jamrelay clients permissions set CLIENT_ID
+jamrelay clients permissions set CLIENT_ID --permissions catalog.read,playlist.read --connections spotify-default --tools all
+jamrelay clients revoke CLIENT_ID
+jamrelay clients policy
+jamrelay clients policy set --permissions catalog.read,playlist.read,diagnostics.read --tools all
+```
+
+`permissions set` opens an interactive selector without flags; `--tools` can restrict a grant to comma-separated tool names. Empty scope/account/tool lists deny access. Policy changes alter initial consent defaults only; existing grants remain unchanged. Grant changes apply to existing tokens and queued work immediately. Refresh the client's tool list after editing; revoked OAuth clients must authorize again. An external provider request already accepted cannot be recalled. Legacy API-key access remains an owner-controlled shared registration named `api-key`; use OAuth for separate client identities.
+
+New installations default to `JAMRELAY_TOOLSET=essential` (14 common tools before permission/capability filtering). `advanced` adds music automation, transfer and personalization; `all` also exposes authorized internal diagnostics. Existing configured profiles are retained. Version 1.5.7 retires 20 nonfunctional/obsolete tool registrations; the full catalog has 95 tools with database features enabled. Provider support and grants can reduce discovery further.
+
+`jamrelay connect client cursor` and `jamrelay connect client vscode` offer project/user configuration with JSONC preservation and backups. Different existing JamRelay entries are preserved for manual review. Claude Code registration uses its installed CLI; Claude Desktop can use the optional local stdio bridge described in [the client guide](docs/clients/claude.md). Containers print instructions for the host (PowerShell on Windows). OAuth login, observed tool discovery and provider authorization remain separate verification steps. Spotify and native Windows Docker/Desktop flows require the owner's live test.

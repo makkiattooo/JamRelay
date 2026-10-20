@@ -316,11 +316,14 @@ describe('Express MCP body limit', () => {
   };
   async function request(payload: unknown) {
     await setup();
-    const app = createApp(cfg, {
-      auth: { connected: async () => false } as any,
-      client: { request: async () => null, json: async () => null } as any,
-      logger: { info() {}, warn() {} } as any,
-    });
+    const app = createApp(
+      { ...cfg, MCP_OAUTH_STORE_PATH: join(root!, 'oauth.json') },
+      {
+        auth: { connected: async () => true } as any,
+        client: { request: async () => null, json: async () => null } as any,
+        logger: { info() {}, warn() {} } as any,
+      },
+    );
     const server = app.listen(0, '127.0.0.1');
     await new Promise<void>((r) => server.once('listening', () => r()));
     const address = server.address() as any;

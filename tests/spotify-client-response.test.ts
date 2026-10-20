@@ -1,3 +1,4 @@
+import { toolContext } from '../src/mcp/context.js';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { SpotifyClient } from '../src/spotify/client.js';
 import { SpotifyApiError } from '../src/spotify/errors.js';
@@ -121,4 +122,38 @@ describe('SpotifyClient successful response parsing', () => {
     expect(body.result.isError).not.toBe(true);
     expect(body.result.content[0].text).toBe('null');
   });
+});
+
+it('does not retry a provider write after its live MCP grant is revoked during token refresh', async () => {
+  const access = {
+    clientId: 'a',
+    connectionIds: ['spotify-default'],
+    permissions: ['playback.control'],
+  };
+  let revoked = false;
+  const fetcher = vi
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValue(new Response('{}', { status: 401 }));
+  const spotify = new SpotifyClient({
+    accessToken: async (refresh: boolean) => {
+      if (refresh) revoked = true;
+      return 'test';
+    },
+  } as any);
+  await toolContext.run(
+    {
+      requestId: 'retry-revocation',
+      signal: new AbortController().signal,
+      deadlineAt: Date.now() + 1000,
+      operation: 'pause',
+      mcpAccess: access,
+      resolveAccess: async () => (revoked ? undefined : access),
+    },
+    async () => {
+      await expect(spotify.request('/me/player/pause', { method: 'PUT' })).rejects.toThrow(
+        'CLIENT_REVOKED',
+      );
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    },
+  );
 });

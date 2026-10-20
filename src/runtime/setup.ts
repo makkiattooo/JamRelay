@@ -1,26 +1,39 @@
+import { hashOwnerPassword, passwordProblem, validPasswordHash } from '../mcp/owner-password.js';
 import { randomBytes } from 'node:crypto';
 import { existsSync, accessSync, constants, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve, isAbsolute, join } from 'node:path';
-import { createServer } from 'node:net';
-import { createInterface } from 'node:readline/promises';
-import { getConfig } from '../config.js';
+import { createServer, isIP } from 'node:net';
+import { isContainer } from '../cli/browser.js';
+import { effectiveBaseUrl, getConfig, localBaseUrl } from '../config.js';
 import {
   currentLanguage,
   translator,
   knownMessage,
   languages,
-  languagePrompt,
-  selectLanguage,
-  yesNo,
   rememberErrorLanguage,
   languageNames,
+  type Message,
+  type Language,
 } from '../cli/i18n/index.js';
-import { clearScreen, selectOption, welcome } from '../cli/tui.js';
+import {
+  clearScreen,
+  promptConfirm,
+  promptText as passwordPrompt,
+  promptText,
+  selectOption,
+  menuPanel,
+  setTuiContext,
+  showPanel,
+  showLoadingPanel,
+  welcome,
+  waitForEnter,
+} from '../cli/tui.js';
 import {
   installationPaths,
   readSettings,
   saveSettings,
   lockInstallation,
+  INSTALLATION_LOCKED_MESSAGE,
   runtimePath,
 } from './installation.js';
 
@@ -28,15 +41,28 @@ export const supportedNode = () => {
   const [major, minor] = process.versions.node.split('.').map(Number);
   return major > 22 || (major === 22 && minor >= 13);
 };
+function privateHttpHost(hostname: string) {
+  const host = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (['localhost', '127.0.0.1', '::1'].includes(host)) return true;
+  const version = isIP(host);
+  if (version === 4) {
+    const octets = host.split('.').map(Number);
+    return (
+      octets[0] === 10 ||
+      (octets[0] === 192 && octets[1] === 168) ||
+      (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31)
+    );
+  }
+  return version === 6 && /^(fc|fd|fe8)/.test(host);
+}
 export function validateSettings(settings: Record<string, string>) {
   const config = getConfig(settings);
+  if (config.MCP_OWNER_PASSWORD_HASH && !validPasswordHash(config.MCP_OWNER_PASSWORD_HASH))
+    throw new Error('Invalid owner password hash. Use jamrelay owner password.');
   const url = new URL(config.PUBLIC_BASE_URL);
   if (url.username || url.password || url.search || url.hash || url.pathname !== '/')
     throw new Error('Public URL must be an origin without credentials, path, query or fragment.');
-  if (
-    url.protocol !== 'https:' &&
-    !(url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))
-  )
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && privateHttpHost(url.hostname)))
     throw new Error('Remote access requires an HTTPS public URL.');
   if (!config.MCP_OAUTH_OWNER_SECRET || config.MCP_OAUTH_OWNER_SECRET.length < 32)
     throw new Error(
@@ -85,42 +111,27 @@ function assets() {
 }
 export async function setup(nonInteractive = false, reconfigure = false) {
   let language = currentLanguage();
-  let t = translator(language);
+  let t: (message: Message, ...values: unknown[]) => string = translator(language);
   if (!supportedNode()) throw new Error('Node.js >=22.13.0 is required.');
   if (!nonInteractive && !process.stdin.isTTY)
     throw new Error(
       'Interactive setup requires a terminal. For automation use setup --yes with environment variables.',
     );
   assets();
-  const paths = installationPaths();
+  let paths = installationPaths();
   let unlock = () => {};
   let closeDatabase = () => {};
-  let terminal: ReturnType<typeof createInterface> | undefined;
-  let inputAbort: AbortController;
   let stateForSetup: typeof import('../cli/state.js') | undefined;
   let notificationPreference: boolean | undefined;
   const ask = async (label: string, fallback: string) => {
-    if (!terminal) {
-      inputAbort = new AbortController();
-      terminal = createInterface({ input: process.stdin, output: process.stdout });
-      terminal.once('SIGINT', () => inputAbort.abort());
-      terminal.once('close', () => inputAbort.abort());
-    }
-    try {
-      return (
-        (
-          await terminal.question(`${label} [${fallback}]: `, { signal: inputAbort.signal })
-        ).trim() || fallback
-      );
-    } catch {
-      throw new Error('Setup cancelled.');
-    }
+    return promptText(label, fallback);
   };
   try {
     if (!nonInteractive) {
+      setTuiContext({ step: null, total: null, language: 'en' });
       clearScreen();
       const detected = Math.max(0, languages.indexOf(language));
-      let chosen = await selectOption(
+      const chosen = await selectOption(
         languages.map((item) => ({ label: languageNames[item], value: item })),
         detected,
         (cursor) =>
@@ -129,40 +140,129 @@ export async function setup(nonInteractive = false, reconfigure = false) {
             cursor,
           ),
       );
-      if (!chosen) {
-        do {
-          chosen = selectLanguage(
-            await ask(languagePrompt, String(languages.indexOf(language) + 1)),
-            language,
-          );
-        } while (!chosen);
-      }
+      if (!chosen) throw new Error('Setup cancelled.');
       language = chosen;
       t = translator(language);
+      setTuiContext({ step: null, total: null, language });
     }
+    let connectivityMode = 'standard';
     const confirm = async (label: string, fallback: boolean) => {
       for (;;) {
-        const answer = yesNo(
-          await ask(`${label} (${t('yes/no')})`, t(fallback ? 'yes' : 'no')),
-          language,
-        );
-        if (answer !== undefined) return answer;
-        console.log(t('Please answer yes or no.'));
+        return promptConfirm(label, t('yes'), t('no'), fallback);
       }
     };
     const initial = readSettings(paths.config);
     let mode = process.env.JAMRELAY_INSTALL_MODE || initial.JAMRELAY_INSTALL_MODE || 'local';
     if (!['local', 'docker'].includes(mode))
       throw new Error('Choose local or docker installation mode.');
+    // Esc on the environment menu returns to the configuration level menu.
+    for (;;) {
+      if (!nonInteractive && !reconfigure) {
+        const selectedLevel = await selectOption(
+          [
+            { value: 'standard', label: t('Standard — recommended setup with common choices') },
+            {
+              value: 'advanced',
+              label: `${t('Advanced — all settings, including a custom env file path')} — ${t('Beta')}`,
+            },
+          ],
+          0,
+          (cursor) =>
+            menuPanel(
+              t('Choose configuration level'),
+              [
+                t('Standard — recommended setup with common choices'),
+                `${t('Advanced — all settings, including a custom env file path')} — ${t('Beta')}`,
+              ],
+              cursor,
+            ),
+        );
+        if (!selectedLevel) throw new Error('Setup cancelled.');
+        connectivityMode = selectedLevel;
+      }
+      if (nonInteractive) break;
+      showPanel(
+        t('Installation environment'),
+        t(
+          'Choose how JamRelay will run. Local Node.js is simplest for a single computer; Docker Compose is useful for an isolated service.',
+        ),
+      );
+      const modes = [
+        { label: t('Local Node.js installation'), value: 'local' },
+        { label: t('Docker Compose installation'), value: 'docker' },
+      ];
+      let selectedMode: string | undefined;
+      for (;;) {
+        selectedMode = await selectOption(
+          modes,
+          Math.max(
+            0,
+            modes.findIndex((item) => item.value === mode),
+          ),
+          (cursor) =>
+            menuPanel(
+              t('Installation environment'),
+              modes.map((item) => item.label),
+              cursor,
+            ),
+        );
+        if (selectedMode !== 'local' || !isContainer()) break;
+        showPanel(
+          t('Local Node.js installation'),
+          t(
+            'This setup is running inside Docker, so it cannot install Node.js on the host. Choose Docker Compose to continue here, or exit the container and run `jamrelay setup` in PowerShell or your host terminal.',
+          ),
+        );
+        mode = 'docker';
+      }
+      if (!selectedMode) {
+        if (reconfigure) throw new Error('Setup cancelled.');
+        continue;
+      }
+      if (selectedMode === 'docker' && !isContainer()) {
+        showPanel(
+          t('Docker Compose installation'),
+          t(
+            'From the directory containing compose.yml, run:\n\n  docker compose run --rm -it jamrelay setup\n\nThis starts the complete wizard inside the Compose service and saves settings to its persistent /data volume.',
+          ),
+        );
+        return false;
+      }
+      mode = selectedMode;
+      break;
+    }
     if (mode === 'docker' && !existsSync(paths.config) && !process.env.JAMRELAY_CONFIG_PATH)
       paths.config = '/data/jamrelay.env';
+    if (!nonInteractive && connectivityMode === 'advanced') {
+      const configPath = await ask(
+        t('Configuration env file path (edit to use another file)'),
+        paths.config,
+      );
+      if (configPath.trim()) {
+        process.env.JAMRELAY_CONFIG_PATH = resolve(configPath.trim());
+        paths = installationPaths();
+      }
+    }
     if (!nonInteractive)
-      console.log(
+      showPanel(
+        t('Setup'),
         t('JamRelay stores settings and access credentials in its private data directory.'),
       );
     paths.legacy = paths.config === resolve('.env') && existsSync(paths.config);
     writable(paths.config);
-    unlock = await lockInstallation(paths.config);
+    try {
+      unlock = await lockInstallation(paths.config);
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== INSTALLATION_LOCKED_MESSAGE) throw error;
+      const lockMessage = t(INSTALLATION_LOCKED_MESSAGE);
+      showPanel(t('Setup is still active'), lockMessage);
+      await waitForEnter(t('Press Enter to finish setup'));
+      showPanel(
+        t('Setup ended without changes'),
+        t('No configuration was changed because JamRelay is still running or setup is active.'),
+      );
+      return 'locked';
+    }
     const saved = readSettings(paths.config);
     // Persist existing env overrides as well, using the same config keys as the runtime.
     if (
@@ -183,10 +283,13 @@ export async function setup(nonInteractive = false, reconfigure = false) {
         )
       )
         settings[key] = value;
-    console.log(
-      `JamRelay ${t(existsSync(paths.config) ? 'Reconfiguration' : 'Setup')} — ${process.platform}, Node ${process.versions.node}\n${t('Configuration')}: ${paths.config}`,
-    );
+    if (!nonInteractive)
+      showPanel(
+        t(existsSync(paths.config) ? 'Reconfiguration' : 'Setup'),
+        `${process.platform}, Node ${process.versions.node}\n${t('Configuration')}: ${paths.config}`,
+      );
     settings.JAMRELAY_INSTALL_MODE = mode;
+    if (!reconfigure) settings.JAMRELAY_SETUP_MODE = connectivityMode;
     const legacyProduction = paths.legacy && process.env.NODE_ENV === 'production';
     settings.JAMRELAY_DATA_DIR ||=
       settings.JAMRELAY_INSTALL_MODE === 'docker' ? '/data' : paths.data;
@@ -207,18 +310,49 @@ export async function setup(nonInteractive = false, reconfigure = false) {
       );
     settings.TOKEN_ENCRYPTION_KEY ||= randomBytes(32).toString('base64');
     settings.MCP_OAUTH_OWNER_SECRET ||= randomBytes(32).toString('base64url');
+    if (
+      !nonInteractive &&
+      !settings.MCP_OWNER_PASSWORD_HASH &&
+      (await confirm(t('Create an owner password?'), true))
+    ) {
+      settings.MCP_OWNER_PASSWORD_HASH = await promptOwnerPassword(language);
+    }
     settings.HOST ||= settings.JAMRELAY_INSTALL_MODE === 'docker' ? '0.0.0.0' : '127.0.0.1';
     settings.PORT ||= '5267';
-    settings.PUBLIC_BASE_URL ||= `http://localhost:${settings.PORT}`;
+    settings.PUBLIC_BASE_URL ||= localBaseUrl({ ...process.env, PORT: settings.PORT });
+    const effectiveEnv = {
+      ...process.env,
+      JAMRELAY_INSTALL_MODE: mode,
+      JAMRELAY_HOST_PORT: process.env.JAMRELAY_HOST_PORT,
+    };
+    const suggestedOrigin = effectiveBaseUrl(settings, effectiveEnv);
+    const savedOrigin = new URL(settings.PUBLIC_BASE_URL).origin;
+    if (
+      !nonInteractive &&
+      process.env.PUBLIC_BASE_URL === undefined &&
+      suggestedOrigin !== savedOrigin &&
+      mode === 'docker'
+    ) {
+      showPanel(
+        t('Docker host address'),
+        `${t('The saved local address uses the old default port.')}\n${t('Current host address')}: ${suggestedOrigin}\n${t('This changes generated OAuth callback URLs. Update redirect URLs in provider dashboards before reconnecting.')}`,
+      );
+      if (
+        await confirm(t('Update the saved local address to match the published Docker port?'), true)
+      )
+        settings.PUBLIC_BASE_URL = suggestedOrigin;
+    }
     settings.TRUST_PROXY ||= 'false';
     if (reconfigure && !nonInteractive) {
-      console.log(
+      showPanel(
+        t('Advanced settings'),
         t(
           'Advanced settings are optional. Keep the defaults unless you need remote access or a nonstandard port.',
         ),
       );
       if (await confirm(t('Open advanced network settings?'), false)) {
-        console.log(
+        showPanel(
+          t('Network safety'),
           t(
             'Only trust a reverse proxy that you control and that terminates HTTPS. Do not enable proxy trust on a directly exposed server.',
           ),
@@ -235,13 +369,16 @@ export async function setup(nonInteractive = false, reconfigure = false) {
       }
     }
     if (!nonInteractive)
-      console.log(
+      showPanel(
+        t('Network access'),
         t(
           'Local setup uses a private address. Remote AI clients need a reachable HTTPS address through a reverse proxy; advanced network settings stay unchanged.',
         ),
       );
-    const origin = settings.PUBLIC_BASE_URL.replace(/\/$/, '');
+    const origin = effectiveBaseUrl(settings, effectiveEnv);
+    settings.PUBLIC_BASE_URL = origin;
     const providers = ['spotify', 'soundcloud', 'apple-music', 'youtube'];
+    if (!nonInteractive) setTuiContext({ step: null, total: null, language });
     const config = validateSettings(settings);
     for (const path of [
       data,
@@ -254,26 +391,38 @@ export async function setup(nonInteractive = false, reconfigure = false) {
       mkdirSync(path, { recursive: true, mode: 0o700 });
     }
     if (await portOccupied(config.HOST, config.PORT))
-      throw new Error('Configured port is occupied. Stop the existing server before setup.');
+      throw new Error(
+        `Configured port ${config.PORT} is occupied. Another service or JamRelay version may already be running. Do not stop an installation you need. Choose another port (for example $env:PORT='15269' in Windows PowerShell, then rerun jamrelay setup) or inspect its owner with Get-NetTCPConnection -LocalPort ${config.PORT} -State Listen.`,
+      );
     if (!nonInteractive) {
       stateForSetup = await import('../cli/state.js');
-      console.log(
-        '\n' +
-          t(
-            'JamRelay updates: optional occasional public HTTPS checks for official releases and project notices. No credentials, installation IDs or telemetry are sent. Disable later with jamrelay notifications disable.',
-          ),
+      showPanel(
+        t('Optional notifications'),
+        t(
+          'JamRelay updates: optional occasional public HTTPS checks for official releases and project notices. No credentials, installation IDs or telemetry are sent. Disable later with jamrelay notifications disable.',
+        ),
       );
       notificationPreference = await confirm(
         t('Enable occasional CLI update/notice checks?'),
         stateForSetup.readState().notifications !== false,
       );
     }
-    const database = await import('../db/database.js');
-    closeDatabase = database.closeDatabase;
-    database.initializeDatabase({ dbPath: settings.JAMRELAY_DB_PATH, dataDir: data });
-    database.closeDatabase();
-    closeDatabase = () => {};
-    saveSettings(paths.config, settings);
+    const stopLoading = nonInteractive
+      ? () => {}
+      : showLoadingPanel(
+          t('Preparing installation'),
+          t('Initializing JamRelay and checking the saved configuration.'),
+        );
+    try {
+      const database = await import('../db/database.js');
+      closeDatabase = database.closeDatabase;
+      database.initializeDatabase({ dbPath: settings.JAMRELAY_DB_PATH, dataDir: data });
+      database.closeDatabase();
+      closeDatabase = () => {};
+      saveSettings(paths.config, settings);
+    } finally {
+      stopLoading();
+    }
     if (stateForSetup && notificationPreference !== undefined) {
       // Follow a custom configuration path selected in this wizard without touching OAuth settings.
       const priorConfig = process.env.JAMRELAY_CONFIG_PATH;
@@ -292,26 +441,18 @@ export async function setup(nonInteractive = false, reconfigure = false) {
         settings[p === 'apple-music' ? 'APPLE_MUSIC_TEAM_ID' : `${p.toUpperCase()}_CLIENT_ID`],
       ),
     );
-    console.log(
-      `\n${t('JamRelay Setup Complete')}\n${t('Server setup is complete; music account authorization and AI client setup are still pending.')}\n\n${t('Next')}:\n  jamrelay start\n  jamrelay onboard\n  jamrelay doctor\n\n${t('MCP endpoint')}: ${origin}/mcp\n${t('Providers')}: ${configured.length ? configured.join(', ') + ' (' + t('configured; run connections list to check account authorization') + ')' : t('none')}`,
+    showPanel(
+      t('JamRelay Setup Complete'),
+      `${t('Base installation settings saved.')}\n${t('The encryption key protects music-service credentials saved later. The owner secret is used to approve OAuth connections. Both are stored in the private installation config.')}\n\n${t('Health endpoint')}: ${origin}/health\n${t('MCP endpoint')}: ${origin}/mcp\n${t('Configured providers')}: ${configured.length ? configured.join(', ') : t('none')}\n\n${t('Continue with network, music providers and MCP clients in the JamRelay menu.')}`,
     );
   } catch (error) {
     rememberErrorLanguage(error, language);
     throw error;
   } finally {
     try {
-      terminal?.close();
+      process.stdin.setRawMode?.(false);
     } catch {
-      // PowerShell may reject readline's setRawMode(false) during close even
-      // though all answers and configuration changes were completed.
-    }
-    if (terminal) {
-      try {
-        process.stdin.setRawMode(false);
-      } catch {
-        // Some Windows terminal hosts do not expose raw-mode restoration.
-      }
-      process.stdin.destroy();
+      // Some Windows terminal hosts do not expose raw-mode restoration.
     }
     closeDatabase();
     unlock();
@@ -354,11 +495,11 @@ export async function doctor(json = false) {
         'HTTPS origin: configure TRUST_PROXY for your trusted reverse proxy if TLS terminates there.',
       );
     if (existsSync(settings.JAMRELAY_DB_PATH)) {
-      const [{ DatabaseSync }, database] = await Promise.all([
-        import('node:sqlite'),
+      const [{ openSqlite }, database] = await Promise.all([
+        import('./sqlite.js'),
         import('../db/database.js'),
       ]);
-      const db = new DatabaseSync(settings.JAMRELAY_DB_PATH, { readOnly: true });
+      const db = openSqlite(settings.JAMRELAY_DB_PATH, { readOnly: true });
       try {
         if (db.prepare('PRAGMA integrity_check').get()?.integrity_check !== 'ok')
           errors.push('SQLite integrity check failed.');
@@ -411,4 +552,43 @@ export async function doctor(json = false) {
       : `${t('Configuration')}: ${paths.config}\n${t('Errors')}:\n${errors.map((e) => '  ' + knownMessage(e)).join('\n') || '  0'}\n${t('Warnings')}:\n${warnings.map((e) => '  ' + knownMessage(e)).join('\n') || '  0'}\n${t('State')}: ${errors.length ? t('Errors') : t('OK')}`,
   );
   return errors.length ? 1 : 0;
+}
+
+export async function promptOwnerPassword(language = currentLanguage()) {
+  const t = translator(language);
+  for (;;) {
+    const password = await passwordPrompt(t('Owner password (12–256 characters)'), '', {
+      secret: true,
+    });
+    const problem = passwordProblem(password);
+    if (problem) {
+      showPanel(t('Owner password'), t(problem));
+      continue;
+    }
+    const confirmation = await passwordPrompt(t('Confirm owner password'), '', { secret: true });
+    if (password !== confirmation) {
+      showPanel(t('Owner password'), t('Passwords do not match. Try again.'));
+      continue;
+    }
+    return hashOwnerPassword(password);
+  }
+}
+
+/** Explicit offline migration/reset; keeps recovery secret, encryption key and OAuth data. */
+export async function setOwnerPassword() {
+  const { loadInstallation } = await import('./installation.js');
+  const paths = loadInstallation();
+  if (!existsSync(paths.config)) throw new Error('Run jamrelay setup first.');
+  const unlock = await lockInstallation(paths.config);
+  try {
+    const settings = readSettings(paths.config);
+    settings.MCP_OWNER_PASSWORD_HASH = await promptOwnerPassword();
+    saveSettings(paths.config, settings);
+    showPanel(
+      'Owner password saved',
+      'Start JamRelay and sign in with your password. Recovery secret and all existing credentials are preserved.',
+    );
+  } finally {
+    unlock();
+  }
 }

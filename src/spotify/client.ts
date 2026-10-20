@@ -1,3 +1,4 @@
+import { McpPermissionEngine } from '../mcp/permissions.js';
 import { assertQueueJobActive } from '../db/jobs.js';
 import { retryAfterSeconds } from '../providers/retry-after.js';
 import { SpotifyAuth } from './auth.js';
@@ -135,6 +136,10 @@ export class SpotifyClient {
           endpointKey,
           (this.apiCallsByEndpoint.get(endpointKey) ?? 0) + 1,
         );
+        assertQueueJobActive();
+        if (init.method && !['GET', 'HEAD'].includes(init.method.toUpperCase()))
+          await McpPermissionEngine.enforceWrite(['spotify-default']);
+        else await McpPermissionEngine.enforce(undefined, ['spotify-default']);
         response = await fetch('https://api.spotify.com/v1' + requestPath, {
           ...init,
           headers,

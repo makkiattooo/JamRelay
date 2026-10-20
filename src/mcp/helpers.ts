@@ -1,3 +1,4 @@
+import { McpPermissionEngine } from './permissions.js';
 import * as z from 'zod/v4';
 import { parseProviderIdentifier } from '../providers/identifiers.js';
 import { chunks } from '../utils/chunks.js';
@@ -1248,6 +1249,9 @@ export function registerAdvanced(
         const job = getJob(a.job_id, 0, 1);
         if (!job) return text({ error: 'job_not_found' });
         const payload = job.payload as any;
+        const authorization = job.authorization ? JSON.parse(job.authorization) : undefined;
+        if (authorization?.tool)
+          await McpPermissionEngine.enforce(authorization.tool, [job.connectionId]);
         if (job.status === 'completed' && job.commitState === 'completed')
           return text({
             job_id: a.job_id,

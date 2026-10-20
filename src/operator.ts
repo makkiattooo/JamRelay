@@ -1,3 +1,6 @@
+import { selectPermissions, parsePolicy, parseTools } from './cli/permissions.js';
+import { probeHealth } from './cli/network-context.js';
+import { effectiveBaseUrl } from './config.js';
 import { installationPaths } from './runtime/installation.js';
 import { knownMessage, translator, currentLanguage } from './cli/i18n/index.js';
 import { APP_VERSION } from './version.js';
@@ -50,11 +53,9 @@ export async function runOperator(
       result = {
         version: APP_VERSION,
         configuration: installationPaths().config,
-        runtime: await fetch(`http://127.0.0.1:${process.env.PORT || 5267}/health`, {
-          signal: AbortSignal.timeout(500),
-        })
-          .then((r) => (r.ok ? 'reachable' : 'unhealthy'))
-          .catch(() => 'not reachable on loopback'),
+        runtime: await probeHealth(effectiveBaseUrl(process.env))
+          .then((ok) => (ok ? 'reachable' : 'unhealthy'))
+          .catch(() => 'not reachable in this network context'),
         database: getDatabaseStatus(),
         providers_configured: [
           'SPOTIFY_CLIENT_ID',
@@ -75,7 +76,7 @@ export async function runOperator(
       }));
     } else if (group === 'clients') {
       const store = new McpOAuthStore(oauthPath);
-      if (action === 'list') {
+      if (action === 'list' || action === 'show') {
         let statics: any = [];
         try {
           const raw = JSON.parse(
@@ -91,6 +92,9 @@ export async function runOperator(
         result = {
           clients: [
             ...(await store.listClients()),
+            ...(process.env.MCP_API_KEY
+              ? [{ clientId: 'api-key', clientName: 'Legacy shared API key', source: 'local' }]
+              : []),
             ...statics.map((c: any) => ({
               clientId: c.clientId,
               clientName: c.clientName,
@@ -109,7 +113,104 @@ export async function runOperator(
             ),
           })),
         };
+        const summary = result as { clients: any[]; grants: any[] };
+        summary.clients = await Promise.all(
+          summary.clients
+            .filter((c) => action !== 'show' || c.clientId === value)
+            .map(async (c) => {
+              const grant = summary.grants.find((g) => g.clientId === c.clientId);
+              const authenticated = await store.authenticationEvidence(c.clientId);
+              const discovery = getDatabase()
+                .prepare(
+                  'SELECT verified_at, tool_count FROM mcp_client_discovery WHERE client_id=?',
+                )
+                .get(c.clientId) as { verified_at: number; tool_count: number } | undefined;
+              return {
+                ...c,
+                grant,
+                authenticated,
+                discovery: discovery ?? null,
+                verified: Boolean(
+                  authenticated &&
+                  grant &&
+                  !grant.revoked &&
+                  discovery &&
+                  discovery.verified_at >= grant.updatedAt,
+                ),
+              };
+            }),
+        );
+        if (
+          action === 'show' &&
+          !summary.clients.length &&
+          !summary.grants.some((g) => g.clientId === value)
+        )
+          throw new Error('NOT_FOUND');
+        if (action === 'show') summary.grants = summary.grants.filter((g) => g.clientId === value);
+      } else if (action === 'policy') {
+        if (value === 'set') {
+          const scopes = words.indexOf('--permissions');
+          const tools = words.indexOf('--tools');
+          if (scopes < 0 || words[scopes + 1] === undefined) throw new Error('USAGE');
+          await store.setDefaults(
+            parsePolicy(words[scopes + 1], tools < 0 ? undefined : words[tools + 1]),
+          );
+        }
+        result = {
+          defaults: await store.defaults(),
+          effect:
+            'Initial consent defaults only. Existing grants are unchanged; every new connection still requires owner approval.',
+        };
+      } else if (action === 'permissions') {
+        const editing = value === 'set';
+        const clientId = editing ? words[3] : value;
+        if (!clientId) throw new Error('USAGE');
+        const grant = await store.getGrant(clientId);
+        if (!grant || grant.revokedAt) throw new Error('NOT_FOUND');
+        if (!editing) result = grant;
+        else {
+          const flag = (name: string) => {
+            const index = words.indexOf(name);
+            return index < 0 ? undefined : words[index + 1];
+          };
+          const records = await new EncryptedCredentialStore(credentialPath).list();
+          const accounts = [
+            ...new Set([...grant.connectionIds, ...records.map((r) => r.connectionId)]),
+          ];
+          let change;
+          if (
+            flag('--permissions') !== undefined ||
+            flag('--connections') !== undefined ||
+            flag('--tools') !== undefined
+          ) {
+            change = {
+              ...parsePolicy(flag('--permissions') ?? grant.permissions.join(',')),
+              connectionIds:
+                flag('--connections') === undefined
+                  ? grant.connectionIds
+                  : flag('--connections')!.split(',').filter(Boolean),
+              tools: flag('--tools') === undefined ? grant.tools : parseTools(flag('--tools')!),
+            };
+          } else {
+            if (!process.stdin.isTTY) throw new Error('USAGE');
+            change = await selectPermissions(
+              grant.permissions,
+              accounts,
+              grant.connectionIds,
+              grant.tools,
+            );
+          }
+          if (change.connectionIds.some((id) => !accounts.includes(id)))
+            throw new Error('INVALID_CONNECTION');
+          await store.updateGrant(clientId, change.connectionIds, change.permissions, change.tools);
+          result = {
+            grant: await store.getGrant(clientId),
+            effect:
+              'Effective immediately for existing tokens and queued work. Refresh the client tool list; no server restart or new login is required.',
+          };
+        }
       } else if (action === 'revoke' && value) {
+        await store.revokeGrant(value);
         getDatabase()
           .prepare(
             'INSERT INTO operator_client_revocations VALUES (?,?) ON CONFLICT(client_id) DO UPDATE SET revoked_at=excluded.revoked_at',
@@ -162,9 +263,16 @@ export async function runOperator(
   } catch (error) {
     const code =
       error instanceof Error &&
-      ['USAGE', 'NOT_FOUND', 'INVALID_JOB_STATE', 'INVALID_OR_UNCERTAIN_JOB_STATE'].includes(
-        error.message,
-      )
+      [
+        'USAGE',
+        'NOT_FOUND',
+        'INVALID_PERMISSION',
+        'INVALID_TOOL',
+        'INVALID_CONNECTION',
+        'CANCELLED',
+        'INVALID_JOB_STATE',
+        'INVALID_OR_UNCERTAIN_JOB_STATE',
+      ].includes(error.message)
         ? error.message
         : 'OPERATOR_FAILED';
     output(
@@ -172,7 +280,7 @@ export async function runOperator(
         error: code,
         message: (json ? (s: string) => s : knownMessage)(
           code === 'USAGE'
-            ? 'Usage: operator status | connections list | clients list/revoke ID | jobs list/inspect/cancel/resume ID | diagnostics | backup create/list [--json]'
+            ? 'Usage: operator status | connections list | clients list/show ID/permissions [set] ID/revoke ID | clients policy [set --permissions CSV --tools all/CSV] | jobs list/inspect/cancel/resume ID | diagnostics | backup create/list [--json]'
             : 'Operation failed; verify configuration and local file permissions. No secrets are printed.',
         ),
       }),

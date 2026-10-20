@@ -1,3 +1,5 @@
+import { hashOwnerPassword } from '../src/mcp/owner-password.js';
+import { initializeDatabase, closeDatabase, getDatabase } from '../src/db/database.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -30,7 +32,20 @@ const cfg = (path: string, clientsPath: string, overrides: Record<string, unknow
 const challenge = (value: string) => createHash('sha256').update(value).digest('base64url');
 const json = async (url: string, init?: RequestInit) => {
   const r = await fetch(url, init);
-  return { r, body: await r.json().catch(() => undefined) };
+  const raw = await r.text();
+  const payload = raw.trim().startsWith('event:')
+    ? raw
+        .split('\n')
+        .find((line) => line.startsWith('data:'))
+        ?.slice(5)
+    : raw;
+  let body;
+  try {
+    body = JSON.parse(payload || '');
+  } catch {
+    /* non-JSON error response */
+  }
+  return { r, body };
 };
 
 describe('MCP OAuth', () => {
@@ -39,6 +54,7 @@ describe('MCP OAuth', () => {
 
   afterEach(async () => {
     vi.useRealTimers();
+    closeDatabase();
     if (server) await new Promise<void>((resolve) => server.close(() => resolve()));
     if (directory) await rm(directory, { recursive: true, force: true });
     server = undefined;
@@ -75,7 +91,7 @@ describe('MCP OAuth', () => {
     return `http://127.0.0.1:${server.address().port}`;
   }
 
-  async function authorize(root: string, owner = 'owner-secret') {
+  async function authorize(root: string, owner = 'owner-secret', method = 'owner_secret') {
     const verifier = 'verifier-value';
     const query = new URLSearchParams({
       client_id: 'chatgpt-client',
@@ -96,7 +112,8 @@ describe('MCP OAuth', () => {
       code_challenge_method: 'S256',
       state: 'state with spaces',
       resource: `${base}/mcp`,
-      owner_secret: owner,
+      [method]: owner,
+      permissions: 'diagnostics.read',
     });
     const response = await fetch(`${root}/oauth/authorize`, {
       method: 'POST',
@@ -121,6 +138,44 @@ describe('MCP OAuth', () => {
       }),
     });
   }
+
+  it('authenticates an OAuth client with the owner password and records only actual tool discovery', async () => {
+    const password = 'unique owner passphrase for oauth';
+    const root = await start({ MCP_OWNER_PASSWORD_HASH: await hashOwnerPassword(password) });
+    initializeDatabase({ dataDir: directory });
+    const { response, verifier } = await authorize(root, password, 'owner_password');
+    expect(response.status).toBe(302);
+    const code = new URL(response.headers.get('location')!).searchParams.get('code')!;
+    const exchange = await json(root + '/oauth/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: 'chatgpt-client',
+        client_secret: 'chatgpt-secret',
+        redirect_uri: 'https://chatgpt.com/connector/oauth/callback',
+        code,
+        code_verifier: verifier,
+        resource: `${base}/mcp`,
+      }),
+    });
+    expect(exchange.r.status).toBe(200);
+    expect(getDatabase().prepare('SELECT * FROM mcp_client_discovery').all()).toHaveLength(0);
+    const discovery = await json(root + '/mcp', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${exchange.body.access_token}`,
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 42, method: 'tools/list', params: {} }),
+    });
+    expect(discovery.r.status).toBe(200);
+    expect(discovery.body?.result?.tools?.length).toBeGreaterThan(0);
+    expect(
+      getDatabase().prepare('SELECT client_id, tool_count FROM mcp_client_discovery').get(),
+    ).toMatchObject({ client_id: 'chatgpt-client', tool_count: expect.any(Number) });
+  });
 
   it('publishes protected-resource and authorization-server metadata including DCR', async () => {
     const root = await start();
@@ -190,7 +245,7 @@ describe('MCP OAuth', () => {
     expect(wrongResource.status).toBe(400);
     const denied = await authorize(root, 'wrong');
     expect(denied.response.status).toBe(401);
-    expect(await denied.response.text()).toContain('Invalid owner secret');
+    expect(await denied.response.text()).toContain('Invalid owner credentials');
   });
 
   it('renders a branded, non-cacheable authorization page without exposing callback details', async () => {
@@ -209,9 +264,12 @@ describe('MCP OAuth', () => {
     expect(page.status).toBe(200);
     expect(page.headers.get('cache-control')).toBe('no-store');
     expect(page.headers.get('content-security-policy')).toContain("default-src 'none'");
-    expect(page.headers.get('referrer-policy')).toBe('no-referrer');
-    expect(html).toContain('Connect ChatGPT to JamRelay');
-    expect(html).toContain('/assets/icons/jamrelay-icon-dark.png.png');
+    expect(page.headers.get('referrer-policy')).toBe('same-origin');
+    expect(html).toContain('Connect an AI client to JamRelay');
+    expect(html).toContain('/assets/icons/jamrelay-icon-dark.png');
+    const icon = await fetch(`${root}/assets/icons/jamrelay-icon-dark.png`);
+    expect(icon.status).toBe(200);
+    expect(icon.headers.get('content-type')).toContain('image/png');
     expect(html).toContain('JamRelay Connect');
     expect(html).toContain('Authorize access');
     expect(html).toContain('type="password"');

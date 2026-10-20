@@ -1,3 +1,4 @@
+import { McpPermissionEngine } from '../mcp/permissions.js';
 import { assertQueueJobActive } from '../db/jobs.js';
 import { retryAfterSeconds } from '../providers/retry-after.js';
 import { ProviderApiError } from '../providers/errors.js';
@@ -29,6 +30,9 @@ export class AppleMusicClient {
     const parentSignal = toolContext.get()?.signal;
     const timeoutSignal = AbortSignal.timeout(15_000);
     assertQueueJobActive();
+    if (init.method && !['GET', 'HEAD'].includes(init.method.toUpperCase()))
+      await McpPermissionEngine.enforceWrite(['apple-music-default']);
+    else await McpPermissionEngine.enforce(undefined, ['apple-music-default']);
     const response = await fetch(`https://api.music.apple.com/v1${path}`, {
       ...init,
       headers: { ...headers, ...(init.headers as any) },

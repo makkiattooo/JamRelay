@@ -1,7 +1,8 @@
+import { ownerCredentialMatches, ownerCredentialFields } from './owner-password.js';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type express from 'express';
 import { OwnerSessionStore } from './owner-session.js';
-import { oauthPageHeaders } from './oauth-authorize-page.js';
+import { oauthPageHeaders, renderStandaloneAuthPage } from './oauth-authorize-page.js';
 
 export const secretMatches = (a: string, b: string) =>
   Boolean(b) &&
@@ -11,8 +12,7 @@ const escape = (s: string) =>
     /[&<>"']/g,
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
   );
-export const authPage = (title: string, body: string) =>
-  `<!doctype html><html lang="en"><meta charset="utf-8"><title>${escape(title)}</title><h1>${escape(title)}</h1>${body}</html>`;
+export const authPage = (title: string, body: string) => renderStandaloneAuthPage(title, body);
 export const authResultPage = (
   _provider: string,
   ok: boolean,
@@ -55,9 +55,14 @@ export class ProviderInitiations {
   }
 }
 
-export function registerOwnerAuthentication(app: express.Express, secret: string, baseUrl: string) {
+export function registerOwnerAuthentication(
+  app: express.Express,
+  secret: string,
+  baseUrl: string,
+  passwordHash?: string,
+) {
   const sessions = new OwnerSessionStore();
-  const secure = new URL(baseUrl).protocol === 'https:' || process.env.NODE_ENV === 'production';
+  const secure = new URL(baseUrl).protocol === 'https:';
   const attrs = `; Path=/; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`;
   const cookie = (req: express.Request, name: string) =>
     (req.header('cookie') ?? '')
@@ -82,7 +87,12 @@ export function registerOwnerAuthentication(app: express.Express, secret: string
     attempts.set(key, r);
     return ++r.count <= 10;
   };
-  app.get('/owner/login', (_req, res) => {
+  const returnPath = (value: unknown) =>
+    typeof value === 'string' &&
+    /^\/auth\/providers\/(spotify|soundcloud|youtube)\/start$/.test(value)
+      ? value
+      : '';
+  app.get('/owner/login', (req, res) => {
     const nonce = randomBytes(24).toString('base64url');
     res
       .set(oauthPageHeaders)
@@ -90,12 +100,12 @@ export function registerOwnerAuthentication(app: express.Express, secret: string
       .type('html')
       .send(
         authPage(
-          'Owner authentication',
-          `<form method="post" action="/owner/login"><input type="hidden" name="csrf_token" value="${nonce}"><label>Owner secret <input type="password" name="owner_secret" required autocomplete="current-password"></label><button>Sign in</button></form>`,
+          'Owner sign-in',
+          `<p class="intro">Sign in to JamRelay to approve this music service connection.</p><form class="auth-form" method="post" action="/owner/login"><input type="hidden" name="csrf_token" value="${nonce}"><input type="hidden" name="next" value="${escape(returnPath(req.query.next))}">${ownerCredentialFields(Boolean(passwordHash))}<div class="actions"><button class="primary" type="submit">Sign in</button></div></form>`,
         ),
       );
   });
-  app.post('/owner/login', (req, res) => {
+  app.post('/owner/login', async (req, res) => {
     if (!allowed(req))
       return res.status(429).set('Retry-After', '300').json({ error: 'RATE_LIMITED' });
     const nonce = cookie(req, 'jamrelay_login');
@@ -106,15 +116,23 @@ export function registerOwnerAuthentication(app: express.Express, secret: string
       (origin && origin !== new URL(baseUrl).origin)
     )
       return res.status(403).json({ error: 'CSRF_REQUIRED' });
-    const session = sessions.authenticate(String(req.body?.owner_secret ?? ''), secret);
+    if (!(await ownerCredentialMatches(req.body ?? {}, secret, passwordHash)))
+      return res.status(401).json({
+        error: 'OWNER_AUTH_REQUIRED',
+        message: 'Invalid owner credentials. Try again or use recovery.',
+      });
+    const session = sessions.authenticate(secret, secret);
     if (!session) return res.status(401).json({ error: 'OWNER_AUTH_REQUIRED' });
     sessions.revoke(cookie(req, 'jamrelay_owner'));
-    return res
+    res
       .set(oauthPageHeaders)
       .setHeader('Set-Cookie', [
         `jamrelay_owner=${session.token}${attrs}; Max-Age=1800`,
         `jamrelay_login=${attrs}; Max-Age=0`,
-      ])
+      ]);
+    const next = returnPath(req.body?.next);
+    if (next) return res.redirect(303, next);
+    return res
       .type('html')
       .send(
         authPage(
@@ -134,5 +152,5 @@ export function registerOwnerAuthentication(app: express.Express, secret: string
 export const providerConsentPage = (provider: string, connection: string, csrf: string) =>
   authPage(
     'Authorize provider connection',
-    `<p>Connect or replace ${escape(connection)} on ${escape(provider)}. Existing credentials will change only after successful authorization.</p><form method="post" action="/auth/providers/${encodeURIComponent(provider)}/start"><input type="hidden" name="csrf_token" value="${escape(csrf)}"><input type="hidden" name="connection_id" value="${escape(connection)}"><button>Approve connection or replacement</button></form>`,
+    `<p class="intro">Connect or replace ${escape(connection)} on ${escape(provider)}. Existing credentials change only after successful authorization.</p><form class="actions" method="post" action="/auth/providers/${encodeURIComponent(provider)}/start"><input type="hidden" name="csrf_token" value="${escape(csrf)}"><input type="hidden" name="connection_id" value="${escape(connection)}"><button class="primary">Approve connection</button></form>`,
   );

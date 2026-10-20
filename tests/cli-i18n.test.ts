@@ -2,7 +2,6 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { EventEmitter } from 'node:events';
 import { messages } from '../src/cli/i18n/messages.js';
 import {
   languages,
@@ -18,8 +17,26 @@ import { setup } from '../src/runtime/setup.js';
 import { readSettings, saveSettings } from '../src/runtime/installation.js';
 
 const { question } = vi.hoisted(() => ({ question: vi.fn() }));
-vi.mock('node:readline/promises', () => ({
-  createInterface: () => Object.assign(new EventEmitter(), { question, close: vi.fn() }),
+// Test the setup flow at its TUI boundary; raw key handling is covered separately.
+vi.mock('../src/cli/tui.js', async (original) => ({
+  ...(await original<typeof import('../src/cli/tui.js')>()),
+  showPanel: (title: string, body: string) => console.log(title, body),
+  promptText: async (label: string, fallback = '') => (await question(label)) || fallback,
+  promptConfirm: async (label: string, _yes: string, _no: string, fallback: boolean) =>
+    label.includes('password') ||
+    label.includes('hasło') ||
+    label.includes('passwort') ||
+    label.includes('mot de passe') ||
+    label.includes('contraseña')
+      ? false
+      : fallback,
+  selectOption: async (options: Array<{ value: string }>, initial: number) => {
+    for (;;) {
+      const answer = await question(languagePrompt + ' [1]');
+      const selected = selectLanguage(answer, options[initial].value as (typeof languages)[number]);
+      if (selected) return selected;
+    }
+  },
 }));
 let root: string;
 const ttyDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');

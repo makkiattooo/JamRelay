@@ -15,4 +15,5 @@ export interface ProviderConnectionSummary {
 
 export interface ProviderConnection extends ProviderCapabilityImplementations {
   summary: ProviderConnectionSummary;
+  isAuthorized?: () => Promise<boolean>;
 }

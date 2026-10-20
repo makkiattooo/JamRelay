@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createServer } from 'node:http';
+import { APP_VERSION } from '../src/version.js';
 import { languages } from '../src/cli/i18n/index.js';
 import {
   connectivityTranslations,
@@ -66,7 +67,13 @@ describe('guided connectivity setup', () => {
   it('requires a reachable local health endpoint and an authentication challenge at MCP', async () => {
     const server = createServer((request, response) => {
       if (request.url === '/health') {
-        response.writeHead(200).end('{}');
+        response.writeHead(200).end(
+          JSON.stringify({
+            status: 'ok',
+            version: APP_VERSION,
+            database: { schemaState: 'current' },
+          }),
+        );
       } else if (request.url === '/mcp') {
         response.writeHead(401).end();
       } else response.writeHead(404).end();
@@ -75,12 +82,15 @@ describe('guided connectivity setup', () => {
     try {
       const address = server.address();
       if (!address || typeof address === 'string') throw new Error('Test server did not bind');
-      await expect(verifyEndpoint(`http://127.0.0.1:${address.port}`, true)).resolves.toEqual({
-        dns: true,
-        https: true,
-        health: true,
-        mcpProtected: true,
-      });
+      await expect(verifyEndpoint(`http://127.0.0.1:${address.port}`, true)).resolves.toMatchObject(
+        {
+          dns: null,
+          https: null,
+          health: true,
+          mcpProtected: true,
+          oauthDiscovery: false,
+        },
+      );
     } finally {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),

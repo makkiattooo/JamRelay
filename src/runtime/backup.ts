@@ -1,7 +1,16 @@
-import { chmod, copyFile, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  copyFile,
+  mkdir,
+  readdir,
+  readFile,
+  stat,
+  lstat,
+  writeFile,
+} from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import { openSqlite } from './sqlite.js';
 
 export type ApplicationBackupOptions = {
   databasePath: string;
@@ -29,7 +38,7 @@ export async function createApplicationBackup(
   if (!existsSync(databasePath)) throw new Error('State DB does not exist.');
   await mkdir(outputDir, { recursive: true, mode: 0o700 });
   const destinationDb = path.join(outputDir, 'jamrelay.db');
-  const source = new DatabaseSync(databasePath, { readOnly: true });
+  const source = openSqlite(databasePath, { readOnly: true });
   try {
     const escaped = destinationDb.replaceAll("'", "''");
     source.exec(`VACUUM INTO '${escaped}'`);
@@ -84,23 +93,40 @@ export async function listApplicationBackups(
         encryption_key_included?: unknown;
       };
       const files = Array.isArray(manifest.files) ? manifest.files : [];
-      const bytes = (
-        await Promise.all(
-          files.map(async (file: any) => {
-            try {
-              return (await stat(path.join(directory, String(file.name)))).size;
-            } catch {
-              return 0;
-            }
-          }),
-        )
-      ).reduce((total, value) => total + value, 0);
+      const inspected = await Promise.all(
+        files.map(async (file: any) => {
+          if (
+            typeof file?.name !== 'string' ||
+            !file.name ||
+            /[\\/]/.test(file.name) ||
+            file.name === '.' ||
+            file.name === '..' ||
+            !Number.isSafeInteger(file.bytes) ||
+            file.bytes < 0
+          )
+            return { bytes: 0, valid: false };
+          try {
+            const info = await lstat(path.join(directory, file.name));
+            return {
+              bytes: info.size,
+              valid:
+                info.isFile() &&
+                info.size === file.bytes &&
+                (file.name !== 'jamrelay.db' || info.size > 0),
+            };
+          } catch {
+            return { bytes: 0, valid: false };
+          }
+        }),
+      );
+      const bytes = inspected.reduce((total, file) => total + file.bytes, 0);
       summaries.push({
         name: entry.name,
         createdAt: typeof manifest.created_at === 'string' ? manifest.created_at : 'unknown',
         bytes,
         valid:
           manifest.encryption_key_included === false &&
+          inspected.every((file) => file.valid) &&
           files.some((file: any) => file.name === 'jamrelay.db'),
       });
     } catch {

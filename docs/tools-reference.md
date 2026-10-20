@@ -7,7 +7,7 @@ description: Generated reference for the MCP tools registered by the server.
 
 > **Generated file.** Do not edit this page by hand. Run `npm run docs:generate` after changing MCP tool registrations.
 
-Generated from the runtime tool registry. Current tool count: **115**.
+Generated from the runtime tool registry. Current tool count: **95**.
 
 ## `add_tracks_by_search`
 
@@ -50,6 +50,7 @@ Add tracks sequentially in chunks of at most 100 using /items.
 **Title:** Apply playlist recipe
 
 **Type:** Write / action
+**Destructive hint:** yes
 
 Apply a persistent recipe; dry_run defaults true, execution creates one safety snapshot.
 
@@ -67,7 +68,6 @@ Apply a persistent recipe; dry_run defaults true, execution creates one safety s
 **Title:** Archive playlist
 
 **Type:** Write / action
-**Destructive hint:** yes
 
 Persist an immutable local snapshot/version; no provider mutation.
 
@@ -83,6 +83,7 @@ Persist an immutable local snapshot/version; no provider mutation.
 **Title:** Avoid recently played
 
 **Type:** Write / action
+**Destructive hint:** yes
 
 Uses only locally observed history; dry_run defaults true.
 
@@ -113,21 +114,6 @@ Reorder without removing tracks; dry_run defaults true.
 | `dry_run`        | unknown |      yes | —       |
 | `min_artist_gap` | unknown |      yes | —       |
 | `strategy`       | unknown |      yes | —       |
-
-## `batch_playlist_jobs`
-
-**Type:** Write / action
-
-batch_playlist_jobs is planned through the shared playlist engine; dry_run defaults true.
-
-**Arguments:**
-
-| Argument             | Type    | Required | Details |
-| -------------------- | ------- | -------: | ------- |
-| `playlist_id`        | unknown |      yes | —       |
-| `dry_run`            | unknown |      yes | —       |
-| `percentage`         | unknown |      yes | —       |
-| `target_duration_ms` | unknown |      yes | —       |
 
 ## `build_session_queue`
 
@@ -164,21 +150,6 @@ Add mixed ID/URI/search track inputs in ordered chunks; supports strict, dry_run
 | `strict`        | unknown |      yes | —       |
 | `dry_run`       | unknown |      yes | —       |
 | `skip_existing` | unknown |      yes | —       |
-
-## `bulk_edit_playlists`
-
-**Type:** Write / action
-
-bulk_edit_playlists is planned through the shared playlist engine; dry_run defaults true.
-
-**Arguments:**
-
-| Argument             | Type    | Required | Details |
-| -------------------- | ------- | -------: | ------- |
-| `playlist_id`        | unknown |      yes | —       |
-| `dry_run`            | unknown |      yes | —       |
-| `percentage`         | unknown |      yes | —       |
-| `target_duration_ms` | unknown |      yes | —       |
 
 ## `cancel_job`
 
@@ -279,19 +250,6 @@ Read-only efficient URI, artist, album and duration comparison.
 | `playlist_id_a` | unknown |      yes | —       |
 | `playlist_id_b` | unknown |      yes | —       |
 
-## `complete_artist_collection`
-
-**Type:** Read
-
-Read-only local-first personalization operation with explicit evidence and no automatic provider mutation.
-
-**Arguments:**
-
-| Argument      | Type    | Required | Details |
-| ------------- | ------- | -------: | ------- |
-| `playlist_id` | unknown |      yes | —       |
-| `limit`       | unknown |      yes | —       |
-
 ## `create_bulk_job`
 
 **Title:** Create bulk job
@@ -366,19 +324,6 @@ Fetches all items, preserves first occurrence and order, and refuses lossless re
 | ------------- | ------- | -------: | ------- |
 | `playlist_id` | unknown |      yes | —       |
 | `dry_run`     | unknown |      yes | —       |
-
-## `deep_cuts_mode`
-
-**Type:** Read
-
-Read-only local-first personalization operation with explicit evidence and no automatic provider mutation.
-
-**Arguments:**
-
-| Argument      | Type    | Required | Details |
-| ------------- | ------- | -------: | ------- |
-| `playlist_id` | unknown |      yes | —       |
-| `limit`       | unknown |      yes | —       |
 
 ## `dry_run_playlist_operation`
 
@@ -467,26 +412,12 @@ Resolve a local candidate pool, append only needed tracks, snapshot and verify.
 | `min_artist_gap`     | unknown |      yes | —       |
 | `seed`               | unknown |      yes | —       |
 
-## `extract_artist_tracks`
-
-**Type:** Write / action
-
-extract_artist_tracks using playlist metadata; dry_run defaults true.
-
-**Arguments:**
-
-| Argument      | Type    | Required | Details |
-| ------------- | ------- | -------: | ------- |
-| `playlist_id` | unknown |      yes | —       |
-| `artist_id`   | unknown |      yes | —       |
-| `artist_name` | unknown |      yes | —       |
-| `dry_run`     | unknown |      yes | —       |
-
 ## `filter_playlist`
 
 **Title:** Filter playlist
 
 **Type:** Write / action
+**Destructive hint:** yes
 
 Filter by typed deterministic predicates; dry_run defaults true.
 
@@ -498,19 +429,6 @@ Filter by typed deterministic predicates; dry_run defaults true.
 | `filters`     | unknown |      yes | —       |
 | `mode`        | unknown |      yes | —       |
 | `dry_run`     | unknown |      yes | —       |
-
-## `find_missing_favorites`
-
-**Type:** Read
-
-Read-only local-first personalization operation with explicit evidence and no automatic provider mutation.
-
-**Arguments:**
-
-| Argument      | Type    | Required | Details |
-| ------------- | ------- | -------: | ------- |
-| `playlist_id` | unknown |      yes | —       |
-| `limit`       | unknown |      yes | —       |
 
 ## `find_playlist_by_name`
 
@@ -543,49 +461,6 @@ Resolve a track by deterministic title/artist/album/year scoring; returns matche
 | `album`  | string |       no | —       |
 | `year`   | number |       no | —       |
 
-## `freshen_playlist`
-
-**Type:** Write / action
-
-freshen_playlist is planned through the shared playlist engine; dry_run defaults true.
-
-**Arguments:**
-
-| Argument             | Type    | Required | Details |
-| -------------------- | ------- | -------: | ------- |
-| `playlist_id`        | unknown |      yes | —       |
-| `dry_run`            | unknown |      yes | —       |
-| `percentage`         | unknown |      yes | —       |
-| `target_duration_ms` | unknown |      yes | —       |
-
-## `generate_daily_mix`
-
-**Type:** Write / action
-
-generate_daily_mix remains local-first and dry-run by default; no unsupported Spotify behavior is assumed.
-
-**Arguments:**
-
-| Argument             | Type    | Required | Details |
-| -------------------- | ------- | -------: | ------- |
-| `playlist_id`        | unknown |      yes | —       |
-| `target_playlist_id` | unknown |      yes | —       |
-| `dry_run`            | unknown |      yes | —       |
-
-## `generate_weekly_rotation`
-
-**Type:** Write / action
-
-generate_weekly_rotation remains local-first and dry-run by default; no unsupported Spotify behavior is assumed.
-
-**Arguments:**
-
-| Argument             | Type    | Required | Details |
-| -------------------- | ------- | -------: | ------- |
-| `playlist_id`        | unknown |      yes | —       |
-| `target_playlist_id` | unknown |      yes | —       |
-| `dry_run`            | unknown |      yes | —       |
-
 ## `get_artist`
 
 **Type:** Read
@@ -601,20 +476,6 @@ Get a provider artist by ID, URI, or URL.
 | `provider`                | unknown |      yes | —       |
 | `preferred_connection_id` | unknown |      yes | —       |
 | `read_fallback`           | unknown |      yes | —       |
-
-## `get_artist_top_tracks`
-
-**Title:** Get artist top tracks
-
-**Type:** Write / action
-
-Spotify removed the official endpoint in February 2026; this tool returns a structured platform limitation.
-
-**Arguments:**
-
-| Argument    | Type    | Required | Details |
-| ----------- | ------- | -------: | ------- |
-| `artist_id` | unknown |      yes | —       |
 
 ## `get_capabilities`
 
@@ -947,35 +808,6 @@ Parse and validate provider-neutral playlist data. This operation never writes t
 | `format`  | unknown |      yes | —       |
 | `content` | unknown |      yes | —       |
 
-## `inbox_playlist`
-
-**Type:** Write / action
-
-inbox_playlist remains local-first and dry-run by default; no unsupported Spotify behavior is assumed.
-
-**Arguments:**
-
-| Argument             | Type    | Required | Details |
-| -------------------- | ------- | -------: | ------- |
-| `playlist_id`        | unknown |      yes | —       |
-| `target_playlist_id` | unknown |      yes | —       |
-| `dry_run`            | unknown |      yes | —       |
-
-## `liked_to_playlist_sync`
-
-**Type:** Write / action
-**Destructive hint:** yes
-
-liked_to_playlist_sync remains local-first and dry-run by default; no unsupported Spotify behavior is assumed.
-
-**Arguments:**
-
-| Argument             | Type    | Required | Details |
-| -------------------- | ------- | -------: | ------- |
-| `playlist_id`        | unknown |      yes | —       |
-| `target_playlist_id` | unknown |      yes | —       |
-| `dry_run`            | unknown |      yes | —       |
-
 ## `limit_artist_share`
 
 **Title:** Limit artist share
@@ -1033,8 +865,9 @@ Merge source playlists without mutating them; dry_run defaults true.
 ## `move_artist_tracks`
 
 **Type:** Write / action
+**Destructive hint:** yes
 
-move_artist_tracks using playlist metadata; dry_run defaults true.
+Move selected artist tracks to the beginning of the same playlist; dry_run defaults true.
 
 **Arguments:**
 
@@ -1097,21 +930,18 @@ Pause Spotify playback; verifies the resulting state after a 403 restriction res
 **Title:** Personalize playlist
 
 **Type:** Write / action
+**Destructive hint:** yes
 
 Deterministic local personalization combining affinity and artist spacing; dry_run defaults true.
 
 **Arguments:**
 
-| Argument                | Type    | Required | Details |
-| ----------------------- | ------- | -------: | ------- |
-| `playlist_id`           | unknown |      yes | —       |
-| `dry_run`               | unknown |      yes | —       |
-| `affinity_weight`       | unknown |      yes | —       |
-| `freshness_weight`      | unknown |      yes | —       |
-| `rediscovery_weight`    | unknown |      yes | —       |
-| `artist_balance_weight` | unknown |      yes | —       |
-| `min_artist_gap`        | unknown |      yes | —       |
-| `seed`                  | unknown |      yes | —       |
+| Argument         | Type    | Required | Details |
+| ---------------- | ------- | -------: | ------- |
+| `playlist_id`    | unknown |      yes | —       |
+| `dry_run`        | unknown |      yes | —       |
+| `min_artist_gap` | unknown |      yes | —       |
+| `seed`           | unknown |      yes | —       |
 
 ## `plan_playlist_transfer`
 
@@ -1231,26 +1061,12 @@ Read-only deterministic rule evaluation; never mutates Spotify.
 | `rules`       | unknown |      yes | —       |
 | `dry_run`     | unknown |      yes | —       |
 
-## `playlist_skip_cleanup`
-
-**Type:** Write / action
-**Destructive hint:** yes
-
-playlist_skip_cleanup remains local-first and dry-run by default; no unsupported Spotify behavior is assumed.
-
-**Arguments:**
-
-| Argument             | Type    | Required | Details |
-| -------------------- | ------- | -------: | ------- |
-| `playlist_id`        | unknown |      yes | —       |
-| `target_playlist_id` | unknown |      yes | —       |
-| `dry_run`            | unknown |      yes | —       |
-
 ## `playlist_trim_to_duration`
 
 **Title:** Trim playlist to duration
 
 **Type:** Write / action
+**Destructive hint:** yes
 
 Plan or trim a playlist without exceeding the target; dry_run defaults true.
 
@@ -1265,25 +1081,11 @@ Plan or trim a playlist without exceeding the target; dry_run defaults true.
 | `seed`               | unknown |      yes | —       |
 | `dry_run`            | unknown |      yes | —       |
 
-## `playlist_versioning`
-
-**Type:** Write / action
-**Destructive hint:** yes
-
-Read-only local-first personalization operation with explicit evidence and no automatic provider mutation.
-
-**Arguments:**
-
-| Argument      | Type    | Required | Details |
-| ------------- | ------- | -------: | ------- |
-| `playlist_id` | unknown |      yes | —       |
-| `limit`       | unknown |      yes | —       |
-
 ## `preview_playlist_import`
 
 **Title:** Preview playlist import
 
-**Type:** Write / action
+**Type:** Read
 
 Parse and validate provider-neutral playlist data. This operation never writes to a provider.
 
@@ -1306,19 +1108,6 @@ Control Spotify playback.
 | ----------- | ------- | -------: | ------- |
 | `device_id` | unknown |      yes | —       |
 
-## `queue_from_playlist`
-
-**Type:** Write / action
-
-Read-only local-first personalization operation with explicit evidence and no automatic provider mutation.
-
-**Arguments:**
-
-| Argument      | Type    | Required | Details |
-| ------------- | ------- | -------: | ------- |
-| `playlist_id` | unknown |      yes | —       |
-| `limit`       | unknown |      yes | —       |
-
 ## `rank_playlist_tracks`
 
 **Title:** Rank playlist tracks
@@ -1334,24 +1123,11 @@ Read-only explainable local affinity/freshness ranking; no Spotify popularity fa
 | `playlist_id`  | unknown |      yes | —       |
 | `ranking_mode` | unknown |      yes | —       |
 
-## `rediscover_old_tracks`
-
-**Type:** Read
-
-Read-only local-first personalization operation with explicit evidence and no automatic provider mutation.
-
-**Arguments:**
-
-| Argument      | Type    | Required | Details |
-| ------------- | ------- | -------: | ------- |
-| `playlist_id` | unknown |      yes | —       |
-| `limit`       | unknown |      yes | —       |
-
 ## `remember_track`
 
 **Title:** Remember track
 
-**Type:** Read
+**Type:** Write / action
 
 Verify a known Spotify track ID, URI, or public URL and save its safe alias.
 
@@ -1369,8 +1145,9 @@ Verify a known Spotify track ID, URI, or public URL and save its safe alias.
 ## `remove_artist_from_playlist`
 
 **Type:** Write / action
+**Destructive hint:** yes
 
-remove_artist_from_playlist using playlist metadata; dry_run defaults true.
+Remove selected artist tracks; dry_run defaults true.
 
 **Arguments:**
 
@@ -1433,36 +1210,6 @@ Reorder with current PUT /items payload.
 | `connection_id`           | unknown |      yes | —       |
 | `provider`                | unknown |      yes | —       |
 | `preferred_connection_id` | unknown |      yes | —       |
-
-## `replace_artist_tracks`
-
-**Type:** Write / action
-
-replace_artist_tracks using playlist metadata; dry_run defaults true.
-
-**Arguments:**
-
-| Argument      | Type    | Required | Details |
-| ------------- | ------- | -------: | ------- |
-| `playlist_id` | unknown |      yes | —       |
-| `artist_id`   | unknown |      yes | —       |
-| `artist_name` | unknown |      yes | —       |
-| `dry_run`     | unknown |      yes | —       |
-
-## `replace_percentage`
-
-**Type:** Write / action
-
-replace_percentage is planned through the shared playlist engine; dry_run defaults true.
-
-**Arguments:**
-
-| Argument             | Type    | Required | Details |
-| -------------------- | ------- | -------: | ------- |
-| `playlist_id`        | unknown |      yes | —       |
-| `dry_run`            | unknown |      yes | —       |
-| `percentage`         | unknown |      yes | —       |
-| `target_duration_ms` | unknown |      yes | —       |
 
 ## `replace_playlist_tracks`
 
@@ -1531,20 +1278,6 @@ Resume a previously started chapter from its first saved position.
 | `chapter_set_id` | unknown |      yes | —       |
 | `chapter_number` | unknown |      yes | —       |
 | `device_id`      | unknown |      yes | —       |
-
-## `rotation_manager`
-
-**Type:** Write / action
-
-rotation_manager remains local-first and dry-run by default; no unsupported Spotify behavior is assumed.
-
-**Arguments:**
-
-| Argument             | Type    | Required | Details |
-| -------------------- | ------- | -------: | ------- |
-| `playlist_id`        | unknown |      yes | —       |
-| `target_playlist_id` | unknown |      yes | —       |
-| `dry_run`            | unknown |      yes | —       |
 
 ## `save_tracks`
 
@@ -1681,19 +1414,6 @@ Set volume from 0 to 100.
 | `volume_percent` | unknown |      yes | —       |
 | `device_id`      | unknown |      yes | —       |
 
-## `skip_pattern_report`
-
-**Type:** Read
-
-Read-only local-first personalization operation with explicit evidence and no automatic provider mutation.
-
-**Arguments:**
-
-| Argument      | Type    | Required | Details |
-| ------------- | ------- | -------: | ------- |
-| `playlist_id` | unknown |      yes | —       |
-| `limit`       | unknown |      yes | —       |
-
 ## `smart_insert_tracks`
 
 **Title:** Smart insert tracks
@@ -1771,6 +1491,7 @@ Persist an ordered playlist snapshot; requires the state database.
 **Title:** Sort by personal affinity
 
 **Type:** Write / action
+**Destructive hint:** yes
 
 Plan or reorder using local evidence only; dry_run defaults true and snapshots on execution.
 
@@ -1788,9 +1509,9 @@ Plan or reorder using local evidence only; dry_run defaults true and snapshots o
 
 **Title:** Split playlist
 
-**Type:** Write / action
+**Type:** Read
 
-Split a playlist into deterministic groups; dry_run defaults true.
+Preview deterministic sequential or round-robin groups. Preview only; no playlists are created.
 
 **Arguments:**
 
@@ -1826,6 +1547,7 @@ Apply an explicitly confirmed provider-neutral sync policy. Destructive cross-pr
 **Title:** Sync playlists
 
 **Type:** Write / action
+**Destructive hint:** yes
 
 Plan or apply deterministic playlist synchronization; dry_run defaults true.
 

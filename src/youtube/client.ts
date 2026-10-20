@@ -1,3 +1,4 @@
+import { McpPermissionEngine } from '../mcp/permissions.js';
 import { assertQueueJobActive } from '../db/jobs.js';
 import { retryAfterSeconds } from '../providers/retry-after.js';
 import { ProviderApiError } from '../providers/errors.js';
@@ -22,6 +23,7 @@ export class YouTubeClient {
     params: Record<string, string | number | boolean | undefined> = {},
     body?: unknown,
   ): Promise<{ value: T; quotaCost: number }> {
+    if (!Object.hasOwn(YOUTUBE_QUOTA_COST, method)) throw new Error('youtube_method_unsupported');
     const token = await this.auth.accessToken();
     if (!token)
       throw new ProviderApiError(
@@ -30,7 +32,7 @@ export class YouTubeClient {
         'youtube',
         'youtube-default',
       );
-    const url = new URL('https://www.googleapis.com/youtube/v3/' + method);
+    const url = new URL('https://www.googleapis.com/youtube/v3/' + method.split('.')[0]);
     Object.entries(params).forEach(
       ([k, v]) => v !== undefined && url.searchParams.set(k, String(v)),
     );
@@ -44,6 +46,8 @@ export class YouTubeClient {
     const timeoutSignal = AbortSignal.timeout(15_000);
     const parentSignal = toolContext.get()?.signal;
     assertQueueJobActive();
+    if (httpMethod === 'GET') await McpPermissionEngine.enforce(undefined, ['youtube-default']);
+    else await McpPermissionEngine.enforceWrite(['youtube-default']);
     const response = await fetch(url, {
       method: httpMethod,
       headers: {
@@ -54,7 +58,16 @@ export class YouTubeClient {
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.any([timeoutSignal, ...(parentSignal ? [parentSignal] : [])]),
     });
-    const value: any = await response.json().catch(() => ({}));
+    const value: any = await response.json().catch(() => {
+      if (response.ok && response.status !== 204)
+        throw new ProviderApiError(
+          502,
+          'YouTube returned an invalid JSON response',
+          'youtube',
+          'youtube-default',
+        );
+      return {};
+    });
     if (!response.ok)
       throw new ProviderApiError(
         response.status,

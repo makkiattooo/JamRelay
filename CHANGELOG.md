@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.5.9 — 2026-10-20
+
+- Add Codex CLI and Desktop MCP onboarding with safe existing-registration checks, manual configuration guidance and documented verification stages.
+- Reject healthy responses from older JamRelay versions during onboarding checks to avoid confusing an existing container with the current build.
+- Improve Spotify application setup guidance with field-by-field examples and the exact configured callback URL.
+- Clarify Windows Docker Compose host commands and safe alternate host-port selection when another installation is using the default port.
+
+## 1.5.8 — 2026-10-20
+
+- Keep refreshed and nested MCP grants within the original authorization; recheck provider requests and reject owned jobs without live authorization.
+- Keep revoked access/refresh tokens invalid after a new grant, including installations without an open database.
+- Correct YouTube REST paths, playlist item removal/reordering and partial metadata updates; reject incomplete backup manifests.
+- Update release commands and Windows configuration path fallbacks.
+
+## 1.5.7
+
+- Centralize model-independent MCP permissions, live per-registration scope/account/tool edits and revocation, including durable work. Filter discovery by grants and provider capabilities; default new installations to the essential profile.
+- Preserve JSONC settings and backups for desktop configuration; add project/user scope selection and the optional Claude Desktop stdio bridge. Keep Docker setup on the host and verify OAuth IDs rather than application names.
+- Repair browser navigation and owner-to-provider redirects; retain validated OAuth callbacks and fix the authorization icon URL. Retire 17 planning/empty-result placeholders, the obsolete artist-top-tracks endpoint stub and two misleading artist-operation aliases; the full catalog now contains 95 tools (including database tools). Repair actual personalization writes, playlist identifiers and two-way sync; splitting is explicitly preview-only.
+
+## 1.5.6
+
+- Load SQLite only when opening a database; filter its known Node 22 experimental notice during CLI commands, defer unrelated interactive warnings until teardown, and remove duplicate stack output. Native diagnostics remain available with `node --trace-warnings dist/cli.js …`; SQL errors, logs and existing storage are unchanged.
+
+## 1.5.5
+
+- Add masked owner password setup/reset with salted scrypt hashing and retained recovery/legacy access. Preserve encryption keys, OAuth stores and provider credentials.
+- Correct OAuth client branding, read-only permission defaults and actionable account/grant errors.
+- Separate Compose-internal health checks from host-facing client URLs; local DNS/TLS are N/A.
+- Add confirmed local client configuration with backups and honest registration/authentication/discovery states, backed by migration 0013 for actual MCP discovery evidence.
+- Repair TUI language-selection CI and add an isolated Docker image/network/authentication smoke job. Prepare npm/GHCR and a free self-hosted Agensi skill; publication and live provider acceptance remain owner-gated.
+
+## 1.5.4
+
+- Replace setup, configuration and guided connection prompts with a shared keyboard-driven terminal UI.
+- Correct Docker host-facing URLs for custom published ports and provide bounded startup readiness checks.
+- Keep the container listener on port 5267 and preserve existing custom HTTPS origins and credentials.
+
 ## 1.5.3
 
 - Add guided local, tunnel, custom-domain and reverse-proxy connectivity with DNS, HTTPS, health and MCP-authentication checks.

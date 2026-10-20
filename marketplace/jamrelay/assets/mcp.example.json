@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "jamrelay": {
+      "url": "http://127.0.0.1:5267/mcp"
+    }
+  }
+}

@@ -1,7 +1,9 @@
+import { McpPermissionEngine } from './mcp/permissions.js';
+import { recordDiscovery } from './mcp/client-evidence.js';
 import express from 'express';
 import { timingSafeEqual } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { runtimePath } from './runtime/installation.js';
+import { loadInstallation, runtimePath } from './runtime/installation.js';
 import { McpServer, createMcpHandler } from '@modelcontextprotocol/server';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import pino, { type Logger } from 'pino';
@@ -170,9 +172,12 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
-    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Referrer-Policy', 'same-origin');
     next();
   });
+  app.get('/assets/icons/jamrelay-icon-dark.png', (_req, res) =>
+    res.sendFile(runtimePath('assets', 'icons', 'jamrelay-icon-dark.png.png')),
+  );
   app.use('/assets', express.static(runtimePath('assets'), { index: false }));
   const oauthStore = new McpOAuthStore(cfg.MCP_OAUTH_STORE_PATH);
   registerMcpOAuthRoutes(app, cfg, oauthStore, () =>
@@ -186,6 +191,7 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
     app,
     cfg.MCP_OAUTH_OWNER_SECRET ?? '',
     cfg.PUBLIC_BASE_URL,
+    cfg.MCP_OWNER_PASSWORD_HASH,
   );
   const initiations = new ProviderInitiations();
   app.get('/health', async (_req, res) => {
@@ -327,22 +333,9 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
       got.length === want.length &&
       timingSafeEqual(got, want)
     )
-      return {
-        clientId: 'api-key',
-        connectionIds: registry.listConnections().map((connection) => connection.connectionId),
-        permissions: [
-          'catalog.read',
-          'library.read',
-          'library.write',
-          'playlist.read',
-          'playlist.write',
-          'playlist.destructive',
-          'playback.control',
-          'diagnostics.read',
-          'transfer.plan',
-          'transfer.execute',
-        ],
-      };
+      return oauthStore.ensureLegacyApiGrant(
+        registry.listConnections().map((connection) => connection.connectionId),
+      );
     return oauthStore.accessPolicy(value, `${cfg.PUBLIC_BASE_URL.replace(/\/$/, '')}/mcp`);
   };
   const mcpHandler = createMcpHandler(
@@ -364,7 +357,26 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
   );
   const nodeMcpHandler = toNodeHandler(mcpHandler);
   app.all('/mcp', async (req, res) => {
+    await registry.refreshAuthorization();
     const access = await authorized(req);
+    if (access) await oauthStore.recordActivity(access.clientId);
+    if (access && req.body?.method === 'tools/call') {
+      try {
+        McpPermissionEngine.assert(access, String(req.body.params?.name ?? ''));
+      } catch (error) {
+        const normalized = toApiError(error);
+        const detail = { code: normalized.code, message: normalized.message };
+        return res.json({
+          jsonrpc: '2.0',
+          id: req.body.id ?? null,
+          result: {
+            isError: true,
+            content: [{ type: 'text', text: JSON.stringify({ error: detail }) }],
+            structuredContent: { error: detail },
+          },
+        });
+      }
+    }
     if (!access)
       return sendApiError(
         res
@@ -375,6 +387,28 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
           ),
         new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required.'),
       );
+    // Only successful authenticated tools/list responses count as verified discovery.
+    if (req.body?.method === 'tools/list') {
+      let captured = '';
+      const append = (chunk: unknown) => {
+        if (captured.length > 262144) return;
+        if (typeof chunk === 'string') captured += chunk;
+        else if (chunk instanceof Uint8Array) captured += Buffer.from(chunk).toString('utf8');
+      };
+      const originalWrite = res.write.bind(res);
+      const originalEnd = res.end.bind(res);
+      res.write = ((...args: Parameters<typeof res.write>) => {
+        append(args[0]);
+        return originalWrite(...args);
+      }) as typeof res.write;
+      res.end = ((...args: Parameters<typeof res.end>) => {
+        append(args[0]);
+        return originalEnd(...args);
+      }) as typeof res.end;
+      res.once('finish', () => {
+        if (res.statusCode === 200) recordDiscovery(access.clientId, captured);
+      });
+    }
     const started = Date.now();
     res.on('finish', () =>
       logger.info(
@@ -405,6 +439,7 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
           // deadline bounds the whole MCP exchange and is not reset by nesting.
           deadlineAt: Date.now() + 5 * 60_000,
           mcpAccess: access,
+          resolveAccess: async () => (await authorized(req)) || undefined,
           singleflight,
         },
         () => nodeMcpHandler(req, res, req.body),
@@ -432,8 +467,19 @@ export function createApp(cfg: Config, provided?: Partial<AppDependencies>) {
   ).jamrelayRegistry = registry;
   return app;
 }
-export async function startServer(cfg = getConfig()) {
-  const logger = pino({ level: cfg.LOG_LEVEL });
+export async function startServer(
+  cfg = getConfig(),
+  logger: Logger = pino({ level: cfg.LOG_LEVEL }),
+) {
+  if (
+    !cfg.TOKEN_ENCRYPTION_KEY ||
+    Buffer.from(cfg.TOKEN_ENCRYPTION_KEY, 'base64').length !== 32 ||
+    !cfg.MCP_OAUTH_OWNER_SECRET ||
+    cfg.MCP_OAUTH_OWNER_SECRET.length < 32
+  )
+    throw new Error(
+      'JamRelay setup is incomplete. Run `jamrelay setup` before starting the server.',
+    );
   initializeDatabase({
     dataDir: cfg.JAMRELAY_DATA_DIR,
     dbPath: cfg.JAMRELAY_DB_PATH,
@@ -447,6 +493,7 @@ export async function startServer(cfg = getConfig()) {
       new TrackResolver((app as typeof app & { jamrelayClient: SpotifyClient }).jamrelayClient),
     ),
     logger,
+    new McpOAuthStore(cfg.MCP_OAUTH_STORE_PATH),
   );
   jobRunner.start();
   const server = app.listen(cfg.PORT, cfg.HOST, () =>
@@ -490,8 +537,10 @@ export async function startServer(cfg = getConfig()) {
   process.once('SIGINT', () => shutdown('SIGINT'));
   return server;
 }
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url)
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  loadInstallation();
   startServer().catch((error: unknown) => {
     pino().error({ err: error }, `${APP_NAME} startup failed`);
     process.exitCode = 1;
   });
+}

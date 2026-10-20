@@ -28,7 +28,9 @@ const run = (...args: string[]) => runOperator(args, (s) => lines.push(s));
 describe('local operator CLI', () => {
   it('reports status, validates usage and closes database', async () => {
     expect(await run('status', '--json')).toBe(0);
-    expect(JSON.parse(lines.pop()!).database.currentVersion).toContain('0012');
+    const database = JSON.parse(lines.pop()!).database;
+    expect(database.currentVersion).toBe(database.expectedVersion);
+    expect(database.schemaState).toBe('current');
     expect(await run('unknown')).toBe(2);
     expect(await run('jobs', 'inspect', '999')).toBe(1);
   });
@@ -58,6 +60,23 @@ describe('local operator CLI', () => {
     const tokens = await store.issueTokens('client', 'http://localhost/mcp');
     expect(await store.accessPolicy(tokens.access, 'http://localhost/mcp')).toBeDefined();
     closeDatabase();
+    expect(
+      await run(
+        'clients',
+        'permissions',
+        'set',
+        'client',
+        '--permissions',
+        'playlist.read',
+        '--tools',
+        'get_my_playlists',
+      ),
+    ).toBe(0);
+    expect(await store.accessPolicy(tokens.access, 'http://localhost/mcp')).toMatchObject({
+      permissions: ['playlist.read'],
+      tools: ['get_my_playlists'],
+    });
+    expect(await run('clients', 'permissions', 'client')).toBe(0);
     expect(await run('clients', 'revoke', 'client')).toBe(0);
     initializeDatabase();
     expect(await store.accessPolicy(tokens.access, 'http://localhost/mcp')).toBeUndefined();

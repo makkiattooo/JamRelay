@@ -1,5 +1,6 @@
+import { listApplicationBackups } from '../src/runtime/backup.js';
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, stat, writeFile, rm } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { join } from 'node:path';
@@ -44,11 +45,16 @@ describe('application-aware backup', () => {
     expect(manifest.files.map((file: { name: string }) => file.name)).toContain(
       'provider-credentials.json',
     );
+    expect((await listApplicationBackups(root)).find((x) => x.name === 'backup')?.valid).toBe(true);
     expect(await stat(join(output, 'jamrelay.db'))).toMatchObject({ mode: expect.any(Number) });
     if (process.platform !== 'win32')
       expect((await stat(join(output, 'jamrelay.db'))).mode & 0o077).toBe(0);
     expect(await readFile(join(output, 'provider-credentials.json'), 'utf8')).toBe(
       'encrypted-placeholder',
+    );
+    await rm(join(output, 'jamrelay.db'));
+    expect((await listApplicationBackups(root)).find((x) => x.name === 'backup')?.valid).toBe(
+      false,
     );
   });
 });

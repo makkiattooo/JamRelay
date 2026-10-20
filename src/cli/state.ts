@@ -8,6 +8,7 @@ import { installationPaths, lockInstallation } from '../runtime/installation.js'
 export const channelSchema = z.enum(['stable', 'beta']);
 export const connectivityMethodSchema = z.enum([
   'local',
+  'local-network',
   'tailscale-funnel',
   'ngrok',
   'cloudflare-quick',
@@ -28,12 +29,21 @@ export const connectivityStateSchema = z
     registrar: z.string().nullable().default(null),
     checks: z
       .object({
-        dns: z.boolean().default(false),
-        https: z.boolean().default(false),
+        dns: z.boolean().nullable().default(false),
+        https: z.boolean().nullable().default(false),
         health: z.boolean().default(false),
         mcpProtected: z.boolean().default(false),
+        oauthDiscovery: z.boolean().default(false),
+        oauthRedirects: z.boolean().nullable().default(null),
       })
-      .default({ dns: false, https: false, health: false, mcpProtected: false }),
+      .default({
+        dns: false,
+        https: false,
+        health: false,
+        mcpProtected: false,
+        oauthDiscovery: false,
+        oauthRedirects: null,
+      }),
     checkedAt: z.string().datetime().nullable().default(null),
   })
   .strict();
@@ -53,7 +63,40 @@ export const cliStateSchema = z
         }),
       )
       .default({}),
-    guidedClients: z.enum(['chatgpt', 'claude', 'cursor', 'vscode', 'generic']).array().default([]),
+    guidedClients: z
+      .enum([
+        'chatgpt',
+        'codex',
+        'gemini-cli',
+        'claude',
+        'claude-code',
+        'claude-desktop',
+        'cursor',
+        'vscode',
+        'generic',
+      ])
+      .array()
+      .default([]),
+    clientSetup: z
+      .record(
+        z.string(),
+        z.object({
+          status: z.enum([
+            'not_configured',
+            'configuration_generated',
+            'configured',
+            'authentication_required',
+            'authenticated',
+            'verified',
+            'failed',
+          ]),
+          endpoint: z.string().url(),
+          detail: z.string(),
+          clientId: z.string().optional(),
+          updatedAt: z.number(),
+        }),
+      )
+      .default({}),
     connectivity: connectivityStateSchema.default({
       method: null,
       status: 'pending',
@@ -62,7 +105,14 @@ export const cliStateSchema = z
       zone: null,
       dnsProvider: null,
       registrar: null,
-      checks: { dns: false, https: false, health: false, mcpProtected: false },
+      checks: {
+        dns: false,
+        https: false,
+        health: false,
+        mcpProtected: false,
+        oauthDiscovery: false,
+        oauthRedirects: null,
+      },
       checkedAt: null,
     }),
   })
@@ -75,6 +125,7 @@ export const defaultState = (): CliState => ({
   lastPassiveAttempt: 0,
   notices: {},
   guidedClients: [],
+  clientSetup: {},
   connectivity: connectivityStateSchema.parse({}),
 });
 export function cliPaths() {

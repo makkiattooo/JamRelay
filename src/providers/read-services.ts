@@ -1,3 +1,4 @@
+import { McpPermissionEngine } from '../mcp/permissions.js';
 import type { ProviderCapabilityName } from './capabilities.js';
 import { CapabilityUnavailableError } from './errors.js';
 import type { ProviderConnection } from './types.js';
@@ -62,6 +63,7 @@ export class ProviderReadServices {
     for (const [index, connection] of candidates.entries()) {
       if (index > 0 && !allowFallback) break;
       try {
+        await McpPermissionEngine.enforce(undefined, [connection.summary.connectionId]);
         return {
           data: await operation(connection),
           provenance: {

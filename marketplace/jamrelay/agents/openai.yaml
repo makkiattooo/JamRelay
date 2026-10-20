@@ -1,0 +1,4 @@
+interface:
+  display_name: 'JamRelay'
+  short_description: 'Self-hosted music workflows through MCP'
+  default_prompt: 'Use $jamrelay to connect my music account and preview a playlist workflow.'

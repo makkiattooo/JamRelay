@@ -144,6 +144,9 @@ const playback = (value: any) => ({
 });
 
 export class SpotifyProviderAdapter implements ProviderConnection {
+  async isAuthorized() {
+    return this.auth?.connected ? this.auth.connected() : true;
+  }
   readonly summary;
   readonly identity: IdentityCapability;
   readonly catalog: CatalogCapability;

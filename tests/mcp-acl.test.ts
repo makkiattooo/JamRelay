@@ -45,6 +45,12 @@ describe('MCP grant ACLs', () => {
     });
     await store.revokeGrant('client-a');
     expect(await store.accessPolicy(tokens.access)).toBeUndefined();
+    expect(await store.validAccess(tokens.access)).toBe(false);
+    await store.setGrant('client-a', ['spotify-main'], ['catalog.read']);
+    const fresh = await store.issueTokens('client-a');
+    expect(await store.validAccess(fresh.access)).toBe(true);
+    expect(await store.validAccess(tokens.access)).toBe(false);
+    expect(await store.useRefresh(tokens.refresh, 'client-a')).toBeUndefined();
   });
 
   it('rejects tokens that have no current consent grant', async () => {

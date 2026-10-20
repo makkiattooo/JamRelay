@@ -43,7 +43,9 @@ export function createJob(type: string, payload: unknown, items: unknown[], maxA
         provider,
         connectionId,
         access?.clientId ?? null,
-        access ? JSON.stringify(access) : null,
+        access
+          ? JSON.stringify({ ...access, tool: toolContext.get()?.operation ?? 'create_bulk_job' })
+          : null,
       );
     const id = Number(job.lastInsertRowid);
     const insert = db.prepare(

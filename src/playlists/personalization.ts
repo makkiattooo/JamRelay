@@ -1,6 +1,6 @@
 import * as z from 'zod/v4';
 import type { PlaylistGateway } from '../providers/playlist-gateway.js';
-import { PlaylistStateReader } from './state-reader.js';
+import { PlaylistStateReader, invalidatePlaylistStateCache } from './state-reader.js';
 import { normalizePlaylistItems } from './normalize.js';
 import { rankTracks } from './affinity.js';
 import { listHistory, ingestPlayback, stableSeed, historyStats } from './history.js';
@@ -17,23 +17,10 @@ export const PLAYLIST_PERSONALIZATION_TOOL_NAMES = [
   'sort_by_personal_affinity',
   'personalize_playlist',
   'avoid_recently_played',
-  'rediscover_old_tracks',
-  'deep_cuts_mode',
-  'find_missing_favorites',
-  'complete_artist_collection',
   'compare_playlists',
   'build_session_queue',
-  'queue_from_playlist',
   'smart_next',
-  'skip_pattern_report',
-  'playlist_skip_cleanup',
-  'generate_daily_mix',
-  'generate_weekly_rotation',
-  'rotation_manager',
-  'liked_to_playlist_sync',
-  'inbox_playlist',
   'archive_playlist',
-  'playlist_versioning',
 ] as const;
 export function registerPlaylistPersonalizationTools(s: any, playlists: PlaylistGateway) {
   const stateReader = new PlaylistStateReader(playlists);
@@ -95,13 +82,47 @@ export function registerPlaylistPersonalizationTools(s: any, playlists: Playlist
       });
     },
   );
+  const execute = async (
+    a: any,
+    x: Awaited<ReturnType<typeof state>>,
+    after: typeof x.tracks,
+    reason: string,
+  ) => {
+    if (after.some((t) => !t.id)) throw new Error('playlist_contains_unsupported_items');
+    const target = {
+      provider: x.state_provenance.provider,
+      connection_id: x.state_provenance.connectionId,
+    };
+    const snapshot = saveSnapshot({
+      playlistId: x.id,
+      providerId: target.provider,
+      connectionId: target.connection_id,
+      providerRevision: x.provider_revision,
+      metadata: x.meta,
+      uris: x.tracks.map((t) => t.uri ?? t.id!).filter(Boolean),
+      reason,
+    });
+    await playlists.replace(
+      x.id,
+      after.map((t) => t.id!),
+      target,
+    );
+    invalidatePlaylistStateCache(x.id, target);
+    const verified = await state(x.id, target);
+    if (
+      verified.tracks.length !== after.length ||
+      verified.tracks.some((t, i) => t.id !== after[i]?.id)
+    )
+      throw new Error('playlist_integrity_mismatch');
+    return { safety_snapshot_id: snapshot.id, verification: { ok: true, count: after.length } };
+  };
   const layout = async (
     a: any,
     mode: 'affinity' | 'freshness' | 'rediscovery' | 'recent_frequency',
   ) => {
     const x = await state(a.playlist_id, a),
       ranked = rankTracks(x.tracks, mode),
-      after = ranked.map((r) => r.track),
+      after = (a.direction === 'lowest_first' ? [...ranked].reverse() : ranked).map((r) => r.track),
       warnings = ranked.every(
         (r) => r.evidence.length === 1 && r.evidence[0] === 'no local playback evidence',
       )
@@ -118,30 +139,7 @@ export function registerPlaylistPersonalizationTools(s: any, playlists: Playlist
         warnings,
         seed: a.seed,
       });
-    const snap = saveSnapshot({
-      playlistId: x.id,
-      // Keep the legacy identifiers only when an older caller omitted routing;
-      // MCP requests are bound by the wrapper before this callback runs.
-      providerId: a.provider ?? 'spotify',
-      connectionId: a.connection_id ?? 'spotify-default',
-      spotifySnapshotId: x.meta?.snapshot_id,
-      metadata: x.meta,
-      uris: x.tracks.map((t) => t.uri!).filter(Boolean),
-      reason: mode,
-    });
-    await playlists.replace(
-      x.id,
-      after.flatMap((t) => (t.id ? [t.id] : [])),
-      {
-        provider: a.provider,
-        connection_id: a.connection_id,
-      },
-    );
-    return text({
-      safety_snapshot_id: snap.id,
-      verification: { ok: true, count: uris.length },
-      warnings,
-    });
+    return text({ ...(await execute(a, x, after, mode)), warnings });
   };
   s.registerTool(
     'sort_by_personal_affinity',
@@ -158,11 +156,6 @@ export function registerPlaylistPersonalizationTools(s: any, playlists: Playlist
       },
     },
     async (a: any) => {
-      if (a.direction === 'lowest_first') {
-        const x = await state(a.playlist_id, a);
-        const r = rankTracks(x.tracks).reverse();
-        return layout({ ...a, playlist_id: a.playlist_id, seed: a.seed }, 'affinity');
-      }
       return layout(a, 'affinity');
     },
   );
@@ -175,10 +168,6 @@ export function registerPlaylistPersonalizationTools(s: any, playlists: Playlist
       inputSchema: {
         playlist_id: id,
         dry_run: z.boolean().default(true),
-        affinity_weight: z.number().min(0).max(1).default(0.5),
-        freshness_weight: z.number().min(0).max(1).default(0.25),
-        rediscovery_weight: z.number().min(0).max(1).default(0.25),
-        artist_balance_weight: z.number().min(0).max(1).default(0.25),
         min_artist_gap: z.number().int().min(0).max(100).default(1),
         seed: z.number().int().optional(),
       },
@@ -191,6 +180,7 @@ export function registerPlaylistPersonalizationTools(s: any, playlists: Playlist
           { seed: a.seed ?? stableSeed(JSON.stringify(a)), minArtistGap: a.min_artist_gap },
         );
       return text({
+        ...(!a.dry_run ? await execute(a, x, after, 'personalize') : {}),
         before_count: x.tracks.length,
         after_count: after.length,
         tracks_moved: after
@@ -217,7 +207,7 @@ export function registerPlaylistPersonalizationTools(s: any, playlists: Playlist
     },
     async (a: any) => {
       const x = await state(a.playlist_id, a),
-        since = Date.now() - (a.lookback_hours ?? a.lookback_days * 24) * 3600000,
+        since = Date.now() - (a.lookback_hours ?? (a.lookback_days ?? 1) * 24) * 3600000,
         h = listHistory({ since, limit: 1000 }),
         ids = new Set(
           h.flatMap((e: any) =>
@@ -231,10 +221,9 @@ export function registerPlaylistPersonalizationTools(s: any, playlists: Playlist
         after =
           a.behavior === 'remove'
             ? x.tracks.filter((t) => !affected.includes(t))
-            : a.behavior === 'move_to_end'
-              ? [...x.tracks.filter((t) => !affected.includes(t)), ...affected]
-              : x.tracks;
+            : [...x.tracks.filter((t) => !affected.includes(t)), ...affected];
       return text({
+        ...(!a.dry_run ? await execute(a, x, after, 'avoid_recently_played') : {}),
         recently_played: h,
         affected_tracks: affected.map((t) => t.uri),
         incomplete_history_warning:
@@ -256,8 +245,8 @@ export function registerPlaylistPersonalizationTools(s: any, playlists: Playlist
         xs = new Set(x.tracks.map((t) => t.canonicalTrackId ?? t.uri)),
         ys = new Set(y.tracks.map((t) => t.canonicalTrackId ?? t.uri));
       return text({
-        only_in_a: x.tracks.filter((t) => !ys.has(t.uri)),
-        only_in_b: y.tracks.filter((t) => !xs.has(t.uri)),
+        only_in_a: x.tracks.filter((t) => !ys.has(t.canonicalTrackId ?? t.uri)),
+        only_in_b: y.tracks.filter((t) => !xs.has(t.canonicalTrackId ?? t.uri)),
         common_count: [...xs].filter((u) => ys.has(u)).length,
         artist_overlap: [...new Set(x.tracks.map((t) => t.normalizedArtist))].filter((v) =>
           new Set(y.tracks.map((t) => t.normalizedArtist)).has(v),
@@ -351,61 +340,4 @@ export function registerPlaylistPersonalizationTools(s: any, playlists: Playlist
       return text({ archive_snapshot_id: snap.id, track_count: snap.trackCount, label: a.label });
     },
   );
-  const readOnly = (name: string, schema: any, fn: any) =>
-    s.registerTool(
-      name,
-      {
-        title: name,
-        description:
-          'Read-only local-first personalization operation with explicit evidence and no automatic provider mutation.',
-        inputSchema: schema,
-      },
-      fn,
-    );
-  for (const name of [
-    'rediscover_old_tracks',
-    'deep_cuts_mode',
-    'find_missing_favorites',
-    'complete_artist_collection',
-    'queue_from_playlist',
-    'skip_pattern_report',
-    'playlist_versioning',
-  ] as const)
-    readOnly(
-      name,
-      { playlist_id: id.optional(), limit: z.number().int().min(1).max(1000).default(50) },
-      async (a: any) =>
-        text({
-          operation: name,
-          tracks: [],
-          warning: 'Insufficient synchronized local source data for a defensible result.',
-        }),
-    );
-  for (const name of [
-    'generate_daily_mix',
-    'generate_weekly_rotation',
-    'rotation_manager',
-    'liked_to_playlist_sync',
-    'inbox_playlist',
-    'playlist_skip_cleanup',
-  ] as const)
-    s.registerTool(
-      name,
-      {
-        title: name,
-        description: `${name} remains local-first and dry-run by default; no unsupported Spotify behavior is assumed.`,
-        inputSchema: {
-          playlist_id: id.optional(),
-          target_playlist_id: id.optional(),
-          dry_run: z.boolean().default(true),
-        },
-      },
-      async (a: any) =>
-        text({
-          operation: name,
-          dry_run: a.dry_run,
-          status: 'planned',
-          warning: 'Execution requires an explicit synchronized candidate source.',
-        }),
-    );
 }
